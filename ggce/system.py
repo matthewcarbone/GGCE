@@ -12,8 +12,6 @@ from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 from ggce.equations import Equation, GreenEquation
 
-BYTES_TO_MB = 1048576
-
 
 class System:
     """Defines a list of Equations (a system of equations, so to speak) and
@@ -265,11 +263,6 @@ class System:
         else:
             dlog.critical("Invalid closure!")
             raise RuntimeError("Invalid closure!")
-
-        # for ii, identifier in enumerate(list(self.unique_short_identifiers)):
-        #     self.basis[identifier] = ii
-        # print(f"Basis of length {len(self.basis)} generated")
-        # print("Computation is primed: ready for spectra generation")
 
     def prime_solver(self):
         """Prepares the solver-specific information.
