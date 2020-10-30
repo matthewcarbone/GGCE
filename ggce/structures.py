@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+
+__author__ = "Matthew R. Carbone & John Sous"
+__maintainer__ = "Matthew R. Carbone"
+__email__ = "x94carbone@gmail.com"
+
+import math
+
+
+class ModelParams:
+
+    def __init__(self, M, N, t, Omega, eta, a, g):
+        self.M = M
+        self.N = N
+        self.t = t
+        self.Omega = Omega
+        self.eta = eta
+        self.a = a
+        self.g = g
+
+
+class SHT:
+    """Container for a single term in the Hamiltonian. Also carries the
+    parameters needed for the computation, such as the couplings."""
+
+    def __init__(self, x, y, sign, dagger, model_params, alpha_idx=0):
+        self.x = x
+        self.y = y
+        self.sign = sign
+        self.dagger = dagger
+        self.model_params = model_params
+        self.alpha_idx = alpha_idx
+
+
+class InputParameters:
+    """Container for the full set of input parameters for the trial.
+
+    Attributes
+    ----------
+    M : int
+        Maximal cloud extent. Must be > 0.
+    N : int
+        Maximum number of bosons allowed in the cloud. Must be > 0.
+    model : {'H', 'EFB', 'SSH'}
+        The model type.
+    t : float
+        Hopping term.
+    Omega: float
+        Boson Einstein frequency.
+    eta : float
+        Broadening term.
+    a : float
+        Lattice parameter. Default is 1.0. Recommended not to change this.
+    config_filter : {0, 1}
+        Determines the filter/rule for boson clouds. 0 for no rule, 1 for
+        A gaussian filter. Default is 0.
+    g : float, optional
+        If provided, represents the direct coupling term (multiplying the
+        term V in the Hamiltonian). If not provided, defaults to provided
+        lambd argument. Default is None.
+    lambd : float, optional
+        If provided, represents the effective coupling which is
+        model-dependent. Default is None. Note that the user should only
+        provide lambd or g, not both, else it will raise a RuntimeError.
+    """
+
+    AVAIL_MODELS = ['H', 'EFB', 'SSH']
+    AVAIL_CONFIG_FILTERS = [0]
+
+    def __init__(
+        self, M, N, model, t, Omega, eta, a=1.0, config_filter=0, g=None,
+        lambd=None
+    ):
+
+        # Checks on M
+        self.M = M
+        assert(isinstance(self.M, int))
+        assert(self.M > 0)
+
+        # Checks on N
+        self.N = N
+        assert(isinstance(self.N, int))
+        assert(self.N > 0)
+
+        # Assert a valid model
+        self.model = model
+        assert(self.model in InputParameters.AVAIL_MODELS)
+
+        # Assert the coupling
+        self.t = t
+        assert(self.t >= 0.0)
+
+        # Assert the boson frequency
+        self.Omega = Omega
+        assert(self.Omega >= 0.0)
+
+        # Assert auxiliary parameters
+        self.eta = eta
+        self.a = a
+        assert(self.eta > 0.0)
+        assert(self.a > 0.0)
+        self.config_filter = config_filter
+        assert(self.config_filter in InputParameters.AVAIL_CONFIG_FILTERS)
+
+        # Initializes the coupling, g, explicitly
+        self._set_g(g, lambd)
+
+        # Uses the model to initialize the V-terms
+        self._set_terms()
+
+    def _set_g(self, g, lambd):
+
+        if g is not None and lambd is not None:
+            raise RuntimeError("Must provide only one of g / lambd, not both")
+
+        if g is not None:
+            assert(g >= 0.0)
+            self.g = g
+            self.lambd = None
+            return
+
+        # Else, we need to compute what g actually is based on the model and
+        # the provided lambda
+        # H: lambd=g^2/2*t*Omega => g = sqrt(2*t*Omega*lambd)
+        assert(lambd >= 0.0)
+        if self.model == 'H':  # Holstein
+            self.g = math.sqrt(2.0 * self.t * self.Omega * lambd)
+        elif self.model == 'EFB':  # EFB convention lambd = g for convenience
+            self.g = lambd
+        elif self.model == 'SSH':  # SSH
+            self.g = math.sqrt(self.t * self.Omega * lambd / 2.0)
+        else:
+            raise RuntimeError(f"Unknown model type {self.model}")
+
+        self.lambd = lambd
+
+    def _set_terms(self):
+
+        mp = ModelParams(
+            self.M, self.N, self.t, self.Omega, self.eta, self.a, self.g
+        )
+
+        if self.model == 'H':
+            self.terms = [
+                SHT(x=0, y=0, sign=-1.0, dagger='+', model_params=mp),
+                SHT(x=0, y=0, sign=-1.0, dagger='-', model_params=mp)
+            ]
+        elif self.model == 'EFB':
+            self.terms = [
+                SHT(x=1, y=1, sign=1.0, dagger='+', model_params=mp),
+                SHT(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
+                SHT(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
+                SHT(x=-1, y=0, sign=1.0, dagger='-', model_params=mp)
+            ]
+        elif self.model == 'SSH':
+            self.terms = [
+                SHT(x=1, y=0, sign=1.0, dagger='+', model_params=mp),
+                SHT(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
+                SHT(x=1, y=1, sign=-1.0, dagger='+', model_params=mp),
+                SHT(x=1, y=1, sign=-1.0, dagger='-', model_params=mp),
+                SHT(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
+                SHT(x=-1, y=-1, sign=1.0, dagger='-', model_params=mp),
+                SHT(x=-1, y=0, sign=-1.0, dagger='+', model_params=mp),
+                SHT(x=-1, y=0, sign=-1.0, dagger='-', model_params=mp)
+            ]
+        else:
+            raise RuntimeError("Unknown model type when setting terms")
