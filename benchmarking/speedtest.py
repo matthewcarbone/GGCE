@@ -46,8 +46,7 @@ if __name__ == '__main__':
 
     with DisableLogger():
         config = structures.InputParameters(
-            M=4, N=20, model='H', t=1.0, eta=0.03,
-            g=1.4142135623730951, Omega=1.0
+            M=M, N=N, model='H', t=1.0, eta=0.03, lambd=1.0, Omega=1.0
         )
         sy = system.System(config)
         sy.initialize_generalized_equations()
