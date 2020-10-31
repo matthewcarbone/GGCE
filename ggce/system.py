@@ -313,8 +313,9 @@ class System:
         """Executes the solution for some given k, w. Also returns the shapes
         of all computed matrices."""
 
+        t0_all = time.time()
+
         self._log_solve_info()
-        dlog.info(f"Solving recursively for G({k:.02f}, {w:.02f})")
 
         meta = {
             'alphas': [],
@@ -386,5 +387,9 @@ class System:
             dlog.error(
                 f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
             )
+
+        dt_all = time.time() - t0_all
+
+        dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
 
         return G, meta
