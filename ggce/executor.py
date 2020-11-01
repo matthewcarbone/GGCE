@@ -26,7 +26,7 @@ def execute(k, w_arr, sy, log_every, target_dir):
     pid = os.getpid()
     for ii, w in enumerate(w_arr):
 
-        state_name = f"state/{w:.06f}.txt"
+        state_name = f"{target_dir}/state/{w:.06f}.txt"
 
         if target_dir is not None:
             if os.path.exists(state_name):
@@ -39,10 +39,12 @@ def execute(k, w_arr, sy, log_every, target_dir):
         if target_dir is None:
             results.append([w, G, meta])
         else:
-            with open(f"state/res.txt", "w") as f:
+            with open(f"{target_dir}/res.txt", "w") as f:
                 A = -G.imag / np.pi
                 t = sum(meta['times'])
                 f.write(f"{w}\t{A}\t{t}\n")
+            with open(state_name, 'w') as f:
+                f.write("DONE\n")
 
         if (ii + 1) % log_every == 0:
             pc = int((ii + 1) / L * 100.0)

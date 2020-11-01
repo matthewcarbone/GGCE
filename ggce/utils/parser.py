@@ -93,8 +93,8 @@ def global_parser(sys_argv):
         help='Enables the debug logging stream to stdout.'
     )
 
-    req.add_argument(
-        '--wbins', type=int, default=-1, dest='wbins',
+    execute_sp.add_argument(
+        '--wbins', type=int, default=-1, dest='w_bins',
         help='Number of approximately-equal length bins to split up the '
         'w-grid into.'
     )
