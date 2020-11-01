@@ -89,7 +89,7 @@ def global_parser(sys_argv):
     )
 
     execute_sp.add_argument(
-        '--debug', type=bool, default=False, dest='debug', action='store_true',
+        '--debug', default=False, dest='debug', action='store_true',
         help='Enables the debug logging stream to stdout.'
     )
 
