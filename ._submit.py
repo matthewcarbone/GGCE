@@ -16,8 +16,8 @@ from ggce.structures import InputParameters
 
 
 if __name__ == '__main__':
-    core_path = str(sys.argv[1])
-    nprocs = int(sys.argv[2])
+    nprocs = int(sys.argv[1])
+    core_path = str(sys.argv[2])
     debug = int(sys.argv[3])
     w_bins = int(sys.argv[4])
 
