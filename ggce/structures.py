@@ -6,6 +6,8 @@ __email__ = "x94carbone@gmail.com"
 
 import math
 
+import yaml
+
 
 class ModelParams:
 
@@ -54,23 +56,26 @@ class InputParameters:
     config_filter : {0, 1}
         Determines the filter/rule for boson clouds. 0 for no rule, 1 for
         A gaussian filter. Default is 0.
-    g : float, optional
-        If provided, represents the direct coupling term (multiplying the
-        term V in the Hamiltonian). If not provided, defaults to provided
-        lambd argument. Default is None.
     lambd : float, optional
         If provided, represents the effective coupling which is
         model-dependent. Default is None. Note that the user should only
         provide lambd or g, not both, else it will raise a RuntimeError.
+    k : float, optional
+        The momentum value for the calculation.
     """
 
     AVAIL_MODELS = ['H', 'EFB', 'SSH']
-    AVAIL_CONFIG_FILTERS = [0]
+    AVAIL_CONFIG_FILTERS = ['no_filter']
 
     def __init__(
-        self, M, N, model, t, Omega, eta, a=1.0, config_filter=0, g=None,
-        lambd=None
+        self, M, N, eta, model, t, Omega, lambd, a=1.0,
+        config_filter='no_filter', k=None
     ):
+
+        # If specified, set k
+        if k is not None:
+            assert k >= 0.0
+            self.k = k
 
         # Checks on M
         self.M = M
@@ -102,39 +107,27 @@ class InputParameters:
         self.config_filter = config_filter
         assert(self.config_filter in InputParameters.AVAIL_CONFIG_FILTERS)
 
-        # Initializes the coupling, g, explicitly
-        self._set_g(g, lambd)
+        self.lambd = lambd
+        self.terms = None
 
-        # Uses the model to initialize the V-terms
-        self._set_terms()
-
-    def _set_g(self, g, lambd):
-
-        if g is not None and lambd is not None:
-            raise RuntimeError("Must provide only one of g / lambd, not both")
-
-        if g is not None:
-            assert(g >= 0.0)
-            self.g = g
-            self.lambd = None
-            return
+    def _set_g(self):
 
         # Else, we need to compute what g actually is based on the model and
         # the provided lambda
         # H: lambd=g^2/2*t*Omega => g = sqrt(2*t*Omega*lambd)
-        assert(lambd >= 0.0)
+        assert(self.lambd >= 0.0)
         if self.model == 'H':  # Holstein
-            self.g = math.sqrt(2.0 * self.t * self.Omega * lambd)
+            self.g = math.sqrt(2.0 * self.t * self.Omega * self.lambd)
         elif self.model == 'EFB':  # EFB convention lambd = g for convenience
-            self.g = lambd
+            self.g = self.lambd
         elif self.model == 'SSH':  # SSH
-            self.g = math.sqrt(self.t * self.Omega * lambd / 2.0)
+            self.g = math.sqrt(self.t * self.Omega * self.lambd / 2.0)
         else:
             raise RuntimeError(f"Unknown model type {self.model}")
 
-        self.lambd = lambd
+    def init_terms(self):
 
-    def _set_terms(self):
+        self._set_g()
 
         mp = ModelParams(
             self.M, self.N, self.t, self.Omega, self.eta, self.a, self.g
@@ -165,3 +158,16 @@ class InputParameters:
             ]
         else:
             raise RuntimeError("Unknown model type when setting terms")
+
+    def save_config(self, path):
+        """Saves the config to the disk. These are the precise parameters
+        needed to reconstruct the input parameters in its entirety."""
+
+        assert self.terms is None
+
+        # We don't save the terms since those are reconstructed upon
+        # instantiation
+        config = {key: value for key, value in vars(self).items()}
+
+        with open(path, 'w') as outfile:
+            yaml.dump(config, outfile, default_flow_style=False)

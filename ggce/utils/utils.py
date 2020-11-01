@@ -5,45 +5,38 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import numpy as np
+import math
 import os
+import shlex
+import subprocess
 import time
 
 
-def listdir_fp(d):
+def get_cache_dir():
+    cache = os.environ.get('GGCE_CACHE_DIR')
+    if cache is None:
+        cache = 'results'
+    os.makedirs(cache, exist_ok=True)
+    return cache
+
+
+def get_package_dir():
+    cache = os.environ.get('GGCE_PACKAGES_DIR')
+    if cache is None:
+        cache = 'packages'
+    os.makedirs(cache, exist_ok=True)
+    return cache
+
+
+def listdir_fullpath(d):
+    """https://stackoverflow.com/a/120948"""
+
     return [os.path.join(d, f) for f in os.listdir(d)]
 
 
 def listdir_files_fp(d):
     x = [os.path.join(d, f) for f in os.listdir(d)]
     return [xx for xx in x if not os.path.isdir(xx)]
-
-
-def get_cache(args, archive=False):
-    """First, checks to see if args.cache is specified. If not, it will then
-    look for the HDSPIN_CACHE_DIR environment variable. If that also does not
-    exist, then it will raise a RuntimeError. Returns the directory location.
-    If archive, checks for the archive location.
-    """
-
-    if archive:
-        if args.archive is not None:
-            return args.archive
-
-        env_var = os.environ.get("GMA_ARCHIVE_DIR", None)
-        if env_var is not None:
-            return env_var
-
-        raise RuntimeError("Unknown archive location.")
-
-    else:
-        if args.cache is not None:
-            return args.cache
-
-        env_var = os.environ.get("GMA_CACHE_DIR", None)
-        if env_var is not None:
-            return env_var
-
-        raise RuntimeError("Unknown cache location.")
 
 
 def mgf_sum_rule(w, s, order):
@@ -54,8 +47,8 @@ def holstein_sum_rule_check(w, s, config):
     """Imports the wgrid (w), spectrum (s) and config and produces a summary
     of the sum rules."""
 
-    ek = -2.0 * config.tf * np.cos(config.k * config.a)
-    g = config.tb[0]
+    ek = -2.0 * config.t * np.cos(config.k * config.a)
+    g = config.g
 
     print("Sum rules ratios: (computed / analytic)")
 
@@ -70,7 +63,7 @@ def holstein_sum_rule_check(w, s, config):
     s2 = mgf_sum_rule(w, s, 2) / s2_ana
     print(f"\t#2: {s2:.04f}")
 
-    s3_ana = ek**3 + 2.0 * g**2 * ek + g**2 * config.Omega[0]
+    s3_ana = ek**3 + 2.0 * g**2 * ek + g**2 * config.Omega
     s3 = mgf_sum_rule(w, s, 3) / s3_ana
     print(f"\t#3: {s3:.04f}")
 
@@ -145,3 +138,20 @@ def time_remaining(time_elapsed, percentage_complete):
     if percentage_complete == 100:
         return 0.0
     return (100.0 - percentage_complete) * time_elapsed / percentage_complete
+
+
+def run_command(command):
+    """https://www.endpoint.com/blog/2015/01/28/
+    getting-realtime-output-using-python"""
+
+    process = subprocess.Popen(shlex.split(command), stdout=subprocess.PIPE)
+
+    while True:
+        output = process.stdout.readline()
+        if output == b'' and process.poll() is not None:
+            break
+        if output:
+            print(output.strip().decode())
+
+    rc = process.poll()
+    return rc

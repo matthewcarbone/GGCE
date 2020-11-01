@@ -6,6 +6,7 @@ __email__ = "x94carbone@gmail.com"
 
 import copy
 import numpy as np
+from scipy import linalg
 import time
 
 from ggce.utils import utils
@@ -359,7 +360,7 @@ class System:
 
             t0 = time.time()
             initial_A_shape = A.shape
-            A = np.linalg.inv(identity - beta_n @ A) @ alpha_n
+            A = linalg.inv(identity - beta_n @ A) @ alpha_n
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
             meta['As'].append(A.shape)

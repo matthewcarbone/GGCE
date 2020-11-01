@@ -6,7 +6,6 @@ __email__ = "x94carbone@gmail.com"
 
 """Basic logging module."""
 
-import os
 import logging
 import sys
 
@@ -84,10 +83,9 @@ def setup_logger(name, log_file):
     logger.setLevel(logging.DEBUG)
 
     handler = logging.StreamHandler(sys.stdout)
-    lower = 0 if os.environ.get("GGCE_DEBUG") == "1" else 10
-    handler.setLevel(logging.DEBUG if lower == 0 else logging.INFO)
+    handler.setLevel(logging.DEBUG)
     handler.setFormatter(color_formatter)
-    handler.addFilter(LevelFilter(lower, 20))
+    handler.addFilter(LevelFilter(10, 20))
     logger.addHandler(handler)
 
     handler = logging.StreamHandler(sys.stderr)
