@@ -28,7 +28,7 @@ if __name__ == '__main__':
     w_grid = np.loadtxt(f"{core_path}/grid.txt")
 
     # Suppress debug stream
-    if debug == 1:
+    if debug == 0:
         logging.disable(-1)
 
     parallel(

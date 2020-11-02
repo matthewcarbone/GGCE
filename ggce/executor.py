@@ -26,7 +26,7 @@ def execute(k, w_arr, sy, log_every, target_dir):
     pid = os.getpid()
     for ii, w in enumerate(w_arr):
 
-        state_name = f"{target_dir}/state/{w:.06f}.txt"
+        state_name = f"{target_dir}/state/{w:.12f}.txt"
 
         if target_dir is not None:
             if os.path.exists(state_name):
@@ -39,7 +39,7 @@ def execute(k, w_arr, sy, log_every, target_dir):
         if target_dir is None:
             results.append([w, G, meta])
         else:
-            with open(f"{target_dir}/res.txt", "w") as f:
+            with open(f"{target_dir}/res.txt", "a") as f:
                 A = -G.imag / np.pi
                 t = sum(meta['time'])
                 largest_mat_dim = meta['inv'][0]
@@ -105,12 +105,13 @@ def parallel(
     pool.close()
     pool.join()
 
-    results = [l for p in processes for l in p.get()]
     dt = time.time() - t0
     dlog.info(f"({dt:.02f}s) Parallel execution complete")
 
     if target_dir is not None:
         return
+
+    results = [l for p in processes for l in p.get()]
 
     results.sort(key=lambda x: x[0])  # Sort by w
     G = np.array([x[1] for x in results])
