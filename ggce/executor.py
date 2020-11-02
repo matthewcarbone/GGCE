@@ -146,7 +146,16 @@ class Submitter(Base):
 
         all_cache = utils.listdir_fullpath(self.cache_dir)
         all_cache.sort()
+
+        packs_to_run = None
+        if self.args.package is not None:
+            packs_to_run = [f"{p:03}" for p in self.args.package]
+
         for ii, package in enumerate(all_cache):
+
+            if self.args.package is not None:
+                if f"{ii:03}" not in packs_to_run:
+                    continue
 
             all_package = utils.listdir_fullpath(package)
             for config in all_package:

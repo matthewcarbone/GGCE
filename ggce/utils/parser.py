@@ -36,7 +36,7 @@ def global_parser(sys_argv):
     )
     prime_sp.add_argument(
         '-p', '--package', type=int, default=None, dest='package',
-        help='Index of the package to run. If None, primes all available '
+        help='Index of the package to prime. If None, primes all available '
         'packages. If a single number, primes only that package. Note that '
         'packages must be in the $GMA_PACKAGE_DIR directory (which if not set '
         'defaults to `packages` in the working directory), and must start '
@@ -97,6 +97,12 @@ def global_parser(sys_argv):
         '--wbins', type=int, default=-1, dest='w_bins',
         help='Number of approximately-equal length bins to split up the '
         'w-grid into.'
+    )
+
+    prime_sp.add_argument(
+        '-p', '--package', type=int, nargs='+', default=None, dest='package',
+        help='Index of the packages to run. These are indexed by their '
+        'numbers in the cache directory. Default is to run all available.'
     )
 
     # Quick post processing on the value for beta_critical
