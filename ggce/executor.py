@@ -161,8 +161,10 @@ class Submitter(Base):
                         pc = Lc / L * 100.0
 
                         if pc < 100.0:
+                            tmp = perm.split("/")
+                            tmp = "".join(tmp[-4:])
                             dlog.info(
-                                f"{perm} is {pc:.02f}% complete - submitting"
+                                f"{tmp} is {pc:.02f}% complete: submitting"
                             )
                             utils.run_command(f"mv {submit_script} .")
                             # Path is already contained in the written

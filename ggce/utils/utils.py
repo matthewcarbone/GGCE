@@ -5,11 +5,13 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import numpy as np
-import math
 import os
 import shlex
 import subprocess
 import time
+
+
+from ggce.utils.logger import default_logger as dlog
 
 
 def get_cache_dir():
@@ -151,7 +153,7 @@ def run_command(command):
         if output == b'' and process.poll() is not None:
             break
         if output:
-            print(output.strip().decode())
+            dlog.info(output.strip().decode())
 
     rc = process.poll()
     return rc

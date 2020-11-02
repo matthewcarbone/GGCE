@@ -167,7 +167,9 @@ class InputParameters:
 
         # We don't save the terms since those are reconstructed upon
         # instantiation
-        config = {key: value for key, value in vars(self).items()}
+        config = {
+            key: value for key, value in vars(self).items() if key != 'terms'
+        }
 
         with open(path, 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
