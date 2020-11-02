@@ -82,6 +82,9 @@ def parallel(
         equal the total number of available CPU's.
     """
 
+    dlog.info(f"Running parallel solver with {nprocs} processes")
+    dlog.info(f"Binning w-grid by {w_bins} bins")
+
     t0 = time.time()
 
     sy = system.System(config)
