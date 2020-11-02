@@ -9,6 +9,7 @@ from itertools import product
 import numpy as np
 import multiprocessing as mp
 import os
+import sys
 import time
 import yaml
 
@@ -43,7 +44,7 @@ def execute(k, w_arr, sy, log_every, target_dir):
                 A = -G.imag / np.pi
                 t = sum(meta['time'])
                 largest_mat_dim = meta['inv'][0]
-                f.write(f"{w}\t{A}\t{t}\t{largest_mat_dim}\n")
+                f.write(f"{w:.12f}\t{A:.12f}\t{t:.02e}\t{largest_mat_dim}\n")
             with open(state_name, 'w') as f:
                 f.write("DONE\n")
 
@@ -53,6 +54,7 @@ def execute(k, w_arr, sy, log_every, target_dir):
             dlog.info(
                 f"({pid}, {pc:03}%, {dt:.01f}s) done A({k:.02f}, {w:.02f})"
             )
+            sys.stdout.flush()
 
     if target_dir is None:
         return results
