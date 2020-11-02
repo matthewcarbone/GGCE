@@ -321,7 +321,7 @@ class System:
         meta = {
             'alphas': [],
             'betas': [],
-            'As': [],
+            'inv': [],
             'time': []
         }
 
@@ -363,7 +363,7 @@ class System:
             A = linalg.inv(identity - beta_n @ A) @ alpha_n
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
-            meta['As'].append(A.shape)
+            meta['inv'].append(identity.shape[0])
             meta['time'].append(time.time() - t0)
 
         # The final answer is actually A_1. It is related to G via the vector

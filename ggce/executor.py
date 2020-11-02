@@ -41,8 +41,9 @@ def execute(k, w_arr, sy, log_every, target_dir):
         else:
             with open(f"{target_dir}/res.txt", "w") as f:
                 A = -G.imag / np.pi
-                t = sum(meta['times'])
-                f.write(f"{w}\t{A}\t{t}\n")
+                t = sum(meta['time'])
+                largest_mat_dim = meta['inv'][0]
+                f.write(f"{w}\t{A}\t{t}\t{largest_mat_dim}\n")
             with open(state_name, 'w') as f:
                 f.write("DONE\n")
 
