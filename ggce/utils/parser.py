@@ -99,7 +99,7 @@ def global_parser(sys_argv):
         'w-grid into.'
     )
 
-    prime_sp.add_argument(
+    execute_sp.add_argument(
         '-p', '--package', type=int, nargs='+', default=None, dest='package',
         help='Index of the packages to run. These are indexed by their '
         'numbers in the cache directory. Default is to run all available.'
