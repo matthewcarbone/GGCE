@@ -8,8 +8,6 @@
 #SBATCH --error=job_data/GMA_%A.err
 #SBATCH --mem=62000M
 
-module load compilers/gcc-10.1.0
-
 export OMP_NUM_THREADS=1
 nprocs=12
 
