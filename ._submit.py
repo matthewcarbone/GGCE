@@ -32,6 +32,6 @@ if __name__ == '__main__':
         logging.disable(-1)
 
     parallel(
-        w_grid, config, nprocs, w_bins=w_bins, log_every=10,
+        w_grid, config, w_bins=w_bins, nprocs=nprocs, log_every=10,
         target_dir=core_path
     )

@@ -162,7 +162,7 @@ class Submitter(Base):
 
                         if pc < 100.0:
                             tmp = perm.split("/")
-                            tmp = "".join(tmp[-4:])
+                            tmp = "/".join(tmp[-4:])
                             dlog.info(
                                 f"{tmp} is {pc:.02f}% complete: submitting"
                             )
