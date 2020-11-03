@@ -65,7 +65,7 @@ class InputParameters:
     """
 
     AVAIL_MODELS = ['H', 'EFB', 'SSH']
-    AVAIL_CONFIG_FILTERS = ['no_filter']
+    AVAIL_CONFIG_FILTERS = ['no_filter', 'gaussian']
 
     def __init__(
         self, M, N, eta, model, t, Omega, lambd, a=1.0,

@@ -66,7 +66,7 @@ def time_func(arg1=None):
 
 def configuration_space_generator(length, total_sum):
     """Generator for yielding all possible combinations of integers of length
-    `length` that sum to tota_sum. Not that cases such as length = 4 and
+    `length` that sum to total_sum. Not that cases such as length = 4 and
     total_sum = 5 like [0, 0, 2, 3] need to be screened out, since these do
     not correspond to valid f-functions.
 
@@ -86,21 +86,38 @@ def configuration_space_generator(length, total_sum):
                 yield r
 
 
-def assert_n_vec_legal(n_vec):
-    """Ensures that the input n_vec object is legal, or that it corresponds to
-    a Green's function."""
+def assert_n_vec_legal(n, config_filter=None):
+    """Ensures that the input n object is a legal configuration.
 
-    if n_vec == [[0] for __ in range(len(n_vec))]:
-        # Case where we have the Green's function
-        return
+    Returns
+    -------
+    bool
+        True if the configuration is legal, and False if it is not.
+    """
 
-    for yy in n_vec:
-        assert all(isinstance(xx, int) for xx in yy)
-        assert all(xx >= 0 for xx in yy)
+    if (n[0] <= 0 or n[-1] <= 0):
+        return False
 
-        if len(yy) > 1:
-            assert yy[0] > 0
-            assert yy[-1] > 0
+    if config_filter is None:
+        return True
+
+    if config_filter == 'gaussian':
+        M = len(n)
+        N = sum(n)
+
+        if M % 2 == 0:  # even
+            x = np.linspace(-N / 2 + 0.5, N / 2 - 0.5, M)
+        else:
+            x = np.linspace(-N // 2, N // 2, M)
+        scale_factor = M**2 / 4.0 / np.log(N)
+        y = N * np.exp(-x**2 / scale_factor)
+
+        if any([n[ii] > y[ii] for ii in range(M)]):
+            return False
+        return True
+
+    else:
+        raise RuntimeError(f"Unknown filter {config_filter}")
 
 
 def time_remaining(time_elapsed, percentage_complete):

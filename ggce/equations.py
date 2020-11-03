@@ -8,6 +8,7 @@ import copy
 
 from ggce import physics
 from ggce import terms as terms_module
+from ggce.utils import utils
 
 
 class Equation:
@@ -153,6 +154,14 @@ class Equation:
                 for gamma_idx in range(
                     len(self.n_mat_index) - self.config.M, self.config.M
                 ):
+
+                    if self.config.config_filter is not None:
+                        n_tmp = copy.copy(self.n_mat_index)
+                        n_tmp[gamma_idx] += 1
+                        if not utils.assert_n_vec_legal(
+                            n_tmp, self.config.config_filter
+                        ):
+                            continue
 
                     constant_prefactor = v_term.sign * self.config.g
                     t = terms_module.CreationTerm(

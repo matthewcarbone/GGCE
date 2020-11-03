@@ -117,6 +117,9 @@ class System:
             _totals = 0
             _b_totals = 0
 
+        config_filter = None if self.config.config_filter == 'no_filter' \
+            else self.config.config_filter
+
         # Generate all possible numbers of bosons consistent with n_max.
         for n_bosons in range(1, self.config.N + 1):
 
@@ -132,7 +135,7 @@ class System:
                 # edges of the cloud.
                 tmp_legal_configs = [
                     nn for nn in z_n_configuration_space
-                    if (nn[0] > 0 and nn[-1] > 0)
+                    if utils.assert_n_vec_legal(nn, config_filter)
                 ]
 
                 # Berciu special case, track based on the analysis in her
