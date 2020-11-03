@@ -1,2 +1,4 @@
 *.pyc
 job_data/
+results/
+nb/
