@@ -177,10 +177,6 @@ class Equation:
 
                     self.terms_list.append(t)
 
-            else:
-                msg = f"Invalid dagger string: {v_term.dagger}"
-                raise RuntimeError(msg)
-
 
 class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
