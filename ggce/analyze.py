@@ -24,8 +24,8 @@ class Results:
     def key_str(config, value):
         t = f"{config['model']}_{config['Omega']}_{config['t']}_"
         t += f"{value['k_units_pi']}_{value['lambda']}_{value['M']}" \
-            + f"_{value['N']}_"
-        return t + f"{value['eta']}"
+            + f"_{value['N']}_{value['eta']}"
+        return t
 
     def _assign_key(self, config, value):
         """Returns the correct key value and logs the keys in their
