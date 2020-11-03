@@ -5,7 +5,9 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 
+import copy
 from itertools import product
+import logging
 import numpy as np
 import multiprocessing as mp
 import os
@@ -122,6 +124,82 @@ def parallel(
     G = np.array([x[1] for x in results])
     meta = [x[2] for x in results]
     return G, meta
+
+
+class ConvergenceEngine:
+    """Systematically converge spectral functions in some spectral range."""
+
+    def __init__(self, starting_config, thresh=0.01, N_max=20, M_max=5):
+        logging.disable(30)  # Completely disable the logger except errors
+        self.config = copy.deepcopy(starting_config)
+
+        assert self.config.N < N_max
+        assert self.config.M < M_max
+
+        self.N0 = self.config.N
+        self.M0 = self.config.M
+        self.N_max = N_max
+        self.M_max = M_max
+        self.thresh = thresh
+
+        self.all_A = {
+            m: {
+                n: dict() for n in range(self.N0, self.N_max + 1)
+            } for m in range(self.M0, self.M_max + 1)
+        }
+
+    @staticmethod
+    def epsilon(A1, A2):
+        return np.mean((A1 - A2)**2)
+
+    def append_A(self, A, config):
+        self.all_A[config.M, config.N] = A
+
+    def _converge_wrt_N(self, w_grid, config, **kwargs):
+
+        # Always set the initial config N to the starting N0. Note that
+        # config.M should be set before entering this function
+        N0 = self.N0
+        G1, meta = parallel(w_grid, config, **kwargs)
+        A1 = -G1.imag / np.pi
+        self.append_A(A1, config)
+
+        for N in range(N0 + 1, self.N_max + 1):
+            config.N = N
+            G2, meta = parallel(w_grid, config, **kwargs)
+            A2 = -G2.imag / np.pi
+            self.append_A(A2, config)
+            eps = ConvergenceEngine.epsilon(A1, A2)
+            print(f"At inner loop ({config.M}, {config.N}); eps {eps:.02e}")
+            if eps < self.thresh:
+                print(f"\tConverged ({config.M}, {config.N})")
+                break
+            A1 = A2
+
+        return A2, config
+
+    def converge(self, w_grid, **kwargs):
+        """Attempts to converge the spectral functions to the convergence
+        threshold."""
+
+        # Here, A1 represents the converged spectrum wrt N, for fixed initial M
+        A1, config = self._converge_wrt_N(w_grid, self.config)
+        config1 = copy.deepcopy(config)
+
+        # In the outer loop, we converge wrt M
+        for M in range(self.M0 + 1, self.M_max + 1):
+            config.M = M
+            A2, config2 = self._converge_wrt_N(w_grid, config)
+            eps = ConvergenceEngine.epsilon(A1, A2)
+            print(f"At outer loop M={config.M}; eps {eps:.02e}")
+            if eps < self.thresh:
+                print(f"\tConverged ({config.M}, {config.N})")
+                print(f"\tDONE at ({config.M}, {config.N})")
+                break
+            A1 = A2
+            config1 = copy.deepcopy(config)
+
+        return A1, config1, A2, config2
 
 
 class Base:
