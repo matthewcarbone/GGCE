@@ -46,6 +46,9 @@ class System:
         """
 
         self.config = config
+        filter_type = None if self.config.config_filter == 'no_filter' \
+            else self.config.config_filter
+        self.config_filter = utils.ConfigFilter(filter_type=filter_type)
         self._log_configuration()
 
         # The number of unique boson types has already been evaluated upon
@@ -67,7 +70,9 @@ class System:
 
     def _append_generalized_equation(self, n_bosons, n_mat):
 
-        eq = Equation(n_mat, config=self.config)
+        eq = Equation(
+            n_mat, config=self.config, config_filter=self.config_filter
+        )
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
@@ -117,9 +122,6 @@ class System:
             _totals = 0
             _b_totals = 0
 
-        config_filter = None if self.config.config_filter == 'no_filter' \
-            else self.config.config_filter
-
         # Generate all possible numbers of bosons consistent with n_max.
         for n_bosons in range(1, self.config.N + 1):
 
@@ -135,7 +137,7 @@ class System:
                 # edges of the cloud.
                 tmp_legal_configs = [
                     nn for nn in z_n_configuration_space
-                    if utils.assert_n_vec_legal(nn, config_filter)
+                    if self.config_filter(nn)
                 ]
 
                 # Berciu special case, track based on the analysis in her
@@ -246,6 +248,9 @@ class System:
             for eq in eqs:
                 eq.visualize(full=full, coef=coef)
             print("\n")
+
+    def visualize_filter(self, M, N):
+        self.config_filter.visualize(M, N)
 
     def generate_unique_terms(self):
         """Constructs the basis for the problem, which is a mapping between

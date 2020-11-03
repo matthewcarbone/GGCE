@@ -86,38 +86,88 @@ def configuration_space_generator(length, total_sum):
                 yield r
 
 
-def assert_n_vec_legal(n, config_filter=None):
-    """Ensures that the input n object is a legal configuration.
+class ConfigFilter:
 
-    Returns
-    -------
-    bool
-        True if the configuration is legal, and False if it is not.
-    """
+    def __init__(self, M_min=2, filter_type=None):
+        """M_min is the minimum M in which we want the filter to apply."""
 
-    if (n[0] <= 0 or n[-1] <= 0):
-        return False
+        self.M_min = M_min
+        self.filter_type = filter_type
+        self.config_bound_map = dict()
 
-    if config_filter is None:
-        return True
+    def _find(self, M, N):
+        """Attempts to find if a rule has been calculated already for some
+        configuration. Returns the configuration if it does, else returns
+        None."""
 
-    if config_filter == 'gaussian':
+        try:
+            d1 = self.config_bound_map[M]
+        except KeyError:
+            self.config_bound_map[M] = dict()
+            return None
+
+        try:
+            d2 = d1[N]
+        except KeyError:
+            return None
+
+        return d2
+
+    def get(self, M, N):
+        """Get's the maximum configuration allowed by the rule."""
+
+        possible = self._find(M, N)
+        if possible is not None:
+            return possible
+
+        if M < self.M_min:
+            ans = np.array([N for _ in range(M)])
+
+        elif self.filter_type == 'gaussian':
+            dev = M**2 / 4.0 / np.log(N)
+            x = np.array([(-(M / 2) + ii + 0.5) for ii in range(M)])
+            ans = (N * np.exp(-x**2 / dev)).astype(int)
+
+        else:
+            raise NotImplementedError(f"Filter {self.config_filter}")
+
+        self.config_bound_map[M][N] = ans
+        return ans
+
+    def visualize(self, M, N):
+        n = self.get(M, N)
+        print("\n")
+        for nn in n:
+            print(f"{nn} \t | ", end="")
+            for mm in range(0, nn):
+                print("#", end="")
+            print("\n", end="")
+
+    def __call__(self, n):
+
         M = len(n)
+
+        # G is always legal
+        if M == 1 and n[0] == 0:
+            return True
+
+        # The case in which either of the edges is zero is always illegal,
+        # except for G
+        if n[0] <= 0 or n[-1] <= 0:
+            return False
+
+        # No filter, return True always
+        if self.filter_type is None:
+            return True
+
+        # Then check the rule
         N = sum(n)
 
-        if M % 2 == 0:  # even
-            x = np.linspace(-N / 2 + 0.5, N / 2 - 0.5, M)
-        else:
-            x = np.linspace(-N // 2, N // 2, M)
-        scale_factor = M**2 / 4.0 / np.log(N)
-        y = N * np.exp(-x**2 / scale_factor)
-
-        if any([n[ii] > y[ii] for ii in range(M)]):
+        # Upper bound
+        bound = self.get(M, N)
+        if np.any((bound - np.array(n)) < 0):
             return False
         return True
-
-    else:
-        raise RuntimeError(f"Unknown filter {config_filter}")
 
 
 def time_remaining(time_elapsed, percentage_complete):

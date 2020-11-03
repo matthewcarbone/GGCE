@@ -37,7 +37,7 @@ class Equation:
         particular _n_mat_identifier.
     """
 
-    def __init__(self, n_mat_index, config):
+    def __init__(self, n_mat_index, config, config_filter=None):
         """Initializer.
 
         Parameters
@@ -55,6 +55,7 @@ class Equation:
         self.n_mat_index = n_mat_index
         self.f_arg_terms = None
         self.config = config
+        self.config_filter = config_filter
 
     def bias(self, k, w):
         """The default value for the bias is 0, except in the case of the
@@ -145,6 +146,13 @@ class Equation:
                         constant_prefactor=constant_prefactor
                     )
                     t.step(gamma_idx)
+
+                    # Check the filter for the new configuration, which may not
+                    # be legal, since we might have added/removed a boson in an
+                    # illegal place based on the filter parameters.
+                    if not self.config_filter(t.n_mat):
+                        continue
+
                     t.check_if_green_and_simplify()
                     self.terms_list.append(t)
 
@@ -155,22 +163,23 @@ class Equation:
                     len(self.n_mat_index) - self.config.M, self.config.M
                 ):
 
-                    if self.config.config_filter is not None:
-                        n_tmp = copy.copy(self.n_mat_index)
-                        n_tmp[gamma_idx] += 1
-                        if not utils.assert_n_vec_legal(
-                            n_tmp, self.config.config_filter
-                        ):
-                            continue
-
                     constant_prefactor = v_term.sign * self.config.g
                     t = terms_module.CreationTerm(
                         copy.copy(self.n_mat_index), hterm=v_term,
                         constant_prefactor=constant_prefactor
                     )
                     t.step(gamma_idx)
+
+                    if not self.config_filter(t.n_mat):
+                        continue
+
                     t.check_if_green_and_simplify()
+
                     self.terms_list.append(t)
+
+            else:
+                msg = f"Invalid dagger string: {v_term.dagger}"
+                raise RuntimeError(msg)
 
 
 class GreenEquation(Equation):
