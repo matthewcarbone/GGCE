@@ -8,6 +8,7 @@ import copy
 
 from ggce import physics
 from ggce import terms as terms_module
+from ggce.utils import utils
 
 
 class Equation:
@@ -36,7 +37,7 @@ class Equation:
         particular _n_mat_identifier.
     """
 
-    def __init__(self, n_mat_index, config):
+    def __init__(self, n_mat_index, config, config_filter=None):
         """Initializer.
 
         Parameters
@@ -54,6 +55,7 @@ class Equation:
         self.n_mat_index = n_mat_index
         self.f_arg_terms = None
         self.config = config
+        self.config_filter = config_filter
 
     def bias(self, k, w):
         """The default value for the bias is 0, except in the case of the
@@ -144,6 +146,13 @@ class Equation:
                         constant_prefactor=constant_prefactor
                     )
                     t.step(gamma_idx)
+
+                    # Check the filter for the new configuration, which may not
+                    # be legal, since we might have added/removed a boson in an
+                    # illegal place based on the filter parameters.
+                    if not self.config_filter(t.n_mat):
+                        continue
+
                     t.check_if_green_and_simplify()
                     self.terms_list.append(t)
 
@@ -160,7 +169,12 @@ class Equation:
                         constant_prefactor=constant_prefactor
                     )
                     t.step(gamma_idx)
+
+                    if not self.config_filter(t.n_mat):
+                        continue
+
                     t.check_if_green_and_simplify()
+
                     self.terms_list.append(t)
 
 
