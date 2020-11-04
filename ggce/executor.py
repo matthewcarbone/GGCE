@@ -27,6 +27,11 @@ def execute(k, w_arr, sy, log_every, target_dir):
     results = []
     L = len(w_arr)
     pid = os.getpid()
+
+    wmin = w_arr.min()
+    wmax = w_arr.max()
+    dlog.info(f"({pid}) wgrid in [{wmin:.02f}, {wmax:.02f}]")
+
     for ii, w in enumerate(w_arr):
 
         state_name = f"{target_dir}/state/{w:.12f}.txt"
@@ -51,10 +56,10 @@ def execute(k, w_arr, sy, log_every, target_dir):
                 f.write("DONE\n")
 
         if (ii + 1) % log_every == 0:
-            pc = int((ii + 1) / L * 100.0)
             dt = time.time() - t0
             dlog.info(
-                f"({pid}, {pc:03}%, {dt:.01f}s) done A({k:.02f}, {w:.02f})"
+                f"({pid}, {(ii + 1):03}/{L:03}, {dt:.01f}s) "
+                f"done A({k:.02f}, {w:.02f})"
             )
             sys.stdout.flush()
 
