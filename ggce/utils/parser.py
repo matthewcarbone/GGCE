@@ -45,6 +45,11 @@ def global_parser(sys_argv):
         'config file, and a slurm_config_mapping.yaml config file.'
     )
     prime_sp.add_argument(
+        '-c', '--configs', type=int, nargs='+', default=None, dest='c_to_run',
+        help='Indexes the configs within a package to run. Defaults to '
+        'running all configs in the package.'
+    )
+    prime_sp.add_argument(
         '--distribute', type=int, default=1, dest='distribute',
         help='Number of nodes to distribute each job onto.'
     )

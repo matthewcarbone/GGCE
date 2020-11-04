@@ -498,7 +498,6 @@ class Primer(Base):
         """Prepares a single package for running."""
 
         for ii, config in enumerate(loaded_configs):
-            dlog.info(f"Readying config {ii:03}")
             base = f"{package_path_cache}/{ii:03}"
             os.makedirs(base)
 
@@ -557,6 +556,25 @@ class Primer(Base):
             # Load in all files
             all_files = utils.listdir_fullpath(pack_path_load)
             staged_configs = [s for s in all_files if "config.yaml" in s]
+            staged_configs.sort()
+
+            if self.args.c_to_run is not None:
+                c_to_run = [f"{xx:02}" for xx in self.args.c_to_run]
+
+            for jj, f in enumerate(staged_configs):
+                fname = f.split("/")[-1]
+
+                # Skip configs not specified
+                if self.args.c_to_run is not None:
+                    fn = int(fname[:2])
+
+                    # We only use the first two numbers to index the config
+                    if f"{fn:02}" not in c_to_run:
+                        dlog.info(f"Skipping config {fname}")
+                        continue
+
+                dlog.info(f"Preparing config {fname}")
+
             configs = [yaml.safe_load(open(f)) for f in staged_configs]
             slurm_path = f"{pack_path_load}/submit.sbatch"
 
