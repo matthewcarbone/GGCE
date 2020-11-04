@@ -555,13 +555,14 @@ class Primer(Base):
 
             # Load in all files
             all_files = utils.listdir_fullpath(pack_path_load)
-            staged_configs = [s for s in all_files if "config.yaml" in s]
-            staged_configs.sort()
 
             if self.args.c_to_run is not None:
                 c_to_run = [f"{xx:02}" for xx in self.args.c_to_run]
 
-            for jj, f in enumerate(staged_configs):
+            tmp_staged_configs = [s for s in all_files if "config.yaml" in s]
+            tmp_staged_configs.sort()
+            staged_configs = []
+            for jj, f in enumerate(tmp_staged_configs):
                 fname = f.split("/")[-1]
 
                 # Skip configs not specified
@@ -573,6 +574,7 @@ class Primer(Base):
                         dlog.info(f"Skipping config {fname}")
                         continue
 
+                staged_configs.append(f)
                 dlog.info(f"Preparing config {fname}")
 
             configs = [yaml.safe_load(open(f)) for f in staged_configs]
