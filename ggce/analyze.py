@@ -11,6 +11,7 @@ import numpy as np
 import copy
 from scipy.signal import find_peaks
 from scipy import interpolate
+from scipy.interpolate import InterpolatedUnivariateSpline as ius
 
 
 def listdir_fullpath(d):
@@ -115,14 +116,31 @@ class Results:
         }
         return self.master[Results.key_str(config, value)]
 
-    def lambda_band(self, **kwargs):
-        """Returns the `lambda` band structure (E0 as a function) of lambda."""
+    def lambda_band(self, interp=False, **kwargs):
+        """Returns the `lambda` band structure (E0 as a function) of lambda.
+        Note for interp to work we must assume that we're centered on the peak
+        of interest."""
 
         band = []
         for lambd in self.vals['lambda']:
             kwargs['lam'] = lambd
             A = self.__call__(**kwargs)
-            band.append(A[:, 0][find_peaks(A[:, 1])[0][0]])
+
+            if not interp:
+                y = A[:, 1]
+                x = A[:, 0]
+                peaks = find_peaks(y)
+                band.append(x[peaks[0][0]])
+
+            else:
+                spl = ius(A[:, 0], A[:, 1])
+                x = np.linspace(A[:, 0][0], A[:, 0][-1], 10000)
+                y = spl(x, ext='zeros')
+                # loc = np.argmax(y)
+                peaks = find_peaks(y)
+                band.append(x[peaks[0][0]])
+                # band.append(x[loc])
+
         return self.vals['lambda'], np.array(band)
 
     def lambda_band_exact(self, **kwargs):
