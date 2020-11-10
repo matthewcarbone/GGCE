@@ -28,10 +28,6 @@ def execute(k, w_arr, sy, log_every, target_dir):
     L = len(w_arr)
     pid = os.getpid()
 
-    wmin = w_arr.min()
-    wmax = w_arr.max()
-    dlog.info(f"({pid}) wgrid in [{wmin:.02f}, {wmax:.02f}]")
-
     for ii, w in enumerate(w_arr):
 
         state_name = f"{target_dir}/state/{w:.12f}.txt"
@@ -91,6 +87,7 @@ def parallel(
 
     dlog.info(f"Running parallel solver with {nprocs} processes")
     dlog.info(f"Binning w-grid by {w_bins} bins")
+    dlog.info(f"(N, M) = ({config.N}, {config.M})")
 
     t0 = time.time()
 

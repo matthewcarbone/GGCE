@@ -116,7 +116,10 @@ class Results:
         }
         return self.master[Results.key_str(config, value)]
 
-    def lambda_band(self, interp=False, **kwargs):
+    def lambda_band(
+        self, interp=False, cutoff=False, cutoff_eps=1e-6,
+        **kwargs
+    ):
         """Returns the `lambda` band structure (E0 as a function) of lambda.
         Note for interp to work we must assume that we're centered on the peak
         of interest."""
@@ -134,14 +137,40 @@ class Results:
 
             else:
                 spl = ius(A[:, 0], A[:, 1])
-                x = np.linspace(A[:, 0][0], A[:, 0][-1], 10000)
+                x = np.linspace(A[:, 0][0], A[:, 0][-1], 1000000)
                 y = spl(x, ext='zeros')
                 # loc = np.argmax(y)
                 peaks = find_peaks(y)
                 band.append(x[peaks[0][0]])
                 # band.append(x[loc])
 
-        return self.vals['lambda'], np.array(band)
+        if cutoff:
+
+            final_lambdas = []
+            final_band = []
+
+            # Here, we display the errors for the provided N compared with
+            # N - 1, if it exists.
+            try:
+                _, band2 = self.lambda_band(interp=interp, N=kwargs['N'] - 1)
+            except KeyError:
+                print(f"N - 1 = {kwargs['N']-1} DNE in this dataset")
+                return self.vals['lambda'], np.array(band)
+            for ii in range(len(band2)):
+                delta = np.abs(band[ii] - band2[ii])
+                appended = False
+                if delta < cutoff_eps:
+                    final_lambdas.append(self.vals['lambda'][ii])
+                    final_band.append(band[ii])
+                    appended = True
+                print(
+                    f"{ii}\t{band2[ii]:.04f}"
+                    f"\t{(band[ii] - band2[ii]):.06f}\tappended {appended}"
+                )
+            return final_lambdas, final_band
+
+        else:
+            return self.vals['lambda'], np.array(band)
 
     def lambda_band_exact(self, **kwargs):
         """Uses an analytic equation to determine the true energy. Requires two
