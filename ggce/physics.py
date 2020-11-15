@@ -5,7 +5,7 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import numpy as np
-from scipy.special import binom
+from scipy.special import comb
 
 
 def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
@@ -36,14 +36,10 @@ def generalized_equations_combinatorics_term(m, n):
     * (m + n - 3) choose (n - 2) otherwise
     """
 
-    if n == 1 and m == 1:
-        return 1
-    if n == 2:
-        return 1
-    if m == 1 and n >= 2:
+    if m == 1 or n == 2:
         return 1
 
-    return binom(m + n - 3, n - 2)
+    return comb(m + n - 3, n - 2, exact=True)
 
 
 def total_generalized_equations(M, N):
