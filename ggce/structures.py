@@ -126,6 +126,12 @@ class InputParameters:
             raise RuntimeError(f"Unknown model type {self.model}")
 
     def init_terms(self):
+        """Initializes the terms object, which contains the critical
+        information about the Hamiltonian necessary for running the
+        computation. Note that the sign is *relative*, so as long as
+        every term in V is multipled by an overall factor, and each term has
+        the correct sign relative to the others, the result will be the
+        same."""
 
         self._set_g()
 
