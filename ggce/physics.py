@@ -5,6 +5,7 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import numpy as np
+from scipy.special import binom
 
 
 def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
@@ -21,6 +22,56 @@ def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
 
 def G0_k_omega(k, omega, a, eta, tf):
     return 1.0 / (omega + 1j * eta + 2.0 * tf * np.cos(k * a))
+
+
+def generalized_equations_combinatorics_term(m, n):
+    """The total number of generalized equations is given by the exact
+    relation
+
+    sum_{m, n = 1}^{M, N} c_{m, n}
+
+    where c_{m, n} is given by this equation, and is equal to
+
+    * 1 if m = 1 or n = 2
+    * (m + n - 3) choose (n - 2) otherwise
+    """
+
+    if n == 1 and m == 1:
+        return 1
+    if n == 2:
+        return 1
+    if m == 1 and n >= 2:
+        return 1
+
+    return binom(m + n - 3, n - 2)
+
+
+def total_generalized_equations(M, N):
+    """Gets the total number of generalized equations as predicted by the
+    combinatorics equation described in
+    generalized_equations_combinatorics_term.
+    """
+
+    return sum([
+        sum([
+            generalized_equations_combinatorics_term(m, n)
+            for n in range(1, N + 1)
+        ]) for m in range(1, M + 1)
+    ])
+
+    # total = 0
+    # for nn in range(1, N + 1):
+    #     for mm in range(1, M + 1):
+    #         if nn == 1:
+    #             if mm == 1:
+    #                 total += 1
+    #         elif nn == 2:
+    #             total += 1
+    #         elif nn >= 2 and mm == 1:
+    #             total += 1
+    #         else:
+    #             total += binom(mm + nn - 3, nn - 2)
+    # return total
 
 
 def mgf_sum_rule(w, s, order):

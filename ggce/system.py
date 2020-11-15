@@ -12,6 +12,7 @@ import time
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 from ggce.equations import Equation, GreenEquation
+from ggce.physics import total_generalized_equations
 
 
 class System:
@@ -180,6 +181,13 @@ class System:
 
         L = sum([len(val) for val in self.generalized_equations.values()])
         dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
+
+        # Plus one for the Green's function
+        T = int(total_generalized_equations(self.config.M, self.config.N) + 1)
+        dlog.debug(f"Predicted {T} equations from combinatorics equations")
+
+        assert T == L
+
         totals = self._get_total_terms()
         dlog.debug(f"Predicting {totals} total terms")
 
@@ -240,6 +248,24 @@ class System:
         dlog.info(f"({dt:.02f}s) Generated {L} equations")
 
     def visualize(self, generalized=True, full=True, coef=None):
+        """Allows for easy visualization of the closure. Note this isn't
+        recommended when there are greater than 10 or so equations, since
+        it will be very difficult to see everything.
+
+        Parameters
+        ----------
+        generalized : bool
+            If True, prints information on the generalized equations, else
+            prints the full equations. Default is True.
+        full : bool
+            If True, prints information about the argument of g(...) and the
+            exponential shift in addition to the n-vector and f-argument.
+            Else, just prints the latter two. Default is True.
+        coef : list, optional
+            If not None, actually evaluates the terms at the value of the
+            (k, w) coefficient. Default is None.
+        """
+
         eqs_dict = self.generalized_equations if generalized \
             else self.equations
         for n_bosons, eqs in eqs_dict.items():
