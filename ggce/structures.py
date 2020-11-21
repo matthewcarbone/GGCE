@@ -21,7 +21,7 @@ class ModelParams:
         self.g = g
 
 
-class SHT:
+class SingleTerm:
     """Container for a single term in the Hamiltonian. Also carries the
     parameters needed for the computation, such as the couplings."""
 
@@ -141,26 +141,26 @@ class InputParameters:
 
         if self.model == 'H':
             self.terms = [
-                SHT(x=0, y=0, sign=-1.0, dagger='+', model_params=mp),
-                SHT(x=0, y=0, sign=-1.0, dagger='-', model_params=mp)
+                SingleTerm(x=0, y=0, sign=-1.0, dagger='+', model_params=mp),
+                SingleTerm(x=0, y=0, sign=-1.0, dagger='-', model_params=mp)
             ]
         elif self.model == 'EFB':
             self.terms = [
-                SHT(x=1, y=1, sign=1.0, dagger='+', model_params=mp),
-                SHT(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
-                SHT(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
-                SHT(x=-1, y=0, sign=1.0, dagger='-', model_params=mp)
+                SingleTerm(x=1, y=1, sign=1.0, dagger='+', model_params=mp),
+                SingleTerm(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
+                SingleTerm(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
+                SingleTerm(x=-1, y=0, sign=1.0, dagger='-', model_params=mp)
             ]
         elif self.model == 'SSH':
             self.terms = [
-                SHT(x=1, y=0, sign=1.0, dagger='+', model_params=mp),
-                SHT(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
-                SHT(x=1, y=1, sign=-1.0, dagger='+', model_params=mp),
-                SHT(x=1, y=1, sign=-1.0, dagger='-', model_params=mp),
-                SHT(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
-                SHT(x=-1, y=-1, sign=1.0, dagger='-', model_params=mp),
-                SHT(x=-1, y=0, sign=-1.0, dagger='+', model_params=mp),
-                SHT(x=-1, y=0, sign=-1.0, dagger='-', model_params=mp)
+                SingleTerm(x=1, y=0, sign=1.0, dagger='+', model_params=mp),
+                SingleTerm(x=1, y=0, sign=1.0, dagger='-', model_params=mp),
+                SingleTerm(x=1, y=1, sign=-1.0, dagger='+', model_params=mp),
+                SingleTerm(x=1, y=1, sign=-1.0, dagger='-', model_params=mp),
+                SingleTerm(x=-1, y=-1, sign=1.0, dagger='+', model_params=mp),
+                SingleTerm(x=-1, y=-1, sign=1.0, dagger='-', model_params=mp),
+                SingleTerm(x=-1, y=0, sign=-1.0, dagger='+', model_params=mp),
+                SingleTerm(x=-1, y=0, sign=-1.0, dagger='-', model_params=mp)
             ]
         else:
             raise RuntimeError("Unknown model type when setting terms")
