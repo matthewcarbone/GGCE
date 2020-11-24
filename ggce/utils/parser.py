@@ -23,6 +23,11 @@ def global_parser(sys_argv):
         'required user inputs.'
     )
 
+    ap.add_argument(
+        '--debug', default=False, dest='debug', action='store_true',
+        help='Enables the debug logging stream to stdout.'
+    )
+
     subparsers = ap.add_subparsers(
         help='Choices for various priming, execution and post-processing '
         'protocols.', dest='protocol'
@@ -35,32 +40,17 @@ def global_parser(sys_argv):
         'appropriate directories and writing the SLURM submit file.'
     )
     prime_sp.add_argument(
-        '-p', '--package', type=int, default=None, dest='package',
-        help='Index of the package to prime. If None, primes all available '
-        'packages. If a single number, primes only that package. Note that '
-        'packages must be in the $GMA_PACKAGE_DIR directory (which if not set '
-        'defaults to `packages` in the working directory), and must start '
-        'with three digits, e.g., 123_my_package_sub_dir. A single package '
-        'should contain multiple ##_config.yaml files, a single slurm.yaml '
-        'config file, and a slurm_config_mapping.yaml config file.'
-    )
-    prime_sp.add_argument(
         '-c', '--configs', type=int, nargs='+', default=None, dest='c_to_run',
         help='Indexes the configs within a package to run. Defaults to '
         'running all configs in the package.'
     )
     prime_sp.add_argument(
-        '--distribute', type=int, default=1, dest='distribute',
-        help='Number of nodes to distribute each job onto.'
+        '--linspacek', default=False, dest='linspacek',
+        action='store_true',
+        help='If True, then the user is required to provide three values for '
+        'the -k flag: the k0, kf and total number of k points.'
     )
-    prime_sp.add_argument(
-        '--procs', type=int, default=1, dest='mp_procs',
-        help='The number of multiprocessing processes to use. Note that this '
-        'is not the number of MPI processes as set in SLURM, that is always '
-        '1. This is the number of multiprocessing jobs to use, each of which '
-        'will utilize OMP_NUM_THREADS threads. So the total number of CPUs '
-        'should approximately equal procs * OMP_NUM_THREADS.'
-    )
+
     # Local stuff can be done easily via Jupyter notebooks
     # prime_sp.add_argument(
     #     '--local', dest='local', default=False, action='store_true',
@@ -75,15 +65,30 @@ def global_parser(sys_argv):
     req = prime_sp.add_argument_group("required")
     req.add_argument(
         '-N', type=int, nargs='+', default=None, dest='N',
-        help='Number of bosons.'
+        help='Number of bosons.', required=True
     )
     req.add_argument(
         '-M', type=int, nargs='+', default=None, dest='M',
-        help='Maximal cloud extent.'
+        help='Maximal cloud extent.', required=True
     )
     req.add_argument(
         '--eta', type=float, nargs='+', default=None, dest='eta',
-        help='Broadening parameter.'
+        help='Broadening parameter.', required=True
+    )
+    req.add_argument(
+        '-k', type=float, nargs='+', default=None, dest='k_units_pi',
+        help='Values for k in units of pi.', required=True
+    )
+    req.add_argument(
+        '-p', '--package', type=int, default=None, dest='package',
+        help='Index of the package to prime. If None, primes all available '
+        'packages. If a single number, primes only that package. Note that '
+        'packages must be in the $GMA_PACKAGE_DIR directory (which if not set '
+        'defaults to `packages` in the working directory), and must start '
+        'with three digits, e.g., 123_my_package_sub_dir. A single package '
+        'should contain multiple ##_config.yaml files, a single slurm.yaml '
+        'config file, and a slurm_config_mapping.yaml config file.',
+        required=True
     )
 
     # (2) ---------------------------------------------------------------------
@@ -94,27 +99,29 @@ def global_parser(sys_argv):
     )
 
     execute_sp.add_argument(
-        '--debug', default=False, dest='debug', action='store_true',
-        help='Enables the debug logging stream to stdout.'
+        '--bash', default=False, dest='bash',
+        action='store_true', help='Run using bash (locally) instead of sbatch'
     )
 
     execute_sp.add_argument(
-        '--wbins', type=int, default=-1, dest='w_bins',
-        help='Number of approximately-equal length bins to split up the '
-        'w-grid into.'
+        '-t', '--threads', default=1, dest='threads', type=int,
+        help='Number of threads per process.'
     )
 
     execute_sp.add_argument(
+        '-np', '--processes', default=1, dest='nprocs', type=int,
+        help='Number of MPI processes.'
+    )
+
+    req = execute_sp.add_argument_group("required")
+
+    req.add_argument(
         '-p', '--package', type=int, nargs='+', default=None, dest='package',
         help='Index of the packages to run. These are indexed by their '
-        'numbers in the cache directory. Default is to run all available.'
+        'numbers in the cache directory.', required=True
     )
 
     # Quick post processing on the value for beta_critical
     args = ap.parse_args(sys_argv)
-
-    if args.protocol == 'prime':
-        if (args.N is None or args.M is None or args.eta is None):
-            raise RuntimeError("M, N, and eta are required in prime step")
 
     return args

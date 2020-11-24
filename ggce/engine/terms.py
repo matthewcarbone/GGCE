@@ -6,7 +6,7 @@ __email__ = "x94carbone@gmail.com"
 
 import cmath
 
-from ggce import physics
+from ggce.engine import physics
 
 
 class Term:

@@ -11,8 +11,8 @@ import time
 
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
-from ggce.equations import Equation, GreenEquation
-from ggce.physics import total_generalized_equations
+from ggce.engine.equations import Equation, GreenEquation
+from ggce.engine.physics import total_generalized_equations
 
 
 class System:
@@ -196,6 +196,8 @@ class System:
         for key, _ in self.generalized_equations.items():
             self.equations[key] = []
 
+        return T
+
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
 
@@ -246,6 +248,8 @@ class System:
 
         L = sum([len(val) for val in self.equations.values()])
         dlog.info(f"({dt:.02f}s) Generated {L} equations")
+
+        return L
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't

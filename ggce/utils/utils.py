@@ -4,6 +4,7 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+import logging
 import numpy as np
 import os
 import shlex
@@ -14,11 +15,47 @@ import time
 from ggce.utils.logger import default_logger as dlog
 
 
+class DisableLogger():
+
+    def __enter__(self):
+        logging.disable(logging.CRITICAL)
+
+    def __exit__(self, exit_type, exit_value, exit_traceback):
+        logging.disable(logging.NOTSET)
+
+
+# https://stackoverflow.com/questions/8924173/how-do-i-print-bold-text-in-python
+class Color:
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
+
+def N_M_eta_k_subdir(M, N, eta, k_u_pi, mapping, config_idx):
+    subdir = f"{mapping['M'][M]:03}/{mapping['N'][N]:03}/"
+    subdir += f"{mapping['eta'][eta]:03}/{mapping['k_units_pi'][k_u_pi]:06}"
+    return f"{config_idx:03}/{subdir}"
+
+
+def bold(s):
+    """Makes a string bold for console output."""
+
+    return Color.BOLD + s + Color.END
+
+
 def get_cache_dir():
     cache = os.environ.get('GGCE_CACHE_DIR')
     if cache is None:
         cache = 'results'
     os.makedirs(cache, exist_ok=True)
+    dlog.debug(f"Cache directory set to {cache}")
     return cache
 
 
@@ -27,6 +64,7 @@ def get_package_dir():
     if cache is None:
         cache = 'packages'
     os.makedirs(cache, exist_ok=True)
+    dlog.debug(f"Package directory set to {cache}")
     return cache
 
 
@@ -39,6 +77,11 @@ def listdir_fullpath(d):
 def listdir_files_fp(d):
     x = [os.path.join(d, f) for f in os.listdir(d)]
     return [xx for xx in x if not os.path.isdir(xx)]
+
+
+def listdir_fullpath_dirs_only(d):
+    dirs = [os.path.join(d, f) for f in os.listdir(d)]
+    return [d for d in dirs if os.path.isdir(d)]
 
 
 def time_func(arg1=None):

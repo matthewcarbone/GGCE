@@ -6,9 +6,8 @@ __email__ = "x94carbone@gmail.com"
 
 import copy
 
-from ggce import physics
-from ggce import terms as terms_module
-from ggce.utils import utils
+from ggce.engine import physics
+from ggce.engine import terms as terms_module
 
 
 class Equation:

@@ -165,6 +165,11 @@ class InputParameters:
         else:
             raise RuntimeError("Unknown model type when setting terms")
 
+    def get_params(self):
+        return {
+            key: value for key, value in vars(self).items() if key != 'terms'
+        }
+
     def save_config(self, path):
         """Saves the config to the disk. These are the precise parameters
         needed to reconstruct the input parameters in its entirety."""
@@ -173,9 +178,7 @@ class InputParameters:
 
         # We don't save the terms since those are reconstructed upon
         # instantiation
-        config = {
-            key: value for key, value in vars(self).items() if key != 'terms'
-        }
+        config = self.get_params()
 
         with open(path, 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
