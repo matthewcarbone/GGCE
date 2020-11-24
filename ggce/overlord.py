@@ -60,8 +60,9 @@ class Prime:
         marks the index to resume creating directories at."""
 
         # List all of the directories already existing in the cache (with full
-        # paths)
+        # paths). Ignore system/hidden files with != ".".
         existing = utils.listdir_fullpath(self.cache_dir)
+        existing = [e for e in existing if os.path.basename(e)[0] != "."]
         existing.sort()
 
         # Get the basename of the last file and add one to the index. This

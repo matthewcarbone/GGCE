@@ -26,6 +26,8 @@ from ggce.engine import system
 from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
 
+DRY_RUN = False
+
 
 class LoggerOnRank:
 
@@ -99,7 +101,8 @@ def calculate(
         The location of the cache for this package.
     """
 
-    logger.warning("Running in dry run mode: G is randomly generated")
+    if dry_run:
+        logger.warning("Running in dry run mode: G is randomly generated")
 
     perms = list(product(
         M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
@@ -116,6 +119,11 @@ def calculate(
             state_dir = os.path.join(target, 'state')
             os.makedirs(state_dir, exist_ok=True)
             os.makedirs(target, exist_ok=True)
+
+            donefile = os.path.join(state_dir, "DONE.txt")
+            if os.path.isfile(donefile):
+                dlog.debug(f"Target {target} is done, continuing")
+                continue
 
             if not dry_run:
                 input_params = InputParameters(
@@ -185,6 +193,51 @@ def calculate(
                     f.write("DONE\n")
 
 
+def cleanup(
+    jobs, M_N_eta_k_mapping, package_cache_path, logger,
+    dry_run=False
+):
+    """Runs the calculations.
+
+    Parameters
+    ----------
+    jobs : dict
+        The jobs to run on this rank.
+    M_N_eta_k_mapping : dict
+        A master list of the keys M, N, eta and k, and the values mapped
+        to the indexes we will use to construct the directory paths.
+    package_cache_pat : str
+        The location of the cache for this package.
+    """
+
+    perms = list(product(
+        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
+        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
+    ))
+
+    for c_idx, wgrid in jobs.items():
+        for perm in perms:
+            (M, N, eta, k_units_pi) = perm
+            target = utils.N_M_eta_k_subdir(*perm, M_N_eta_k_mapping, c_idx)
+            target = os.path.join(package_cache_path, target)
+            state_dir = os.path.join(target, 'state')
+
+            donefile = os.path.join(state_dir, "DONE.txt")
+            if os.path.isfile(donefile):
+                dlog.debug(f"Target {target} is done")
+                continue
+
+            for w in wgrid:
+                state_path = os.path.join(state_dir, f"w_{w:.12f}.txt")
+                os.remove(state_path)
+
+            # Add a new file
+            with open(donefile, 'a') as f:
+                f.write(f"RANK {logger.rank} TAGGED\n")
+
+            logger.debug(f"Confirming target {target} is DONE")
+
+
 if __name__ == '__main__':
 
     COMM = MPI.COMM_WORLD  # Default MPI communicator
@@ -205,6 +258,7 @@ if __name__ == '__main__':
         # to an actual python dictionary containing the configuration for that
         # trial. The N_M_eta_permutations is a list of the (M, N, eta) to run,
         # and the package_cache_path is the base cache path.
+        COMM_timer = time.time()
         (
             master_mapping, config_mapping,
             M_N_eta_k_mapping, package_cache_path
@@ -214,12 +268,14 @@ if __name__ == '__main__':
         dlog.debug(f"Cache path is {package_cache_path}")
         for key, value in M_N_eta_k_mapping.items():
             dlog.info(f"Running {key}, incl. {list(value.keys())[:4]}")
-
     else:
+        COMM_timer = None
         master_dict = None
         config_mapping = None
         M_N_eta_k_mapping = None
         package_cache_path = None
+
+    rank_timer = time.time()
 
     # Scatter jobs across cores.
     master_dict = COMM.scatter(master_dict, root=0)
@@ -237,5 +293,23 @@ if __name__ == '__main__':
 
     calculate(
         master_dict, config_mapping, M_N_eta_k_mapping, package_cache_path,
-        dlog, dry_run=False
+        dlog, dry_run=DRY_RUN
     )
+    rank_timer_dt = (time.time() - rank_timer) / 3600.0
+    dlog.info(f"Done in {rank_timer_dt:.02f}h and waiting for other ranks")
+
+    # Stop all processes here until all complete
+    COMM.Barrier()
+
+    # Erase the state directory files, and write DONE to the correct
+    # locations
+    cleanup(
+        master_dict, M_N_eta_k_mapping, package_cache_path, dlog,
+        dry_run=DRY_RUN
+    )
+
+    COMM.Barrier()
+
+    if RANK == 0:
+        dt = (time.time() - COMM_timer) / 3600.0
+        dlog.info(f"All ranks done in {dt:.02f}h")
