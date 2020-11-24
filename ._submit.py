@@ -101,7 +101,7 @@ def calculate(
         The location of the cache for this package.
     """
 
-    if dry_run:
+    if dry_run and logger.rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
     perms = list(product(
