@@ -174,7 +174,11 @@ class Prime:
         """
 
         if self.cl_args.linspacek:
-            assert len(self.cl_args.k_units_pi) == 3
+            if len(self.cl_args.k_units_pi) != 3:
+                msg = "With --linspacek specified, -k requires 3 arguments: " \
+                    "k0, kf and the number of k-points"
+                dlog.critical(msg)
+                raise RuntimeError(msg)
 
         N_M_eta_k = [
             self.cl_args.M, self.cl_args.N, self.cl_args.eta,

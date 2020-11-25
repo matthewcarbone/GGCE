@@ -184,7 +184,7 @@ def calculate(
                 # Write results to disk
                 with open(os.path.join(target, 'res.txt'), "a") as f:
                     f.write(
-                        f"{w:.12f}\t{G.real:.12f}\t{G.imag:.12f}\t{t:.02e}"
+                        f"{w:.08f}\t{G.real:.08f}\t{G.imag:.08f}\t{t:.02e}"
                         f"\t{largest_mat_dim}\n"
                     )
                 with open(state_path, 'w') as f:
