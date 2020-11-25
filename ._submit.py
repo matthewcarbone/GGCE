@@ -36,19 +36,19 @@ class LoggerOnRank:
 
     def debug(self, msg):
         if self.debug_flag:
-            self.logger.debug(f"({self.rank:03}) {msg}")
+            self.logger.debug(f"({self.rank:05}) {msg}")
 
     def info(self, msg):
-        self.logger.info(f"({self.rank:03}) {msg}")
+        self.logger.info(f"({self.rank:05}) {msg}")
 
     def warning(self, msg):
-        self.logger.warning(f"({self.rank:03}) {msg}")
+        self.logger.warning(f"({self.rank:05}) {msg}")
 
     def error(self, msg):
-        self.logger.error(f"({self.rank:03}) {msg}")
+        self.logger.error(f"({self.rank:05}) {msg}")
 
     def critical(self, msg):
-        self.logger.critical(f"({self.rank:03}) {msg}")
+        self.logger.critical(f"({self.rank:05}) {msg}")
 
 
 def prep_jobs(master_dict, logger, comm):
@@ -79,6 +79,14 @@ def prep_jobs(master_dict, logger, comm):
     return jobs
 
 
+def get_perm(M_N_eta_k_mapping):
+
+    return list(product(
+        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
+        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
+    ))
+
+
 def calculate(
     jobs, config_mapping, M_N_eta_k_mapping, package_cache_path, logger,
     dry_run=False
@@ -102,10 +110,7 @@ def calculate(
     if dry_run and logger.rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
-    perms = list(product(
-        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
-        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
-    ))
+    perms = get_perm(M_N_eta_k_mapping)
 
     for c_idx, wgrid in jobs.items():
         config = config_mapping[c_idx]
@@ -146,6 +151,7 @@ def calculate(
                     f"primed in {dt:.02f}m"
                 )
 
+            wgrid_t0 = time.time()
             for w in wgrid:
                 state_path = os.path.join(state_dir, f"w_{w:.12f}.txt")
 
@@ -165,7 +171,7 @@ def calculate(
                         G, meta = sy.solve(k_units_pi * np.pi, w)
                     dt = (time.time() - t0) / 60.0
                     A = -G.imag / np.pi
-                    logger.info(
+                    logger.debug(
                         f"Solved A({k_units_pi:.02f}pi, {w:.02f}) "
                         f"= {A:.02f} in {dt:.02f}m"
                     )
@@ -190,6 +196,12 @@ def calculate(
                 with open(state_path, 'w') as f:
                     f.write("DONE\n")
 
+            dt_wgrid_final = time.time() - wgrid_t0
+            dlog.info(
+                f"Combination {M},{N},{eta:.02e},{k_units_pi:.02f} "
+                f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}"
+            )
+
 
 def cleanup(
     jobs, M_N_eta_k_mapping, package_cache_path, logger,
@@ -208,10 +220,7 @@ def cleanup(
         The location of the cache for this package.
     """
 
-    perms = list(product(
-        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
-        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
-    ))
+    perms = get_perm(M_N_eta_k_mapping)
 
     for c_idx, wgrid in jobs.items():
         for perm in perms:
