@@ -80,7 +80,7 @@ def global_parser(sys_argv):
         help='Values for k in units of pi.', required=True
     )
     req.add_argument(
-        '-p', '--package', type=int, default=None, dest='package',
+        '-P', '--package', type=int, default=None, dest='package',
         help='Index of the package to prime. If None, primes all available '
         'packages. If a single number, primes only that package. Note that '
         'packages must be in the $GMA_PACKAGE_DIR directory (which if not set '
