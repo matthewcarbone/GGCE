@@ -4,10 +4,6 @@ model: EFB
 # Restrictions on the variational space
 config_filter: no_filter
 
-# k is in units of pi
-linspacek: false
-k_units_pi: [0.0, 0.5, 1.0]
-
 # Hamiltonian parameters, note that for EFB lambda = g
 t: 0.1
 Omega: 1.25
