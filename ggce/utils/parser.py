@@ -112,7 +112,9 @@ def global_parser(sys_argv):
     slurm = execute_sp.add_argument_group(
         "SLURM", "SLURM script parameters used to override defaults "
         "in the slurm_config.yaml file. Note that some parameters must "
-        "be set in the config."
+        "be set in the config. The parameter priority goes as follows: "
+        "CL args (here) override the config, and the config overrides "
+        "default CL args (i.e., when a CL arg is not specified)."
     )
     slurm.add_argument(
         '--config_path', dest='loaded_config_path',

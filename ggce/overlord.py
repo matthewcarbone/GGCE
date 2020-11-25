@@ -72,7 +72,7 @@ class Prime:
             dlog.debug(f"These caches are {existing}")
             basename = os.path.basename(existing[-1])
             current_index = int(basename.split("_")[0]) + 1
-            sub_flag = utils.bold(f"-p {current_index}")
+            sub_flag = utils.bold(f"-P {current_index}")
             dlog.info(
                 f"Found {current_index} existing: after scaffolding, "
                 f"to submit, use flag {sub_flag}"

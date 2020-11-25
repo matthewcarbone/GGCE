@@ -96,15 +96,44 @@ class SlurmWriter:
         keymap_keys = list(SlurmWriter.KEYMAP.keys())
         othermap_keys = list(SlurmWriter.OTHERMAP.keys())
         d_keys = list(self.loaded_config.keys())
+
+        # Iterate over the CL args
         for key, value in self.cl_args.items():
+
+            # If we find a key that matches a key in the mappings provided in
+            # this class
             if key in keymap_keys or key in othermap_keys:
+
+                # And, if that key matches a key in the default parameters
                 if key in d_keys:
+
+                    # Then continue, since this case will be caught in the next
+                    # loop
                     continue
+
+                # Otherwise, if they key does not match, we add that key to
+                # the list
                 master_dict[key] = value
 
+        # Iterate over the full list, which is the union of the keys in the
+        # CL args which match the mappings provided in this class, and the
+        # default args found in the config
         for key, value in master_dict.items():
+
+            # Define a temporary variable, tmp, which stores the value
+            # corresponding to the key. This could be None/null, or it could be
+            # some value
             tmp = self.cl_args.get(key)
+
+            # If the CL arg doesn't exist, or defaults to None, use the
+            # key-value pair found in the default config
             value = value if tmp is None else tmp
+
+            # Get the actual line to write to the SLURM script. It is possible
+            # based on the arguments that there is nothing to write, and this
+            # will also handle those cases. This also differentiates between
+            # the SLURM parmaeters and the "others", which are not SLURM
+            # parameters, and are written to the submit script differently.
             (loc, val) = SlurmWriter._check_key(key, value)
             if loc == 0:
                 lines.append(val)
@@ -112,7 +141,7 @@ class SlurmWriter:
                 other_lines.append(val)
 
         # The last line is always the same
-        last_line = 'srun python3 ._submit "$@"'
+        last_line = 'srun python3 ._submit.py "$@"'
 
         with open(target, 'w') as f:
             f.write("#!/bin/bash\n\n")
