@@ -66,15 +66,28 @@ def prep_jobs(master_dict, logger, comm):
         } for ii in range(comm.size)
     ]
 
-    for ii in range(len(jobs) - 1):
-        for cc in list(jobs[ii].keys()):
-            if len(jobs[ii][cc]) != len(jobs[ii + 1][cc]):
-                dlog.warning(
-                    f"Possible job imbalances at e.g. processes {ii}/{ii + 1} "
-                    f"with lens {len(jobs[ii][cc])} and "
-                    f"{len(jobs[ii + 1][cc])}"
-                )
-                return jobs
+    job_lens = [len(j) for job_part in jobs for j in list(job_part.values())]
+
+    # for ii in range(len(jobs)):
+    #     for cc in list(jobs[ii].keys()):
+    #         job_lens.append(jobs[ii][cc])
+    # dlog.warning(
+    #     f"Possible job imbalances at e.g. processes {ii}/{ii + 1} "
+    #     f"with lens {len(jobs[ii][cc])} and "
+    #     f"{len(jobs[ii + 1][cc])}"
+    # )
+
+    job_lens = np.array(job_lens)
+    mean_job_number = np.mean(job_lens)
+    std_job_number = np.std(job_lens)
+    max_job = np.max(job_lens)
+    min_job = np.min(job_lens)
+
+    if std_job_number > 0.0:
+        dlog.warning(
+            f"Job imbalance: {mean_job_number:.02f} +/- "
+            f"{std_job_number:.02f} jobs/rank (min/max {min_job}/{max_job})"
+        )
 
     return jobs
 
@@ -196,10 +209,10 @@ def calculate(
                 with open(state_path, 'w') as f:
                     f.write("DONE\n")
 
-            dt_wgrid_final = time.time() - wgrid_t0
+            dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
             dlog.info(
                 f"Combination {M},{N},{eta:.02e},{k_units_pi:.02f} "
-                f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}"
+                f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}h"
             )
 
 
@@ -229,8 +242,11 @@ def cleanup(
             target = os.path.join(package_cache_path, target)
             state_dir = os.path.join(target, 'state')
 
+            # Check to make sure there are still w-points to delete in the
+            # state directory, this avoids possible race conditions.
             donefile = os.path.join(state_dir, "DONE.txt")
-            if os.path.isfile(donefile):
+            N_in_state = os.listdir(state_dir)
+            if os.path.isfile(donefile) and len(N_in_state) == 1:
                 dlog.debug(f"Target {target} is done")
                 continue
 
@@ -240,7 +256,7 @@ def cleanup(
 
             # Add a new file
             with open(donefile, 'a') as f:
-                f.write(f"RANK {logger.rank} TAGGED\n")
+                f.write(f"RANK {logger.rank:05} TAGGED\n")
 
             logger.debug(f"Confirming target {target} is DONE")
 
@@ -278,7 +294,7 @@ if __name__ == '__main__':
         dlog.debug(f"Cache path is {package_cache_path}")
         for key, value in M_N_eta_k_mapping.items():
             dlog.info(f"Running {key}, incl. {list(value.keys())[:4]}")
-        dlog.info(f"World size: {COMM.size}")
+        dlog.info(f"Confirming COMM world size: {COMM.size}")
     else:
         COMM_timer = None
         master_dict = None
@@ -322,5 +338,6 @@ if __name__ == '__main__':
     COMM.Barrier()
 
     if RANK == 0:
+        time.sleep(1)
         dt = (time.time() - COMM_timer) / 3600.0
         dlog.info(f"All ranks done in {dt:.02f}h")

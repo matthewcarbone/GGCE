@@ -393,12 +393,15 @@ class System:
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
 
-            # Expensive...
             identity = np.eye(beta_n.shape[0], A.shape[1])
 
             t0 = time.time()
             initial_A_shape = A.shape
+
+            # This is the rate-limiting step ##################################
             A = linalg.inv(identity - beta_n @ A) @ alpha_n
+            ###################################################################
+
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
             meta['inv'].append(identity.shape[0])

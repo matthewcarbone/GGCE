@@ -16,7 +16,10 @@ from ggce.utils.logger import default_logger as dlog
 
 class Prime:
     """Prepares the computation for submission by evaluating all jobs to be
-    run, and saving them to a working directory."""
+    run, and saving them to a working directory.
+
+    TODO: detailed docstring
+    """
 
     def _get_all_packages(self):
         """Gets all non-template packages from the packages directory.
@@ -240,6 +243,7 @@ class Prime:
 
 
 class Submitter:
+    """TODO: detailed docstring"""
 
     def __init__(self, cl_args):
 
@@ -297,7 +301,17 @@ class Submitter:
                 args = f"{package} {debug} {dryrun}"
                 out = utils.run_command(f"sbatch submit.sbatch {args}")
                 if out == 0:
-                    dlog.info(f"Cache {ii:03} - success")
+                    dlog.info(f"Cache {ii:03} submit - success")
                 else:
-                    dlog.error(f"Cache {ii:03} - failure (err code {out})")
+                    dlog.error(
+                        f"Cache {ii:03} submit - failure (err code {out})"
+                    )
                 utils.run_command(f"mv submit.sbatch {package}")
+
+
+class Auxiliary:
+    """A class containing debugging and other methods for studying the
+    structure of the produced equations."""
+
+    def __init__(self):
+        """"""
