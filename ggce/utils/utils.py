@@ -4,18 +4,127 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+import copy
 import logging
 import numpy as np
 import os
 import shlex
 import subprocess
 import time
+import yaml
 
 
 from ggce.utils.logger import default_logger as dlog
 
 
-class DisableLogger():
+class SlurmWriter:
+    """Writes a SLURM script from scratch.
+
+    Parameters
+    ----------
+    target_dir : str
+        The full path location to the directory that will contain the SLURM
+        submit script.
+    default_config : dict
+        A dictionary containing the default configurations for the SLURM
+        script. These will be overridden by command line arguments.
+    """
+
+    # Determines the mapping between the config keys and the flag SLURM needs
+    KEYMAP = {
+        'partition': lambda s: f"#SBATCH -p {s}",
+        'jobname': lambda s: f"#SBATCH -J {s}",
+        'output': lambda s: f"#SBATCH --output={s}",
+        'error': lambda s: f"#SBATCH --error={s}",
+        'memory': lambda s: f"#SBATCH --mem={s}",
+        'nodes': lambda s: f"#SBATCH -N {s}",
+        'tasks_per_node': lambda ii: f"#SBATCH --tasks-per-node={ii}",
+        'constraint': lambda s: f"#SBATCH --constraint={s}",
+        'time': lambda s: f"#SBATCH --time={s}",
+        'account': lambda s: f"#SBATCH -A {s}",
+        'gres': lambda ii: f"#SBATCH --gres=gpu:{ii}",
+        'queue': lambda s: f"#SBATCH -q {s}",
+        'email': lambda email_address: f"#SBATCH --mail-user={email_address}",
+        'mail_type': lambda s: f"#SBATCH --mail-type={s}"
+    }
+
+    # Maps basically everything else to the proper format
+    OTHERMAP = {
+        'threads': lambda ii=None:
+            f"export OMP_NUM_THREADS={ii}" if ii is not None else
+            "export OMP_NUM_THREADS=1",
+        'modules': lambda list_of_modules=None:
+            "\n".join([f"module load {m}" for m in list_of_modules])
+            if list_of_modules is not None else None
+    }
+
+    def __init__(self, cl_args):
+        self.cl_args = dict(vars(cl_args))
+        self.loaded_config = yaml.safe_load(
+            open(self.cl_args['loaded_config_path'])
+        )
+
+    @staticmethod
+    def _check_key(key, value):
+
+        if value is not None:
+
+            mapped = SlurmWriter.KEYMAP.get(key)
+            if mapped is not None:
+                mapped = mapped(value)
+                if mapped is not None:
+                    return (0, mapped)
+
+            mapped = SlurmWriter.OTHERMAP.get(key)
+            if mapped is not None:
+                mapped = mapped(value)
+                if mapped is not None:
+                    return (1, mapped)
+
+        return (None, None)
+
+    def write(self, target):
+        """Takes command line arguments, initializes the configuration and
+        writes the new SLURM script to disk. We only want to override the
+        default values in the config if the command line values are not None.
+        This method parses these two dictionaries accordingly."""
+
+        lines = []
+        other_lines = []
+
+        master_dict = copy.copy(self.loaded_config)
+        keymap_keys = list(SlurmWriter.KEYMAP.keys())
+        othermap_keys = list(SlurmWriter.OTHERMAP.keys())
+        d_keys = list(self.loaded_config.keys())
+        for key, value in self.cl_args.items():
+            if key in keymap_keys or key in othermap_keys:
+                if key in d_keys:
+                    continue
+                master_dict[key] = value
+
+        for key, value in master_dict.items():
+            tmp = self.cl_args.get(key)
+            value = value if tmp is None else tmp
+            (loc, val) = SlurmWriter._check_key(key, value)
+            if loc == 0:
+                lines.append(val)
+            elif loc == 1:
+                other_lines.append(val)
+
+        # The last line is always the same
+        last_line = 'srun python3 ._submit "$@"'
+
+        with open(target, 'w') as f:
+            f.write("#!/bin/bash\n\n")
+            for line in lines:
+                f.write(f"{line}\n")
+            f.write("\n")
+            for line in other_lines:
+                f.write(f"{line}\n")
+            f.write(f"\n{last_line}")
+
+
+class DisableLogger:
 
     def __enter__(self):
         logging.disable(logging.CRITICAL)

@@ -26,8 +26,6 @@ from ggce.engine import system
 from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
 
-DRY_RUN = False
-
 
 class LoggerOnRank:
 
@@ -38,19 +36,19 @@ class LoggerOnRank:
 
     def debug(self, msg):
         if self.debug_flag:
-            self.logger.debug(f"({self.rank}) {msg}")
+            self.logger.debug(f"({self.rank:03}) {msg}")
 
     def info(self, msg):
-        self.logger.info(f"({self.rank}) {msg}")
+        self.logger.info(f"({self.rank:03}) {msg}")
 
     def warning(self, msg):
-        self.logger.warning(f"({self.rank}) {msg}")
+        self.logger.warning(f"({self.rank:03}) {msg}")
 
     def error(self, msg):
-        self.logger.error(f"({self.rank}) {msg}")
+        self.logger.error(f"({self.rank:03}) {msg}")
 
     def critical(self, msg):
-        self.logger.critical(f"({self.rank}) {msg}")
+        self.logger.critical(f"({self.rank:03}) {msg}")
 
 
 def prep_jobs(master_dict, logger, comm):
@@ -249,6 +247,9 @@ if __name__ == '__main__':
     # The second argument is if to run in debug mode or not
     debug = int(sys.argv[2])
 
+    # The third argument is whether to run in dry run mode or now
+    dry_run = int(sys.argv[3])
+
     dlog = LoggerOnRank(rank=RANK, logger=_dlog, debug_flag=bool(debug))
 
     if RANK == 0:
@@ -268,6 +269,7 @@ if __name__ == '__main__':
         dlog.debug(f"Cache path is {package_cache_path}")
         for key, value in M_N_eta_k_mapping.items():
             dlog.info(f"Running {key}, incl. {list(value.keys())[:4]}")
+        dlog.info(f"World size: {COMM.size}")
     else:
         COMM_timer = None
         master_dict = None
@@ -288,12 +290,12 @@ if __name__ == '__main__':
     package_cache_path = COMM.bcast(package_cache_path, root=0)
     assert package_cache_path is not None
 
-    dlog.info("<- RANK starting up")
+    dlog.debug("<- RANK starting up")
     dlog.debug(f"Received vars incl. {package_cache_path}")
 
     calculate(
         master_dict, config_mapping, M_N_eta_k_mapping, package_cache_path,
-        dlog, dry_run=DRY_RUN
+        dlog, dry_run=dry_run
     )
     rank_timer_dt = (time.time() - rank_timer) / 3600.0
     dlog.info(f"Done in {rank_timer_dt:.02f}h and waiting for other ranks")
@@ -305,7 +307,7 @@ if __name__ == '__main__':
     # locations
     cleanup(
         master_dict, M_N_eta_k_mapping, package_cache_path, dlog,
-        dry_run=DRY_RUN
+        dry_run=dry_run
     )
 
     COMM.Barrier()

@@ -97,26 +97,48 @@ def global_parser(sys_argv):
         description='Submits jobs to the job controller or runs them locally '
         'depending on the prime step.'
     )
-
     execute_sp.add_argument(
         '--bash', default=False, dest='bash',
         action='store_true', help='Run using bash (locally) instead of sbatch'
     )
-
     execute_sp.add_argument(
-        '-t', '--threads', default=1, dest='threads', type=int,
-        help='Number of threads per process.'
+        '--dryrun', default=False, dest='dryrun',
+        action='store_true', help='Run in dryrun mode. This is different '
+        'from debug in the sense that an actual job will be run/submitted, '
+        'but all values for G will be randomly sampled, and there will be '
+        'no actual GGCE calculations run.'
     )
 
-    execute_sp.add_argument(
-        '-np', '--processes', default=1, dest='nprocs', type=int,
-        help='Number of MPI processes.'
+    slurm = execute_sp.add_argument_group(
+        "SLURM", "SLURM script parameters used to override defaults "
+        "in the slurm_config.yaml file. Note that some parameters must "
+        "be set in the config."
     )
+    slurm.add_argument(
+        '--config_path', dest='loaded_config_path',
+        default='slurm_config.yaml', type=str, help="SLURM config path"
+    )
+    slurm.add_argument('-N', '--nodes', dest='nodes', default=None, type=int)
+    slurm.add_argument(
+        '-s', '--tasks_per_node', dest='tasks_per_node', default=None,
+        type=int
+    )
+    slurm.add_argument(
+        '-q', '--queue', dest='queue', default=None, type=str
+    )
+    slurm.add_argument(
+        '-p', '--partition', dest='partition', default=None, type=str
+    )
+    slurm.add_argument('-m', '--mem', dest='memory', default=None, type=str)
+    slurm.add_argument(
+        '-d', '--threads', default=1, dest='threads', type=int,
+        help='Number of threads PER PROCESS.'
+    )
+    slurm.add_argument('-t', '--time', default=None, dest='time', type=str)
 
     req = execute_sp.add_argument_group("required")
-
     req.add_argument(
-        '-p', '--package', type=int, nargs='+', default=None, dest='package',
+        '-P', '--package', type=int, nargs='+', default=None, dest='package',
         help='Index of the packages to run. These are indexed by their '
         'numbers in the cache directory.', required=True
     )

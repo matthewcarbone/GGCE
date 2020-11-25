@@ -3,3 +3,4 @@ job_data/
 results/
 nb/
 *.sh
+slurm_config.yaml

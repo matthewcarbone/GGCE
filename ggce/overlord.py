@@ -130,7 +130,6 @@ class Prime:
 
         # Load in all files
         all_files = utils.listdir_fullpath(self.staged_package_path)
-        self.slurm_path = f"{self.staged_package_path}/submit.sbatch"
 
         if self.cl_args.c_to_run is not None:
             c_to_run = [f"{xx:02}" for xx in self.cl_args.c_to_run]
@@ -234,7 +233,6 @@ class Prime:
         package_cache_path = self._setup_cache_target()
         configs = self._get_config_files()
         self._ready_configs(configs, package_cache_path)
-        utils.run_command(f"cp {self.slurm_path} {package_cache_path}")
 
 
 class Submitter:
@@ -256,30 +254,44 @@ class Submitter:
         if self.cl_args.package is not None:
             packs_to_run = [f"{p:03}" for p in self.cl_args.package]
 
-        if self.cl_args.bash:
-            dlog.warning("Threads argument is ignored for bash submit")
-
+        slurm_writer = utils.SlurmWriter(self.cl_args)
         for ii, package in enumerate(all_cache):
             if self.cl_args.package is not None:
                 if f"{ii:03}" not in packs_to_run:
                     continue
             dlog.debug(f"Package path {package}")
             submit_script = f"{package}/submit.sbatch"
-            utils.run_command(f"mv {submit_script} .")
-            if self.cl_args.debug:
-                dlog.info(f"Dummy submit {submit_script}")
+
+            # Write the slurm script regardless of --bash, why not
+            slurm_writer.write(submit_script)
+
+            dryrun = int(self.cl_args.dryrun)
+            debug = int(self.cl_args.debug)
+
+            # If bash is true, then we save a local run script, which the
+            # user can run separately using bash.
+            if self.cl_args.bash:
+                # Since the local machine is basically a node, we use the
+                # tasks/node CL argument to determine how many processes to
+                # spawn on the local machine
+                local_procs = self.cl_args.tasks_per_node
+                if local_procs is None:
+                    local_procs = 1
+                    dlog.warning("Local procs not set, defaulting to 1")
+
+                exe = f"mpiexec -np {local_procs} python3 ._submit.py " \
+                    f"{package} {debug} {dryrun}"
+                fname = f"submit_{ii:03}.sh"
+                with open(fname, 'w') as f:
+                    f.write(f"export OMP_NUM_THREADS={self.cl_args.threads}\n")
+                    f.write(exe)
+                dlog.info(f"Run {fname} to execute trials")
+
+            # Else we go through the protocol of submitting a job via SLURM
             else:
-                if self.cl_args.bash:
-                    exe = f"mpiexec -np {self.cl_args.nprocs} python3 " \
-                        f"._submit.py {package} {int(self.cl_args.debug)}"
-                    fname = f"submit_{ii:03}.sh"
-                    with open(fname, 'w') as f:
-                        f.write(exe)
-                    dlog.info(f"Run {fname} to execute trials")
-                else:
-                    dlog.info(f"Submitting package {ii:03}")
-                    args = f"{self.cl_args.nprocs} {self.cl_args.threads} " \
-                        f"{package} {int(self.cl_args.debug)}"
-                    out = utils.run_command(f"sbatch submit.sbatch {args}")
-                    dlog.info(f"{out}")
-            utils.run_command(f"mv submit.sbatch {package}")
+                utils.run_command(f"mv {submit_script} .")
+                dlog.info(f"Submitting package {ii:03}")
+                args = f"{package} {debug} {dryrun}"
+                out = utils.run_command(f"sbatch submit.sbatch {args}")
+                dlog.info(f"{out}")
+                utils.run_command(f"mv submit.sbatch {package}")
