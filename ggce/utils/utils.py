@@ -53,11 +53,15 @@ class SlurmWriter:
         'threads': lambda ii=None:
             f"export OMP_NUM_THREADS={ii}" if ii is not None else
             "export OMP_NUM_THREADS=1",
+        'disable_kmp_affinity': lambda b:
+            f"export KMP_AFFINITY=disabled" if b else None,
+        'omp_places': lambda s: f"export OMP_PLACES={s}",
+        'omp_proc_bind': lambda s: f"export OMP_PROC_BIND={s}",
         'modules': lambda list_of_modules=None:
             "\n".join([f"module load {m}" for m in list_of_modules])
-            if list_of_modules is not None else None,
-        'disable_kmp_affinity': lambda b:
-            f"export KMP_AFFINITY=disabled" if b else None
+            if list_of_modules is not None else None
+        # export OMP_PLACES=threads
+        # export OMP_PROC_BIND=spread
     }
 
     def __init__(self, cl_args):
