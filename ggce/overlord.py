@@ -79,7 +79,7 @@ class Prime:
             )
         else:
             current_index = 0
-            sub_flag = utils.bold(f"-p {current_index}")
+            sub_flag = utils.bold(f"-P {current_index}")
             dlog.info(f"To submit, use flag {sub_flag}")
 
         if current_index > 999:
@@ -290,8 +290,10 @@ class Submitter:
             # Else we go through the protocol of submitting a job via SLURM
             else:
                 utils.run_command(f"mv {submit_script} .")
-                dlog.info(f"Submitting package {ii:03}")
                 args = f"{package} {debug} {dryrun}"
                 out = utils.run_command(f"sbatch submit.sbatch {args}")
-                dlog.info(f"{out}")
+                if out == 0:
+                    dlog.info(f"Cache {ii:03} - success")
+                else:
+                    dlog.error(f"Cache {ii:03} - failure (err code {out})")
                 utils.run_command(f"mv submit.sbatch {package}")

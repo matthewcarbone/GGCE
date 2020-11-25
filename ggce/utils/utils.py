@@ -361,7 +361,7 @@ def time_remaining(time_elapsed, percentage_complete):
     return (100.0 - percentage_complete) * time_elapsed / percentage_complete
 
 
-def run_command(command):
+def run_command(command, silent=True):
     """https://www.endpoint.com/blog/2015/01/28/
     getting-realtime-output-using-python"""
 
@@ -371,8 +371,8 @@ def run_command(command):
         output = process.stdout.readline()
         if output == b'' and process.poll() is not None:
             break
-        if output:
-            dlog.info(output.strip().decode())
+        if output and not silent:
+            dlog.debug(output.strip().decode())
 
     rc = process.poll()
     return rc
