@@ -55,7 +55,9 @@ class SlurmWriter:
             "export OMP_NUM_THREADS=1",
         'modules': lambda list_of_modules=None:
             "\n".join([f"module load {m}" for m in list_of_modules])
-            if list_of_modules is not None else None
+            if list_of_modules is not None else None,
+        'disable_kmp_affinity': lambda b:
+            f"export KMP_AFFINITY=disabled" if b else None
     }
 
     def __init__(self, cl_args):
