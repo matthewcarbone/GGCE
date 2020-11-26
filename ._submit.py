@@ -114,6 +114,13 @@ def prime_system(M, N, eta, config, logger):
     return sy
 
 
+def log_status(logger, M, N, eta, k_u_pi, w, k, dt_wgrid_final):
+    logger.info(
+        f"Combination {M},{N},{eta:.02e},{k_u_pi:.02f} "
+        f"done with {w:.02f}/{k:.02f} in {dt_wgrid_final:.02f}h"
+    )
+
+
 def calculate(
     jobs, config_mapping, M_N_eta_k_mapping, package_cache_path, logger,
     dry_run=False
@@ -174,6 +181,9 @@ def calculate(
             if not dry_run:
                 sy = prime_system(M, N, eta, config, logger)
 
+            total_points = len(k_to_calculate) * len(wgrid)
+            print_every = total_points // 10
+            cc = 1
             for k_u_pi in k_to_calculate:
                 wgrid_t0 = time.time()
                 for w in wgrid:
@@ -229,11 +239,12 @@ def calculate(
                     with open(state_path, 'w') as f:
                         f.write("DONE\n")
 
-                dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
-                dlog.info(
-                    f"Combination {M},{N},{eta:.02e},{k_u_pi:.02f} "
-                    f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}h"
-                )
+                    dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
+                    if cc % print_every == 0:
+                        log_status(
+                            logger, M, N, eta, k_u_pi, w, k_u_pi,
+                            dt_wgrid_final, cc, total_points
+                        )
 
 
 def cleanup(
