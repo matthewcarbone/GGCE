@@ -114,10 +114,11 @@ def prime_system(M, N, eta, config, logger):
     return sy
 
 
-def log_status(logger, M, N, eta, k_u_pi, w, k, dt_wgrid_final):
+def log_status(logger, M, N, eta, k, w, dt_wgrid_final, cc, total_points):
     logger.info(
-        f"Combination {M},{N},{eta:.02e},{k_u_pi:.02f} "
-        f"done with {w:.02f}/{k:.02f} in {dt_wgrid_final:.02f}h"
+        f"Combination {M},{N},{eta:.02e} "
+        f"done with {w:.02f}/{k:.02f} in {dt_wgrid_final:.02f}h "
+        f"({cc:05}/{total_points:05})"
     )
 
 
@@ -240,9 +241,9 @@ def calculate(
                         f.write("DONE\n")
 
                     dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
-                    if cc % print_every == 0:
+                    if cc % print_every == 0 or cc == 1:
                         log_status(
-                            logger, M, N, eta, k_u_pi, w, k_u_pi,
+                            logger, M, N, eta, k_u_pi, w,
                             dt_wgrid_final, cc, total_points
                         )
                     cc += 1
