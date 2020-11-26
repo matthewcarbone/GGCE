@@ -10,6 +10,8 @@ import os
 import pickle
 import yaml
 
+from ggce.engine.structures import InputParameters
+from ggce.engine import system
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 
@@ -313,5 +315,26 @@ class Auxiliary:
     """A class containing debugging and other methods for studying the
     structure of the produced equations."""
 
-    def __init__(self):
-        """"""
+    @staticmethod
+    def analyze_XN(M, N, model='H'):
+        """For any given M and N, there is a hierarchy of equations generated
+        in the number of bosons. At every configuration with n bosons, it
+        couples to all legally-accessible configurations with n pm 1 bosons.
+        This method analyzes the precise number of equations at each
+        level of the hierarchy, for specified M and max N. Note that this
+        result also depends on the model, which is Holstein by default."""
+
+        with utils.DisableLogger():
+            input_params = InputParameters(
+                M=M, N=N, eta=1.0, t=1.0, Omega=1.0, lambd=1.0, model=model,
+                config_filter='no_filter'
+            )
+            input_params.init_terms()
+            sy = system.System(input_params)
+            sy.initialize_generalized_equations()
+            sy.initialize_equations()
+
+        # These are the equations of the closure.
+        dat = [(key, len(value)) for key, value in sy.equations.items()]
+        dat.sort(key=lambda x: x[0])
+        return [d[0] for d in dat], [d[1] for d in dat]

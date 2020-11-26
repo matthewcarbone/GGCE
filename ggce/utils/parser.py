@@ -117,6 +117,15 @@ def global_parser(sys_argv):
         "default CL args (i.e., when a CL arg is not specified)."
     )
     slurm.add_argument(
+        '--requeue', dest='requeue', default=False,
+        action='store_true',
+        help="Saves a special requeue script which is designed to "
+        "terminate gracefully and automatically restart, filling gaps in the "
+        "SLURM schedule with adaptive submit times specified by the time_min "
+        "and time configs arguments. This flag requires the total_time, "
+        "time, and time_min all be set in the config."
+    )
+    slurm.add_argument(
         '--config_path', dest='loaded_config_path',
         default='slurm_config.yaml', type=str, help="SLURM config path"
     )
@@ -136,7 +145,6 @@ def global_parser(sys_argv):
         '-d', '--threads', default=1, dest='threads', type=int,
         help='Number of threads PER PROCESS.'
     )
-    slurm.add_argument('-t', '--time', default=None, dest='time', type=str)
 
     req = execute_sp.add_argument_group("required")
     req.add_argument(

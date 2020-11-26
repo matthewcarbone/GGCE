@@ -45,7 +45,8 @@ class SlurmWriter:
         'gres': lambda ii: f"#SBATCH --gres=gpu:{ii}",
         'queue': lambda s: f"#SBATCH -q {s}",
         'email': lambda email_address: f"#SBATCH --mail-user={email_address}",
-        'mail_type': lambda s: f"#SBATCH --mail-type={s}"
+        'mail_type': lambda s: f"#SBATCH --mail-type={s}",
+        'time_min': lambda s: f"--time-min={s}"
     }
 
     # Maps basically everything else to the proper format
@@ -60,8 +61,6 @@ class SlurmWriter:
         'modules': lambda list_of_modules=None:
             "\n".join([f"module load {m}" for m in list_of_modules])
             if list_of_modules is not None else None
-        # export OMP_PLACES=threads
-        # export OMP_PROC_BIND=spread
     }
 
     def __init__(self, cl_args):
@@ -88,6 +87,21 @@ class SlurmWriter:
                     return (1, mapped)
 
         return (None, None)
+
+    @staticmethod
+    def requeue_lines(target, total_time, checkpoint_time=10):
+        """Gets a specific part of a SLURM script for the KNL flex queue."""
+
+        return [
+            f"#SBATCH --comment={total_time}",
+            f"#SBATCH --signal=B:USR1@{checkpoint_time}",
+            "#SBATCH --requeue",
+            "#SBATCH --open-mode=append\n",
+            "ckpt_command=\n",
+            ". /usr/common/software/variable-time-job/setup.sh",
+            "requeue_job func_trap USR1",
+            "#\n",
+        ]
 
     def write(self, target):
         """Takes command line arguments, initializes the configuration and
@@ -153,6 +167,15 @@ class SlurmWriter:
             f.write("#!/bin/bash\n\n")
             for line in lines:
                 f.write(f"{line}\n")
+            if self.cl_args['requeue']:
+                assert 'total_time' in list(self.loaded_config.keys())
+                assert 'time' in list(self.loaded_config.keys())
+                assert 'time_min' in list(self.loaded_config.keys())
+                requeue_lines = SlurmWriter.requeue_lines(
+                    target, self.loaded_config['total_time']
+                )
+                for line in requeue_lines:
+                    f.write(f"{line}\n")
             f.write("\n")
             for line in other_lines:
                 f.write(f"{line}\n")
