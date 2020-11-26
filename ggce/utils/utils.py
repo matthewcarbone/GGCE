@@ -168,6 +168,7 @@ class SlurmWriter:
             for line in lines:
                 f.write(f"{line}\n")
             if self.cl_args['requeue']:
+                last_line = f"{last_line} &"
                 assert 'total_time' in list(self.loaded_config.keys())
                 assert 'time' in list(self.loaded_config.keys())
                 assert 'time_min' in list(self.loaded_config.keys())
