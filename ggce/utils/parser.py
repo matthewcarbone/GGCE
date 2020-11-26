@@ -50,6 +50,11 @@ def global_parser(sys_argv):
         help='If True, then the user is required to provide three values for '
         'the -k flag: the k0, kf and total number of k points.'
     )
+    prime_sp.add_argument(
+        '--info', dest='info', default=None,
+        help='Extra information about the package which is appended to the '
+        'package name.'
+    )
 
     # Local stuff can be done easily via Jupyter notebooks
     # prime_sp.add_argument(

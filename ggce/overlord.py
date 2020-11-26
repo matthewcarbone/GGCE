@@ -124,6 +124,9 @@ class Prime:
         package_path_cache = \
             f"{self.cache_dir}/{self.current_index:03}_{pack_name}"
 
+        if self.cl_args.info is not None:
+            package_path_cache = f"{package_path_cache}_{self.cl_args.info}"
+
         # Create the target directory in the cache
         dlog.debug(f"Making package directory {package_path_cache}")
         os.makedirs(package_path_cache, exist_ok=False)
