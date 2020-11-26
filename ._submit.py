@@ -185,8 +185,8 @@ def calculate(
             print_every = total_points // 10
             cc = 1
             for k_u_pi in k_to_calculate:
-                wgrid_t0 = time.time()
                 for w in wgrid:
+                    wgrid_t0 = time.time()
                     target = utils.N_M_eta_k_subdir(
                         *perm, k_u_pi, M_N_eta_k_mapping, c_idx
                     )
