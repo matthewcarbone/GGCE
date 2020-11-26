@@ -245,6 +245,7 @@ def calculate(
                             logger, M, N, eta, k_u_pi, w, k_u_pi,
                             dt_wgrid_final, cc, total_points
                         )
+                    cc += 1
 
 
 def cleanup(
