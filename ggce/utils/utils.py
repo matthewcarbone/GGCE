@@ -46,7 +46,7 @@ class SlurmWriter:
         'queue': lambda s: f"#SBATCH -q {s}",
         'email': lambda email_address: f"#SBATCH --mail-user={email_address}",
         'mail_type': lambda s: f"#SBATCH --mail-type={s}",
-        'time_min': lambda s: f"--time-min={s}"
+        'time_min': lambda s: f"#SBATCH --time-min={s}"
     }
 
     # Maps basically everything else to the proper format
