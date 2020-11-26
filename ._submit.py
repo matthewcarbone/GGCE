@@ -92,12 +92,26 @@ def prep_jobs(master_dict, logger, comm):
     return jobs
 
 
-def get_perm(M_N_eta_k_mapping):
+def prime_system(M, N, eta, config, logger):
+    input_params = InputParameters(
+        M=M, N=N, eta=eta, t=config['t'], Omega=config['Omega'],
+        lambd=config['lambda'], model=config['model'],
+        config_filter=config['config_filter']
+    )
+    logger.debug(input_params.get_params())
+    input_params.init_terms()
 
-    return list(product(
-        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
-        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
-    ))
+    # Prime the system
+    t0 = time.time()
+    with utils.DisableLogger():
+        sy = system.System(input_params)
+        T = sy.initialize_generalized_equations()
+        L = sy.initialize_equations()
+        sy.generate_unique_terms()
+        sy.prime_solver()
+    dt = (time.time() - t0) / 60.0
+    logger.info(f"{M},{N},{eta:.02e} terms {T} & {L} primed in {dt:.02f}m")
+    return sy
 
 
 def calculate(
@@ -123,97 +137,103 @@ def calculate(
     if dry_run and logger.rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
-    perms = get_perm(M_N_eta_k_mapping)
+    perms = list(product(
+        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
+        M_N_eta_k_mapping['eta']
+    ))
+
+    k_to_calculate = M_N_eta_k_mapping['k_units_pi']
 
     for c_idx, wgrid in jobs.items():
         config = config_mapping[c_idx]
 
         for perm in perms:
-            (M, N, eta, k_units_pi) = perm
-            target = utils.N_M_eta_k_subdir(*perm, M_N_eta_k_mapping, c_idx)
-            target = os.path.join(package_cache_path, target)
-            state_dir = os.path.join(target, 'state')
-            os.makedirs(state_dir, exist_ok=True)
-            os.makedirs(target, exist_ok=True)
+            (M, N, eta) = perm
 
-            donefile = os.path.join(state_dir, "DONE.txt")
-            if os.path.isfile(donefile):
-                dlog.debug(f"Target {target} is done, continuing")
+            # For a given permutation of M, N and eta, we check to see if
+            # for every k-point and every w-point, the calculation has been
+            # completed. This also serves the purpose of possibly making
+            # necessary sub-directories.
+            all_done = True
+            for k_u_pi in k_to_calculate:
+                target = utils.N_M_eta_k_subdir(
+                    *perm, k_u_pi, M_N_eta_k_mapping, c_idx
+                )
+                target = os.path.join(package_cache_path, target)
+                state_dir = os.path.join(target, 'state')
+                donefile = os.path.join(state_dir, "DONE.txt")
+                if not os.path.isfile(donefile):
+                    dlog.debug(f"Target {target} is not complete")
+                    all_done = False
+
+            if all_done:
                 continue
 
+            # It not all done, prime the system. We only do this once per
+            # (M, N, eta) so as to save time.
             if not dry_run:
-                input_params = InputParameters(
-                    M=M, N=N, eta=eta, t=config['t'], Omega=config['Omega'],
-                    lambd=config['lambda'], model=config['model'],
-                    config_filter=config['config_filter']
-                )
-                logger.debug(input_params.get_params())
-                input_params.init_terms()
+                sy = prime_system(M, N, eta, config, logger)
 
-                # Prime the system
-                t0 = time.time()
-                with utils.DisableLogger():
-                    sy = system.System(input_params)
-                    T = sy.initialize_generalized_equations()
-                    L = sy.initialize_equations()
-                    sy.generate_unique_terms()
-                    sy.prime_solver()
-                dt = (time.time() - t0) / 60.0
-                logger.info(
-                    f"{M},{N},{eta:.02e},{k_units_pi:.02f} terms {T} & {L} "
-                    f"primed in {dt:.02f}m"
-                )
+            for k_u_pi in k_to_calculate:
+                wgrid_t0 = time.time()
+                for w in wgrid:
+                    target = utils.N_M_eta_k_subdir(
+                        *perm, k_u_pi, M_N_eta_k_mapping, c_idx
+                    )
+                    target = os.path.join(package_cache_path, target)
+                    os.makedirs(target, exist_ok=True)
+                    state_dir = os.path.join(target, 'state')
+                    os.makedirs(state_dir, exist_ok=True)
+                    state_path = os.path.join(state_dir, f"w_{w:.12f}.txt")
 
-            wgrid_t0 = time.time()
-            for w in wgrid:
-                state_path = os.path.join(state_dir, f"w_{w:.12f}.txt")
+                    # Never re-run a result if it exists already
+                    if os.path.isfile(state_path):
+                        logger.warning(
+                            f"Target {state_path} exists, continuing"
+                        )
+                        continue
 
-                # Never re-run a result if it exists already
-                if os.path.isfile(state_path):
-                    logger.warning(f"Target {state_path} exists, continuing")
-                    continue
-
-                logger.debug(
-                    f"Running {M},{N},{eta:.02e},{k_units_pi:.02f}, w={w:.12f}"
-                )
-
-                # Solve the system
-                if not dry_run:
-                    t0 = time.time()
-                    with utils.DisableLogger():
-                        G, meta = sy.solve(k_units_pi * np.pi, w)
-                    dt = (time.time() - t0) / 60.0
-                    A = -G.imag / np.pi
                     logger.debug(
-                        f"Solved A({k_units_pi:.02f}pi, {w:.02f}) "
-                        f"= {A:.02f} in {dt:.02f}m"
+                        f"Running {M},{N},{eta:.02e},{k_u_pi:.02f}, w={w:.12f}"
                     )
-                    if A < 0.0:
-                        logger.error(f"Negative spectral weight: {A:.02e}")
-                    t = sum(meta['time'])
-                    largest_mat_dim = meta['inv'][0]
-                    sys.stdout.flush()
 
-                else:
-                    G = np.abs(np.random.random()) + \
-                        np.abs(np.random.random()) * 1j
-                    t = 0.0
-                    largest_mat_dim = 0
+                    # Solve the system
+                    if not dry_run:
+                        t0 = time.time()
+                        with utils.DisableLogger():
+                            G, meta = sy.solve(k_u_pi * np.pi, w)
+                        dt = (time.time() - t0) / 60.0
+                        A = -G.imag / np.pi
+                        logger.debug(
+                            f"Solved A({k_u_pi:.02f}pi, {w:.02f}) "
+                            f"= {A:.02f} in {dt:.02f}m"
+                        )
+                        if A < 0.0:
+                            logger.error(f"Negative spectral weight: {A:.02e}")
+                        t = sum(meta['time'])
+                        largest_mat_dim = meta['inv'][0]
+                        sys.stdout.flush()
 
-                # Write results to disk
-                with open(os.path.join(target, 'res.txt'), "a") as f:
-                    f.write(
-                        f"{w:.08f}\t{G.real:.08f}\t{G.imag:.08f}\t{t:.02e}"
-                        f"\t{largest_mat_dim}\n"
-                    )
-                with open(state_path, 'w') as f:
-                    f.write("DONE\n")
+                    else:
+                        G = np.abs(np.random.random()) + \
+                            np.abs(np.random.random()) * 1j
+                        t = 0.0
+                        largest_mat_dim = 0
 
-            dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
-            dlog.info(
-                f"Combination {M},{N},{eta:.02e},{k_units_pi:.02f} "
-                f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}h"
-            )
+                    # Write results to disk
+                    with open(os.path.join(target, 'res.txt'), "a") as f:
+                        f.write(
+                            f"{w:.08f}\t{G.real:.08f}\t{G.imag:.08f}\t{t:.02e}"
+                            f"\t{largest_mat_dim}\n"
+                        )
+                    with open(state_path, 'w') as f:
+                        f.write("DONE\n")
+
+                dt_wgrid_final = (time.time() - wgrid_t0) / 3600.0
+                dlog.info(
+                    f"Combination {M},{N},{eta:.02e},{k_u_pi:.02f} "
+                    f"done with {len(wgrid)} w-pts in {dt_wgrid_final:.02f}h"
+                )
 
 
 def cleanup(
@@ -233,7 +253,10 @@ def cleanup(
         The location of the cache for this package.
     """
 
-    perms = get_perm(M_N_eta_k_mapping)
+    perms = list(product(
+        M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
+        M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
+    ))
 
     for c_idx, wgrid in jobs.items():
         for perm in perms:
