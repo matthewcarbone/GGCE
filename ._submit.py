@@ -183,7 +183,7 @@ def calculate(
                 sy = prime_system(M, N, eta, config, logger)
 
             total_points = len(k_to_calculate) * len(wgrid)
-            print_every = total_points // 10
+            print_every = max(total_points // 10, 1)
             cc = 1
             for k_u_pi in k_to_calculate:
                 for w in wgrid:
