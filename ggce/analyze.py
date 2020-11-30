@@ -152,7 +152,17 @@ class Results:
             # Here, we display the errors for the provided N compared with
             # N - 1, if it exists.
             try:
-                _, band2 = self.lambda_band(interp=interp, N=kwargs['N'] - 1)
+                if 'M' in kwargs:
+                    _, band2 = self.lambda_band(
+                        interp=interp,
+                        N=kwargs['N'] - 1,
+                        M=kwargs['M']
+                    )
+                else:
+                    _, band2 = self.lambda_band(
+                        interp=interp,
+                        N=kwargs['N'] - 1
+                    )
             except KeyError:
                 print(f"N - 1 = {kwargs['N']-1} DNE in this dataset")
                 return self.vals['lambda'], np.array(band)
