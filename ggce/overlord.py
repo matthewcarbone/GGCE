@@ -5,6 +5,7 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 
+import copy
 import numpy as np
 import os
 import pickle
@@ -14,6 +15,172 @@ from ggce.engine.structures import InputParameters
 from ggce.engine import system
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
+
+
+class SlurmWriter:
+    """Writes a SLURM script from scratch.
+
+    Parameters
+    ----------
+    target_dir : str
+        The full path location to the directory that will contain the SLURM
+        submit script.
+    default_config : dict
+        A dictionary containing the default configurations for the SLURM
+        script. These will be overridden by command line arguments.
+    """
+
+    # Determines the mapping between the config keys and the flag SLURM needs
+    KEYMAP = {
+        'partition': lambda s: f"#SBATCH -p {s}",
+        'jobname': lambda s: f"#SBATCH -J {s}",
+        'output': lambda s: f"#SBATCH --output={s}",
+        'error': lambda s: f"#SBATCH --error={s}",
+        'memory': lambda s: f"#SBATCH --mem={s}",
+        'nodes': lambda s: f"#SBATCH -N {s}",
+        'tasks_per_node': lambda ii: f"#SBATCH --tasks-per-node={ii}",
+        'constraint': lambda s: f"#SBATCH --constraint={s}",
+        'time': lambda s: f"#SBATCH --time={s}",
+        'account': lambda s: f"#SBATCH -A {s}",
+        'gres': lambda ii: f"#SBATCH --gres=gpu:{ii}",
+        'queue': lambda s: f"#SBATCH -q {s}",
+        'email': lambda email_address: f"#SBATCH --mail-user={email_address}",
+        'mail_type': lambda s: f"#SBATCH --mail-type={s}",
+        'time_min': lambda s: f"#SBATCH --time-min={s}"
+    }
+
+    # Maps basically everything else to the proper format
+    OTHERMAP = {
+        'threads': lambda ii=None:
+            f"export OMP_NUM_THREADS={ii}" if ii is not None else
+            "export OMP_NUM_THREADS=1",
+        'disable_kmp_affinity': lambda b:
+            f"export KMP_AFFINITY=disabled" if b else None,
+        'omp_places': lambda s: f"export OMP_PLACES={s}",
+        'omp_proc_bind': lambda s: f"export OMP_PROC_BIND={s}",
+        'modules': lambda list_of_modules=None:
+            "\n".join([f"module load {m}" for m in list_of_modules])
+            if list_of_modules is not None else None
+    }
+
+    def __init__(self, cl_args):
+        self.cl_args = dict(vars(cl_args))
+        self.loaded_config = yaml.safe_load(
+            open(self.cl_args['loaded_config_path'])
+        )
+
+    @staticmethod
+    def _check_key(key, value):
+
+        if value is not None:
+
+            mapped = SlurmWriter.KEYMAP.get(key)
+            if mapped is not None:
+                mapped = mapped(value)
+                if mapped is not None:
+                    return (0, mapped)
+
+            mapped = SlurmWriter.OTHERMAP.get(key)
+            if mapped is not None:
+                mapped = mapped(value)
+                if mapped is not None:
+                    return (1, mapped)
+
+        return (None, None)
+
+    @staticmethod
+    def requeue_lines(target, total_time, checkpoint_time=10):
+        """Gets a specific part of a SLURM script for the KNL flex queue."""
+
+        return [
+            f"#SBATCH --comment={total_time}",
+            f"#SBATCH --signal=B:USR1@{checkpoint_time}",
+            "#SBATCH --requeue",
+            "#SBATCH --open-mode=append\n",
+            "ckpt_command=\n",
+            ". /usr/common/software/variable-time-job/setup.sh",
+            "requeue_job func_trap USR1",
+            "#\n",
+        ]
+
+    def write(self, target):
+        """Takes command line arguments, initializes the configuration and
+        writes the new SLURM script to disk. We only want to override the
+        default values in the config if the command line values are not None.
+        This method parses these two dictionaries accordingly."""
+
+        lines = []
+        other_lines = []
+
+        master_dict = copy.copy(self.loaded_config)
+        keymap_keys = list(SlurmWriter.KEYMAP.keys())
+        othermap_keys = list(SlurmWriter.OTHERMAP.keys())
+        d_keys = list(self.loaded_config.keys())
+
+        # Iterate over the CL args
+        for key, value in self.cl_args.items():
+
+            # If we find a key that matches a key in the mappings provided in
+            # this class
+            if key in keymap_keys or key in othermap_keys:
+
+                # And, if that key matches a key in the default parameters
+                if key in d_keys:
+
+                    # Then continue, since this case will be caught in the next
+                    # loop
+                    continue
+
+                # Otherwise, if they key does not match, we add that key to
+                # the list
+                master_dict[key] = value
+
+        # Iterate over the full list, which is the union of the keys in the
+        # CL args which match the mappings provided in this class, and the
+        # default args found in the config
+        for key, value in master_dict.items():
+
+            # Define a temporary variable, tmp, which stores the value
+            # corresponding to the key. This could be None/null, or it could be
+            # some value
+            tmp = self.cl_args.get(key)
+
+            # If the CL arg doesn't exist, or defaults to None, use the
+            # key-value pair found in the default config
+            value = value if tmp is None else tmp
+
+            # Get the actual line to write to the SLURM script. It is possible
+            # based on the arguments that there is nothing to write, and this
+            # will also handle those cases. This also differentiates between
+            # the SLURM parmaeters and the "others", which are not SLURM
+            # parameters, and are written to the submit script differently.
+            (loc, val) = SlurmWriter._check_key(key, value)
+            if loc == 0:
+                lines.append(val)
+            elif loc == 1:
+                other_lines.append(val)
+
+        # The last line is always the same
+        last_line = 'srun python3 ._submit.py "$@"'
+
+        with open(target, 'w') as f:
+            f.write("#!/bin/bash\n\n")
+            for line in lines:
+                f.write(f"{line}\n")
+            if self.cl_args['requeue']:
+                last_line = f"{last_line} &\nwait"
+                assert 'total_time' in list(self.loaded_config.keys())
+                assert 'time' in list(self.loaded_config.keys())
+                assert 'time_min' in list(self.loaded_config.keys())
+                requeue_lines = SlurmWriter.requeue_lines(
+                    target, self.loaded_config['total_time']
+                )
+                for line in requeue_lines:
+                    f.write(f"{line}\n")
+            f.write("\n")
+            for line in other_lines:
+                f.write(f"{line}\n")
+            f.write(f"\n{last_line}")
 
 
 class Prime:
@@ -267,7 +434,7 @@ class Submitter:
         if self.cl_args.package is not None:
             packs_to_run = [f"{p:03}" for p in self.cl_args.package]
 
-        slurm_writer = utils.SlurmWriter(self.cl_args)
+        slurm_writer = SlurmWriter(self.cl_args)
         for ii, package in enumerate(all_cache):
             if self.cl_args.package is not None:
                 if f"{ii:03}" not in packs_to_run:
