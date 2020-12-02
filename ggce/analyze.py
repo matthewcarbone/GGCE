@@ -129,20 +129,24 @@ class Results:
             kwargs['lam'] = lambd
             A = self.__call__(**kwargs)
 
-            if not interp:
-                y = A[:, 1]
-                x = A[:, 0]
-                peaks = find_peaks(y)
-                band.append(x[peaks[0][0]])
+            try:
+                if not interp:
+                    y = A[:, 1]
+                    x = A[:, 0]
+                    peaks = find_peaks(y)
+                    band.append(x[peaks[0][0]])
 
-            else:
-                spl = ius(A[:, 0], A[:, 1])
-                x = np.linspace(A[:, 0][0], A[:, 0][-1], 1000000)
-                y = spl(x, ext='zeros')
-                # loc = np.argmax(y)
-                peaks = find_peaks(y)
-                band.append(x[peaks[0][0]])
-                # band.append(x[loc])
+                else:
+                    spl = ius(A[:, 0], A[:, 1])
+                    x = np.linspace(A[:, 0][0], A[:, 0][-1], 1000000)
+                    y = spl(x, ext='zeros')
+                    # loc = np.argmax(y)
+                    peaks = find_peaks(y)
+                    band.append(x[peaks[0][0]])
+                    # band.append(x[loc])
+
+            except IndexError:
+                continue
 
         if cutoff:
 

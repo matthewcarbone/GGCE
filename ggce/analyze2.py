@@ -235,6 +235,16 @@ class Results:
 
         return self.vals['lambda'], np.array(band)
 
+    def k_v_w_no_interp(self, **kwargs):
+
+        band = []
+        for k in self.vals['k_units_pi']:
+            kwargs['k'] = k
+            A = self.__call__(**kwargs)
+            band.append(A[1])
+        Z = np.array(band)
+        return A[0], self.vals['k_units_pi'], Z
+
     def k_v_w(self, ninterp_w=1000, ninterp_k=1000, **kwargs):
         """Returns a band structure-like plot of k vs w."""
 
