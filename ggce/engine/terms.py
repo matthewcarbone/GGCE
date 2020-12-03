@@ -5,8 +5,156 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import cmath
+import numpy as np
 
 from ggce.engine import physics
+
+
+class BosonConfig:
+    """A class for holding bosons occupations and defining operations on the
+    boson cloud.
+
+    Attributes
+    ----------
+    config : np.ndarray
+        An array of the shape (n_boson_types, cloud_length)
+    max_modifications : int
+        The maximum number of times one can modify the boson config before
+        throwing an error. This is precisely equal to the order of the
+        boson creation operators in V.
+    """
+
+    def __init__(self, config, max_modifications=1):
+        self.config = np.atleast_2d(config)
+        self.n_boson_types = self.config.shape[0]
+        self.cloud_length = self.config.shape[1]
+        self.total_bosons_per_type = np.sum(self.config, axis=1)
+        self.total_bosons = np.sum(self.total_bosons_per_type)
+        self.n_modified = 0
+        self.max_modifications = max_modifications
+        self.assert_valid()
+
+    def is_green(self):
+        if self.cloud_length == 1:
+            if np.sum(self.config) == 0:
+                return True
+        return False
+
+    def get_identifier(self):
+        if self.is_green():
+            return "G"
+        return str([list(s) for s in self.config])
+
+    def is_legal(self):
+        """Checks if the cloud is a legal configuration."""
+
+        if self.is_green():
+            return True
+
+        # Get the edges of the cloud
+        edge_left = self.config[:, 0]
+        edge_right = self.config[:, -1]
+        if np.sum(edge_left) == 0 or np.sum(edge_right) == 0:
+            return False
+        return True
+
+    def assert_valid(self):
+        """Checks that the configuration contains entries >= 0 only. If not
+        raises a RuntimeError, else silently does nothing."""
+
+        if np.any(self.config < 0):
+            raise RuntimeError(f"Invalid config: {self.config}")
+        if np.sum(self.total_bosons_per_type) < 0:
+            raise RuntimeError("Config has less than 0 total bosons")
+
+    def remove_boson(self, boson_type, location):
+        """Removes a boson of type boson_type from the specified cloud
+        location. if removal is not possible, raises a RuntimeError. Returns
+        the value to shift the exp_shift and f_arg attributes of the Terms
+        class."""
+
+        if self.n_modified >= self.max_modifications:
+            raise RuntimeError("Max modifications exceeded")
+        if boson_type > self.n_boson_types - 1:
+            raise RuntimeError("Boson type remove error")
+        if location > self.cloud_length - 1:
+            raise RuntimeError("Location remove error")
+
+        self.config[boson_type, location] -= 1
+
+        shift = 0
+
+        if not self.is_green():
+
+            at_least_one_boson_present = list(np.where(
+                np.sum(self.config, axis=0) > 0
+            )[0])
+            left = min(at_least_one_boson_present)
+            right = max(at_least_one_boson_present)
+
+            if right < self.config.shape[1] - 1:
+                self.config = self.config[:, :right + 1]
+
+            if left > 0:
+                self.config = self.config[:, left:]
+                shift = left
+
+        self.assert_valid()
+        assert self.is_legal()
+        self.n_modified += 1
+        self.total_bosons_per_type[boson_type] -= 1
+        self.total_bosons -= 1
+
+        return shift
+
+    def add_boson(self, boson_type, location):
+        """Adds a boson of type boson_type to the specified location."""
+
+        if self.n_modified >= self.max_modifications:
+            raise RuntimeError("Max modifications exceeded")
+        if boson_type > self.n_boson_types - 1:
+            raise RuntimeError("Boson type add error")
+
+        # Easy case: the boson type to add is in the existing cloud:
+        if 0 <= location < self.cloud_length:
+            self.config[boson_type, location] += 1
+
+        # Adding a boson to the right or left of the existing cloud requires
+        # one to append a new numpy array to the appropriate side.
+        elif location < 0:
+            new_array_len = -location  # Absolute value of the location
+            new_arr = np.zeros((self.n_boson_types, new_array_len)).astype(int)
+
+            # Add a boson to the first element (on the left) of the appropriate
+            # boson type
+            new_arr[boson_type, 0] += 1
+
+            # Concatenate in the appropriate way
+            arrs = [new_arr, self.config]
+            self.config = np.concatenate(arrs, axis=1).astype(int)
+            self.cloud_length = self.config.shape[1]
+
+        # Here we're adding a boson to the right of the cloud. A similar logic
+        # is adopted to the case when we add to the left of the cloud.
+        else:
+            new_array_len = location - self.cloud_length + 1
+            new_arr = np.zeros((self.n_boson_types, new_array_len)).astype(int)
+            new_arr[boson_type, -1] += 1
+            arrs = [self.config, new_arr]
+            self.config = np.concatenate(arrs, axis=1).astype(int)
+            self.cloud_length = self.config.shape[1]
+
+        shift = 0
+        if location < 0:
+            shift = -location  # shift is > 0
+
+        self.assert_valid()
+        assert self.is_legal()
+        self.n_modified += 1
+        self.total_bosons_per_type[boson_type] += 1
+        self.total_bosons += 1
+
+        return shift
 
 
 class Term:
@@ -32,7 +180,7 @@ class Term:
         strength, sign of the coupling and other prefactor terms such as
         n_gamma. Default is 1.0.
     f_arg : int
-        The value of f_arg, where we have f_{n_mat}(f_arg). Note that if
+        The value of f_arg, where we have f_{boson_config}(f_arg). Note that if
         None, this implies that the term for f_arg is left general. This
         should only occur for an FDeltaTerm object that is an "index" for
         the equation, i.e., it is a term that originally appears on the
@@ -44,39 +192,35 @@ class Term:
 
     Parameters
     ----------
-    n_mat : list
-        The n-"matrix". This vector of vectors is indexed in the following
-        way. For example, n[ii][jj] means that on boson of type ii, and
-        site jj there are n[ii][jj] bosons.
-    hterm : SHT
+    boson_config : BosonConfig
+        The configuration of bosons. The BosonConfig class contains the
+        necessary methods for adding and removing bosons of various types
+        and in various locations.
+    hterm : SingleTerm
         The parameters of the term itself. (Single Hamiltonian Term)
     """
 
-    def __init__(self, n_mat, hterm=None):
-        self.n_mat = list(n_mat)
-        self.n_bosons = sum(self.n_mat)
+    def __init__(self, boson_config, hterm=None, model_params=None):
+        self.config = BosonConfig(boson_config)
 
         # If hterm is none, we know this is an index term which carries with
         # it no system-dependent prefactors or anything like that.
         self.hterm = hterm
+        self.model_params = model_params
         self.constant_prefactor = 1.0
-
-        # If True, will prevent any accidental modification of the n_mat. This
-        # flag is set to True after incrementing/decrementing a position on the
-        # boson chain.
-        self.lock_n_mat = False
 
         # Determines the argument of f and prefactors
         self.exp_shift = 0  # exp(i*k*a*exp_shift)
         self.f_arg = None  # Only None for the index term
         self.g_arg = None  # => g(...) = 1
 
-    def _get_n_mat_identifier(self):
-        """Returns a string of the n_mat identifier."""
+    def get_total_bosons(self):
+        return self.config.total_bosons
 
-        if len(self.n_mat) == 1 and self.n_mat[0] == 0:
-            return "{G}"
-        return "{" + str(self.n_mat)[1:-1] + "}"
+    def _get_boson_config_identifier(self):
+        """Returns a string of the boson_config identifier."""
+
+        return "{" + self.config.get_identifier() + "}"
 
     def _get_f_arg_identifier(self):
         """Returns a string of the f_arg identifier."""
@@ -96,8 +240,8 @@ class Term:
     def identifier(self, full=False):
         """Returns a string with which one can index the term. The string takes
         the form n0-n1-...-nL-1-(f_arg)-[exp_shift]. Also defines the
-        individual identifiers for the n_mat, f_arg and c_exp shift, which will
-        be utilized later.
+        individual identifiers for the boson_config, f_arg and c_exp shift,
+        which will be utilized later.
 
         Parameters
         ----------
@@ -108,13 +252,13 @@ class Term:
             coefficient.
         """
 
-        t1 = self._get_n_mat_identifier() + self._get_f_arg_identifier()
+        t1 = self._get_boson_config_identifier() + self._get_f_arg_identifier()
         if not full:
             return t1
         t2 = self._get_g_arg_identifier() + self._get_c_exp_identifier()
         return t1 + t2
 
-    def update_n_mat(self):
+    def update_boson_config(self):
         """Specific update scheme needs to be run depending on whether we add
         or remove a boson."""
 
@@ -144,7 +288,7 @@ class Term:
         equations are generated, it will think there are multiple Greens
         equations, of which of course there can be only one."""
 
-        if self._get_n_mat_identifier() == '{G}' and self.f_arg != 0:
+        if self._get_boson_config_identifier() == '{G}' and self.f_arg != 0:
             self.exp_shift += self.f_arg
             self.f_arg = 0
 
@@ -158,13 +302,11 @@ class IndexTerm(Term):
     default, unchangeable prefactor being equal to the constant prefactor,
     independent of k and w."""
 
-    def __init__(self, n_mat):
-        super().__init__(n_mat=n_mat)
-        self.lock_n_mat = True
+    def __init__(self, boson_config):
+        super().__init__(boson_config=boson_config)
 
     def set_f_arg(self, val):
-        """Overrides the set value of f_arg and re-initializes the
-        identifier."""
+        """Overrides the set value of f_arg."""
 
         assert self.hterm is None
         self.f_arg = val
@@ -183,10 +325,9 @@ class EOMTerm(Term):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.hterm is not None
-        self.lock_n_mat = True
         self.exp_shift = self.hterm.x - self.hterm.y
         self.f_arg = self.hterm.y
-        self.constant_prefactor = self.hterm.sign * self.hterm.model_params.g
+        self.constant_prefactor = self.hterm.g
 
     def coefficient(self, k, w):
         """This will set the prefactor to G0, since we assume
@@ -197,126 +338,80 @@ class EOMTerm(Term):
         AnnihilationTerm and CreationTerm classes."""
 
         return self.constant_prefactor * physics.G0_k_omega(
-            k, w, self.hterm.model_params.a, self.hterm.model_params.eta,
-            self.hterm.model_params.t
-        ) * cmath.exp(1j * k * self.hterm.model_params.a * self.exp_shift)
+            k, w, self.model_params.a, self.model_params.eta,
+            self.model_params.t
+        ) * cmath.exp(1j * k * self.model_params.a * self.exp_shift)
 
     def increment_g_arg(self, delta):
         return
 
 
-class _NonIndexTerm(Term):
+class NonIndexTerm(Term):
 
-    def __init__(self, n_mat, hterm, constant_prefactor):
-        super().__init__(n_mat=n_mat, hterm=hterm)
+    def __init__(self, boson_config, hterm, model_params, constant_prefactor):
+        super().__init__(boson_config, hterm, model_params)
         assert self.hterm is not None
 
         # This is entirely general now
         self.f_arg = self.hterm.y
         self.g_arg = self.hterm.x - self.hterm.y
-        self.initial_bosons = sum(self.n_mat)
         self.constant_prefactor = constant_prefactor
+        self.freq_shift = sum([
+            self.model_params.Omega[ii] * bpt
+            for ii, bpt in enumerate(self.config.total_bosons_per_type)
+        ])
 
-    def step(self, gamma_idx):
+    def step(self, location):
         """Increments or decrements the bosons on the chain depending on the
-        class derived class type."""
+        class derived class type. The location is generally given by gamma
+        in my notation."""
 
-        assert not self.lock_n_mat
-        self.g_arg += gamma_idx
-        self.f_arg -= gamma_idx
-        self.modify_n_bosons(gamma_idx)
-        self.update_n_mat(gamma_idx)
-        self.lock_n_mat = True
+        self.g_arg += location
+        self.f_arg -= location
+        self.modify_n_bosons(self.hterm.boson_type, location)
 
     def coefficient(self, k, w):
 
-        freq_shift = self.hterm.model_params.Omega * self.initial_bosons
-
         exp_term = cmath.exp(
-            1j * k * self.hterm.model_params.a * self.exp_shift
+            1j * k * self.model_params.a * self.exp_shift
         )
 
-        w_freq_shift = w - freq_shift
+        w_freq_shift = w - self.freq_shift
 
         g_contrib = physics.g0_delta_omega(
-            self.g_arg, w_freq_shift,
-            self.hterm.model_params.a,
-            self.hterm.model_params.eta,
-            self.hterm.model_params.t
+            self.g_arg, w_freq_shift, self.model_params.a,
+            self.model_params.eta, self.model_params.t
         )
 
         return self.constant_prefactor * exp_term * g_contrib
 
 
-class AnnihilationTerm(_NonIndexTerm):
+class AnnihilationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
     a boson from a specified site."""
 
-    def modify_n_bosons(self, gamma_idx):
+    def modify_n_bosons(self, boson_type, location):
         """Removes a boson from the specified site corresponding to the
         correct type. Note this step is independent of the reductions of the
-        f-functions to other f-functions"""
+        f-functions to other f-functions."""
 
-        self.n_mat[gamma_idx] -= 1
-        assert all([n >= 0 for n in self.n_mat])
-
-    def update_n_mat(self, gamma_idx):
-        """Specific updater for the boson annihilation terms."""
-
-        if len(self.n_mat) == 1 and self.n_mat[0] == 0:  # Green's function
-            pass
-        else:
-            locs_where_neq_zero = [
-                ii for ii, n in enumerate(self.n_mat) if n > 0
-            ]
-            right = max(locs_where_neq_zero)
-            left = min(locs_where_neq_zero)
-            if right < len(self.n_mat) - 1:
-                self.n_mat = self.n_mat[:right + 1]
-            if left > 0:
-                self.n_mat = self.n_mat[left:]
-                self.exp_shift -= left
-                self.f_arg += left
-
-        self.n_bosons = self.initial_bosons - 1
+        shift = self.config.remove_boson(boson_type, location)
+        self.exp_shift -= shift
+        self.f_arg += shift
 
 
-class CreationTerm(_NonIndexTerm):
+class CreationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
     a boson from a specified site."""
 
-    def modify_n_bosons(self, gamma_idx):
-        """This is done for the user in update_n_mat."""
-
-        if gamma_idx > len(self.n_mat) - 1:
-            shape1 = gamma_idx + 1 - len(self.n_mat)
-
-            # Create the array to append to the right of the n-matrix
-            to_concat = [0 for _ in range(shape1)]
-
-            # The last entry (column-wise) at the alpha'th index (row-wise)
-            # gets the boson
-            to_concat[-1] = 1
-            self.n_mat = self.n_mat + to_concat
-
-        elif gamma_idx < 0:
-            shape1 = abs(gamma_idx)
-            to_concat = [0 for _ in range(shape1)]
-            to_concat[0] = 1
-            self.n_mat = to_concat + self.n_mat
-
-        else:
-            self.n_mat[gamma_idx] += 1
-
-    def update_n_mat(self, gamma_idx):
-        """Handles the boson creation cases, since these can be a bit
+    def modify_n_bosons(self, boson_type, location):
+        """This is done for the user in update_boson_config. Handles
+        the boson creation cases, since these can be a bit
         confusing. Basically, we have the possibility of creating a boson on
-        a site that is outside of the range of self.n_mat. So we need methods
+        a site that is outside of the range of self.config. So we need methods
         of handling the case when an IndexError would've otherwise been raised
         during an attempt to increment an index that isn't there."""
 
-        if gamma_idx < 0:
-            self.exp_shift = abs(gamma_idx)
-            self.f_arg -= abs(gamma_idx)
-
-        self.n_bosons = self.initial_bosons + 1
+        shift = self.config.add_boson(boson_type, location)
+        self.exp_shift = shift
+        self.f_arg -= shift
