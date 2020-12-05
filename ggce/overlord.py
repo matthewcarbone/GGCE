@@ -369,18 +369,34 @@ class Prime(BaseOverlord):
         cl_args = dict(vars(self.cl_args))
         package_configs_directory = os.path.join(package_cache_path, "configs")
         os.makedirs(package_configs_directory, exist_ok=False)
+
+        # Use a simple dictionary mapping between the config name and the
+        # directory in which results will be saved
+        config_name_to_dir_map = dict()
+
         for config_name, config_dict in configs.items():
 
             # For each config dictionary, initialize the InputParameters
             # object, and parse that, iterating through it to produce all
             # M/N permutations
             upper_inp = InputParameters(config_dict, cl_args)
-            for sub_cc, inp in enumerate(upper_inp):
 
-                name = f"{config_name}_{sub_cc:03}"
+            for sub_cc, inp in enumerate(upper_inp):
+                name = f"{sub_cc:03}_{config_name}"
                 t = os.path.join(package_configs_directory, name)
                 inp.save(t)
                 dlog.debug(f"Prepared config {name}")
+                name_no_ext = os.path.splitext(name)[0]
+                config_results_path = \
+                    os.path.join(package_cache_path, "results", name_no_ext)
+                config_name_to_dir_map[name] = config_results_path
+                os.makedirs(os.path.join(config_results_path, "STATE"))
+
+        # Save the mapping
+        config_name_to_dir_map_path = \
+            os.path.join(package_cache_path, "config_map.yaml")
+        with open(config_name_to_dir_map_path, 'w') as f:
+            yaml.dump(config_name_to_dir_map, f, default_flow_style=False)
 
     def _append_queue(self, package_basename):
         """For convenience, so the user doesn't need to copy/paste the package

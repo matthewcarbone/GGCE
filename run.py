@@ -20,8 +20,10 @@ def purge(file_or_directory):
 
     if os.path.isdir(file_or_directory):
         shutil.rmtree(file_or_directory)
+        print(f"Removed tree {file_or_directory}")
     elif os.path.exists(file_or_directory):
         os.remove(file_or_directory)
+        print(f"Removed file {file_or_directory}")
 
 
 if __name__ == '__main__':
@@ -29,9 +31,6 @@ if __name__ == '__main__':
     args = parser.global_parser(sys.argv[1:])
 
     if args.purge:
-        print(f"Removing {utils.get_cache_dir()}")
-        print(f"Removing {utils.LIFO_QUEUE_PATH}")
-        print(f"Removing {utils.JOB_DATA_PATH}")
         purge(utils.get_cache_dir())
         purge(utils.LIFO_QUEUE_PATH)
         purge(utils.JOB_DATA_PATH)
@@ -40,7 +39,6 @@ if __name__ == '__main__':
         local_sub = os.listdir(".")
         local_sub = [xx for xx in local_sub if "submit_" in xx and ".sh" in xx]
         for file in local_sub:
-            print(f"Removing {file}")
             purge(file)
         exit(0)
 
