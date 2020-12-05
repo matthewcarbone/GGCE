@@ -107,28 +107,6 @@ def time_func(arg1=None):
     return real_decorator
 
 
-def configuration_space_generator(length, total_sum):
-    """Generator for yielding all possible combinations of integers of length
-    `length` that sum to total_sum. Not that cases such as length = 4 and
-    total_sum = 5 like [0, 0, 2, 3] need to be screened out, since these do
-    not correspond to valid f-functions.
-
-    Source of algorithm:
-    https://stackoverflow.com/questions/7748442/
-    generate-all-possible-lists-of-length-n-that-sum-to-s-in-python
-    """
-
-    if length == 1:
-        yield (total_sum,)
-    else:
-        for value in range(total_sum + 1):
-            for permutation in configuration_space_generator(
-                length - 1, total_sum - value
-            ):
-                r = (value,) + permutation
-                yield r
-
-
 class ConfigFilter:
 
     def __init__(self, M_min=2, filter_type=None):

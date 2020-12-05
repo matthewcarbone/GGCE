@@ -116,16 +116,14 @@ class Equation:
         for ii in range(len(self.terms_list)):
             self.terms_list[ii].increment_g_arg(delta)
 
-    def initialize_terms(self):
+    def initialize_terms(self, config_space_generator):
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
-        N = self.input_params.model_params.N
-        M = self.input_params.model_params.M
+        ae = self.input_params.model_params.absolute_extent
 
         self.terms_list = []
         assert np.all(self.config_index >= 0)
-        total_bosons = np.sum(self.config_index)
 
         # Iterate over all possible types of the coupling operators
         for hterm in self.input_params.terms:
@@ -138,7 +136,7 @@ class Equation:
             if hterm.dagger == '-':
 
                 # Iterate over the site indexes for the term's alpha-index
-                for location, nval in enumerate(self.config_index[bt, :]):
+                for loc, nval in enumerate(self.config_index[bt, :]):
 
                     # Do not annihilate the vacuum, this term comes to 0
                     # anyway.
@@ -150,26 +148,30 @@ class Equation:
                         model_params=self.input_params.model_params,
                         constant_prefactor=hterm.g * nval
                     )
-                    t.step(location)
-
+                    t.step(loc)
                     t.check_if_green_and_simplify()
-                    self.terms_list.append(t)
+                    if t.config.is_green():
+                        self.terms_list.append(t)
+                    elif config_space_generator.is_legal(t.config.config):
+                        self.terms_list.append(t)
 
             # Don't want to create an equation corresponding to more than
             # the maximum number of allowed bosons.
-            elif hterm.dagger == '+' and total_bosons + 1 <= N:
-                for location in range(self.config_index.shape[1] - M, M):
+            elif hterm.dagger == '+':
+                for loc in range(self.config_index.shape[1] - ae, ae):
 
                     t = terms_module.CreationTerm(
                         copy.copy(self.config_index), hterm=hterm,
                         model_params=self.input_params.model_params,
                         constant_prefactor=hterm.g
                     )
-                    t.step(location)
-
+                    t.step(loc)
                     t.check_if_green_and_simplify()
 
-                    self.terms_list.append(t)
+                    if t.config.is_green():
+                        self.terms_list.append(t)
+                    elif config_space_generator.is_legal(t.config.config):
+                        self.terms_list.append(t)
 
 
 class GreenEquation(Equation):

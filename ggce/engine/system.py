@@ -4,15 +4,128 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+from collections import OrderedDict
 import copy
 import numpy as np
 from scipy import linalg
 import time
 
-from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
+
+
+def configuration_space_generator(length, total_sum):
+    """Generator for yielding all possible combinations of integers of
+    length `length` that sum to total_sum. Not that cases such as
+    length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
+    out, since these do not correspond to valid f-functions.
+
+    Source of algorithm:
+    https://stackoverflow.com/questions/7748442/
+    generate-all-possible-lists-of-length-n-that-sum-to-s-in-python
+    """
+
+    if length == 1:
+        yield (total_sum,)
+    else:
+        for value in range(total_sum + 1):
+            for permutation in configuration_space_generator(
+                length - 1, total_sum - value
+            ):
+                r = (value,) + permutation
+                yield r
+
+
+class ConfigurationSpaceGenerator:
+    """Helper class for generating configuration spaces of bosons.
+
+    Parameters
+    ----------
+    absolute_extent : int
+        The maximum extent of the cloud. Note that this is NOT trivially
+        the sum(M) since there are different ways in which the clouds can
+        overlap. Take for instance, two boson types, with M1 = 3 and M2 = 2.
+        These clouds can overlap such that absolute extent is at most 5,
+        and they can also overlap such that the maximal extent is 3.
+    M : list
+        Length of the allowed cloud extent for each boson type.
+    N : list
+        Total number of maximum allowed bosons for each boson type. The
+        absolute maximum number of bosons is trivially sum(N).
+    """
+
+    def __init__(self, absolute_extent, M, N):
+        self.absolute_extent = absolute_extent
+        assert self.absolute_extent >= max(M)
+        self.M = M
+        self.N = N
+        self.N_2d = np.atleast_2d(self.N).T
+        self.n_boson_types = len(self.M)
+        assert len(self.N) == self.n_boson_types
+
+    def extent_of_1d(self, config1d):
+        """Gets the extent of a 1d vector."""
+
+        where_nonzero = np.where(config1d != 0)[0]
+        L = len(where_nonzero)
+        if L < 2:
+            return L
+
+        minimum_index = min(where_nonzero)
+        maximum_index = max(where_nonzero)
+        return maximum_index - minimum_index + 1
+
+    def is_legal(self, config):
+        """Checks the condition of a config. If legal, returns True, else
+        returns False."""
+
+        # First, check that the edges of the cloud have at least one boson
+        # of either type on it.
+        if np.sum(config[:, 0]) < 1 or np.sum(config[:, -1]) < 1:
+            return False
+
+        # Second, check that the boson numbers for each boson type are
+        # satisfied
+        if not np.all(config.sum(axis=1, keepdims=True) <= self.N_2d):
+            return False
+
+        # Finally, check that each boson type satisifes its extent rule
+        if any([
+            self.M[ii] < self.extent_of_1d(c1d)
+            for ii, c1d in enumerate(config)
+        ]):
+            return False
+
+        return True
+
+    def __call__(self):
+        """Generates all possible configurations of bosons for the composite
+        system. Then, reduce that space down based on the specific rules for
+        each boson type."""
+
+        nb_max = sum(self.N)
+        config_dict = {N: [] for N in range(1, nb_max + 1)}
+        for nb in range(1, nb_max + 1):
+            for z in range(1, self.absolute_extent + 1):
+                c = list(
+                    configuration_space_generator(z * self.n_boson_types, nb)
+                )
+
+                # Reshape everything properly:
+                c = [np.array(z).reshape(self.n_boson_types, -1) for z in c]
+
+                # Now, we get all of the LEGAL nvecs, which are those in
+                # which at least a single boson of any type is on both
+                # edges of the cloud.
+                tmp_legal_configs = [
+                    nn for nn in c if self.is_legal(nn)
+                ]
+
+                # Extend the temporary config
+                config_dict[nb].extend(tmp_legal_configs)
+
+        return config_dict
 
 
 class System:
@@ -53,6 +166,16 @@ class System:
         self.basis = dict()
         self.unique_short_identifiers = set()
 
+        # Total number of bosons allowed is the sum of the number of bosons
+        # allowed for each boson type
+        self.N_total_max = sum(self.model_params.N)
+
+        # Config space generator
+        self.config_space_generator = ConfigurationSpaceGenerator(
+            self.model_params.absolute_extent,
+            self.model_params.M, self.model_params.N
+        )
+
     def _append_generalized_equation(self, n_bosons, config):
 
         eq = Equation(config, input_params=self.input_params)
@@ -62,7 +185,7 @@ class System:
 
         # Initialize the specific terms which constitute the f_n(delta)
         # EOM, such as f_n'(1), f_n''(0), etc.
-        eq.initialize_terms()
+        eq.initialize_terms(self.config_space_generator)
 
         # Initialize the required values for delta (arguments of f) as
         # derived from the terms themselves, used later when generating
@@ -96,38 +219,11 @@ class System:
 
         t0 = time.time()
 
+        allowed_configs = self.config_space_generator()
+
         # Generate all possible numbers of bosons consistent with n_max.
-        for n_bosons in range(1, self.model_params.N + 1):
-
-            # Iterate over all possible lengths consistent with the MA. For
-            # each boson type in the range, construct the allowed permutations.
-            for z in range(1, self.model_params.M + 1):
-
-                # Pretend that the length of the cloud is actually equal to
-                # z * the number of boson types. We generate all possible
-                # configs, then re-shape that vector into its proper shape,
-                # then eliminate all the illegal ones.
-                configuration_space = list(
-                    utils.configuration_space_generator(
-                        z * self.n_boson_types, n_bosons
-                    )
-                )
-
-                # Reshape everything properly:
-                configuration_space = [
-                    np.array(z).reshape(self.n_boson_types, -1)
-                    for z in configuration_space
-                ]
-
-                # Now, we get all of the LEGAL nvecs, which are those in
-                # which at least a single boson of any type is on both
-                # edges of the cloud.
-                tmp_legal_configs = [
-                    nn for nn in configuration_space
-                    if np.sum(nn[:, 0]) > 0 and np.sum(nn[:, -1]) > 0
-                ]
-
-                self._extend_legal_configs(n_bosons, tmp_legal_configs)
+        for n_bosons, configs in allowed_configs.items():
+            self._extend_legal_configs(n_bosons, configs)
 
         # Manually append the Green's function (do the same as above except)
         # for this special case. Note that no matter what this is always
@@ -149,19 +245,18 @@ class System:
         L = sum([len(val) for val in self.generalized_equations.values()])
         dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
 
-        # Should generalize this at some point
+        # Need to generalize this
         if self.n_boson_types == 1:
-
             # Plus one for the Green's function
-            T = int(total_generalized_equations(
-                self.model_params.M, self.model_params.N) + 1
+            T = 1 + total_generalized_equations(
+                self.model_params.M, self.model_params.N, self.n_boson_types
             )
             dlog.debug(f"Predicted {T} equations from combinatorics equations")
 
             assert T == L
 
-            totals = self._get_total_terms()
-            dlog.debug(f"Predicting {totals} total terms")
+        totals = self._get_total_terms()
+        dlog.debug(f"Predicting {totals} total terms")
 
         # Initialize the self.equations attribute's lists here since we know
         # all the keys:
@@ -244,7 +339,8 @@ class System:
 
         eqs_dict = self.generalized_equations if generalized \
             else self.equations
-        for n_bosons, eqs in eqs_dict.items():
+        od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
+        for n_bosons, eqs in od.items():
             print(f"{n_bosons}")
             print("-" * 60)
             for eq in eqs:
@@ -334,13 +430,15 @@ class System:
             'time': []
         }
 
-        for n_bosons in range(self.model_params.N, 0, -1):
+        total_bosons = np.sum(self.model_params.N)
+
+        for n_bosons in range(total_bosons, 0, -1):
 
             t0 = time.time()
             d_n = len(self.recursion_solver_basis[n_bosons])
             d_n_m_1 = len(self.recursion_solver_basis[n_bosons - 1])
 
-            if n_bosons == self.model_params.N:
+            if n_bosons == total_bosons:
                 A = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
                 self._compute_alpha_beta_(n_bosons, -1, k, w, A)
                 continue
