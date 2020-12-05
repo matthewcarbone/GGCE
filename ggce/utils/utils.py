@@ -15,6 +15,10 @@ import time
 from ggce.utils.logger import default_logger as dlog
 
 
+LIFO_QUEUE_PATH = '.LIFO_queue.yaml'
+JOB_DATA_PATH = 'job_data'
+
+
 class DisableLogger:
 
     def __enter__(self):
@@ -53,6 +57,10 @@ def bold(s):
 def get_cache_dir():
     cache = os.environ.get('GGCE_CACHE_DIR')
     if cache is None:
+        dlog.warning(
+            "Environment variable GGCE_CACHE_DIR not found. "
+            "Cache directory set to 'results'"
+        )
         cache = 'results'
     os.makedirs(cache, exist_ok=True)
     dlog.debug(f"Cache directory set to {cache}")

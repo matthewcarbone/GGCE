@@ -18,9 +18,8 @@ def global_parser(sys_argv):
     ap = argparse.ArgumentParser(formatter_class=SortingHelpFormatter)
 
     ap.add_argument(
-        '--force', dest='force', default=False, action='store_true',
-        help='Overrides failsafes, automatically applies "yes" to otherwise '
-        'required user inputs.'
+        '--purge', dest='purge', default=False, action='store_true',
+        help='Removes all saved data, all queue information and all job data.'
     )
 
     ap.add_argument(
@@ -42,12 +41,46 @@ def global_parser(sys_argv):
     prime_sp = subparsers.add_parser(
         "prime", formatter_class=SortingHelpFormatter,
         description='Prime the computation for submission by creating the '
-        'appropriate directories and writing the SLURM submit file.'
+        'appropriate directories and writing the SLURM submit file. Note that '
+        'command line arguments override config file defaults.'
     )
     prime_sp.add_argument(
-        '-c', '--configs', type=int, nargs='+', default=None, dest='c_to_run',
-        help='Indexes the configs within a package to run. Defaults to '
-        'running all configs in the package.'
+        '-C', '--configs', type=int, nargs='+', default=None, dest='c_to_run',
+        help='Names of the configs within the specified package to run. '
+        'Defaults to running all configs in the package.'
+    )
+    prime_sp.add_argument(
+        '--info', dest='info', default=None,
+        help='Extra information about the package which is appended to the '
+        'package name.'
+    )
+    prime_sp.add_argument(
+        '--model', type=str, nargs='+', default=None, dest='model',
+        help='The model types.'
+    )
+    prime_sp.add_argument(
+        '-N', type=int, nargs='+', default=None, dest='N_bosons',
+        help='Number of bosons.', action='append'
+    )
+    prime_sp.add_argument(
+        '-M', type=int, nargs='+', default=None, dest='M_extent',
+        help='Maximal cloud extent.', action='append'
+    )
+    prime_sp.add_argument(
+        '-O', '--Omega', type=float, nargs='+', default=None,
+        dest='Omega', help='Boson Einsten frequencies.'
+    )
+    prime_sp.add_argument(
+        '-L', '--lam', type=float, nargs='+', default=None,
+        dest='lam', help='Dimensionless effective couplings.'
+    )
+    prime_sp.add_argument(
+        '-e', '--eta', type=float, nargs='+', default=None, dest='eta',
+        help='Broadening parameter.'
+    )
+    prime_sp.add_argument(
+        '-k', type=float, nargs='+', default=None, dest='k_grid_info',
+        help='Values for k in units of pi.'
     )
     prime_sp.add_argument(
         '--linspacek', default=False, dest='linspacek',
@@ -56,39 +89,11 @@ def global_parser(sys_argv):
         'the -k flag: the k0, kf and total number of k points.'
     )
     prime_sp.add_argument(
-        '--info', dest='info', default=None,
-        help='Extra information about the package which is appended to the '
-        'package name.'
+        '-w', type=float, nargs='+', default=None, dest='w_grid_info',
+        help='Values for the frequency grid.', action='append'
     )
-
-    # Local stuff can be done easily via Jupyter notebooks
-    # prime_sp.add_argument(
-    #     '--local', dest='local', default=False, action='store_true',
-    #     help='Saves a bash script instead of SLURM.'
-    # )
-    # prime_sp.add_argument(
-    #     '-r', '--rule', dest='rule', default=0, type=int,
-    #     help="Special rules for further restricting the configuration space."
-    #     "Default is 0 (no rule)."
-    # )
 
     req = prime_sp.add_argument_group("required")
-    req.add_argument(
-        '-N', type=int, nargs='+', default=None, dest='N',
-        help='Number of bosons.', required=True
-    )
-    req.add_argument(
-        '-M', type=int, nargs='+', default=None, dest='M',
-        help='Maximal cloud extent.', required=True
-    )
-    req.add_argument(
-        '--eta', type=float, nargs='+', default=None, dest='eta',
-        help='Broadening parameter.', required=True
-    )
-    req.add_argument(
-        '-k', type=float, nargs='+', default=None, dest='k_units_pi',
-        help='Values for k in units of pi.', required=True
-    )
     req.add_argument(
         '-P', '--package', type=str, default=None, dest='package',
         help='Name of the package to prime. Packages must be contained in the '
@@ -111,6 +116,12 @@ def global_parser(sys_argv):
         'from debug in the sense that an actual job will be run/submitted, '
         'but all values for G will be randomly sampled, and there will be '
         'no actual GGCE calculations run.'
+    )
+    execute_sp.add_argument(
+        '-P', '--package', type=str, default=None, dest='package',
+        help='Name of the package to prime. Packages must be contained in the '
+        '`package_dir` directory. If unspecified, defaults to the last primed '
+        'trial as ordered in the locally stored LIFO queue.'
     )
 
     slurm = execute_sp.add_argument_group(
@@ -183,13 +194,6 @@ def global_parser(sys_argv):
     slurm.add_argument(
         '--config_path', dest='loaded_config_path',
         default='slurm_config.yaml', type=str, help="SLURM config path"
-    )
-
-    req = execute_sp.add_argument_group("required")
-    req.add_argument(
-        '-P', '--package', type=str, default=None, dest='package',
-        help='Name of the package to prime. Packages must be contained in the '
-        '`package_dir` directory.', required=True
     )
 
     # Quick post processing on the value for beta_critical

@@ -4,6 +4,8 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+import copy
+import itertools
 import numpy as np
 import math
 
@@ -51,10 +53,18 @@ class ModelParams:
         Lattice parameter. Default is 1.0. Recommended not to change this.
     """
 
+    def _get_n_boson_types(self):
+        """Get's the total number of boson types and asserts that the lists
+        are properly used."""
+
+        assert len(self.model) == len(self.Omega) == len(self.lambdas) \
+            == len(self.M) == len(self.N)
+
+        return len(self.model)
+
     def __init__(
         self, absolute_extent, M, N, t, eta, a, Omega, lambdas, model
     ):
-        self.absolute_extent = absolute_extent
         self.M = M
         self.N = N
         self.t = t
@@ -63,6 +73,14 @@ class ModelParams:
         self.Omega = Omega
         self.lambdas = lambdas
         self.model = model
+        self.n_boson_types = self._get_n_boson_types()
+
+        if self.n_boson_types == 1:
+            assert absolute_extent is None
+            self.absolute_extent = self.M[0]
+        else:
+            assert absolute_extent is not None
+            self.absolute_extent = absolute_extent
 
     def assert_attributes(self):
         assert isinstance(self.absolute_extent, int)
@@ -84,37 +102,51 @@ class ModelParams:
 
 
 class InputParameters:
-    """Container for the full set of input parameters for the trial.
+    """Container for the full set of input parameters for the trial. The
+    Input parameters themselves are read either from a single config file,
+    command line arguments during the prime step, or a combination of both.
 
-    model_dict : dict
-        Dictionary representing the boson frequencies and coupling terms for
-        each model contribution in the Hamiltonian. This also encodes the
-        models themselves. It also contains the maximum cloud extent and max
-        number of bosons per model. Should be of the form, e.g.,
-        {'H': [0.1, 0.2, 2, 5], 'SSH': [0.3, 0.4, 3, 10]}
+    Attributes
+    ----------
+    model_params : ModelParams
+        Contains the information, along with the terms attribute, for
+        initializing the System class.
+    w_grid_info, k_grid_info : list
+        A list, or list of list in the case of w_grid_info, representing the
+        linspace parameters for constructing the frequency and k-space grids,
+        respectively. The k_grid_info must take the form of either
+            1) a list of k-points in units of pi (if linspacek is False)
+            2) a list of 3 elements representing the linspace parameters
+               (otherwise)
+        The w_grid_info must take the form of a list of lists, where each
+        list is 3 elements long representing linspace parameters, and the
+        corresponding created grids are stitched together. This allows the
+        user to make grids which are non-linear in w-space.
+    terms : list
+        A list of SingleTerm objects. This corresponds directly with the
+        coupling term of the Hamiltonian.
     """
 
-    @staticmethod
-    def _get_n_boson_types(d):
-        """Get's the total number of boson types and asserts that the lists
-        are properly used."""
+    AVAILABLE_KEYS = [
+        't', 'eta', 'model', 'Omega', 'lam', 'M_extent', 'N_bosons',
+        'w_grid_info', 'k_grid_info', 'linspacek'
+    ]
 
-        assert len(d['model']) == len(d['Omega']) \
-            == len(d['lam']) == len(d['M_extent']) \
-            == len(d['N_bosons'])
-
-        return len(d['model'])
+    def __init__(self, d1, d2=dict()):
+        self._params = d1  # d1 should never contain incorrect keys
+        self.terms = None
+        for key, value in d2.items():
+            if key in InputParameters.AVAILABLE_KEYS:
+                if d2[key] is not None:
+                    self._params[key] = value
+        self.N_M_permutations = list(itertools.product(
+            self._params['M_extent'], self._params['N_bosons']
+        ))
+        self.counter_max = len(self.N_M_permutations)
 
     def _from_dict(self, d):
         """Initializes the parameters from a yaml config. Note these serve as
         default parameters and are overridden by command line arguments."""
-
-        self.n_boson_types = InputParameters._get_n_boson_types(d)
-
-        if self.n_boson_types == 1:
-            absolute_extent = d.get('M_extent')[0]
-        else:
-            absolute_extent = d.get('absolute_extent')
 
         self.w_grid_info = d.get('w_grid_info')
         self.k_grid_info = d.get('k_grid_info')
@@ -123,7 +155,7 @@ class InputParameters:
         # Get the number of boson types
         # absoute_extent, M, N, t, eta, a, Omega, lambdas, model
         self.model_params = ModelParams(
-            absolute_extent=absolute_extent,
+            absolute_extent=d.get("absolute_extent"),
             M=d.get("M_extent"),
             N=d.get("N_bosons"),
             t=d.get("t"),
@@ -146,11 +178,8 @@ class InputParameters:
         return list(np.linspace(*self.k_grid_info, endpoint=True)) \
             if list(self.linspacek) else self.k_grid_info
 
-    def init_attributes(self, params_from_yaml, command_line_args):
-        for key, value in command_line_args.items():
-            if command_line_args[key] is not None:
-                params_from_yaml[key] = value
-        self._from_dict(params_from_yaml)
+    def init_attributes(self):
+        self._from_dict(self._params)
         self.model_params.assert_attributes()
         assert isinstance(self.w_grid_info, list)
         assert isinstance(self.k_grid_info, list)
@@ -164,7 +193,7 @@ class InputParameters:
         the correct sign relative to the others, the result will be the
         same."""
 
-        terms = []
+        self.terms = []
 
         boson_type = 0
         Omegas = self.model_params.Omega
@@ -174,7 +203,7 @@ class InputParameters:
             g = model_coupling_map(model, self.model_params.t, Omega, lam)
 
             if model == 'H':
-                terms.extend([
+                self.terms.extend([
                     SingleTerm(
                         x=0, y=0, dagger='+', g=-g, boson_type=boson_type
                     ),
@@ -183,7 +212,7 @@ class InputParameters:
                     )
                 ])
             elif model == 'EFB':
-                terms.extend([
+                self.terms.extend([
                     SingleTerm(
                         x=1, y=1, dagger='+', g=g, boson_type=boson_type
                     ),
@@ -198,7 +227,7 @@ class InputParameters:
                     )
                 ])
             elif model == 'SSH':
-                terms.extend([
+                self.terms.extend([
                     SingleTerm(
                         x=1, y=0, dagger='+', g=g, boson_type=boson_type
                     ),
@@ -228,17 +257,28 @@ class InputParameters:
                 raise RuntimeError("Unknown model type when setting terms")
             boson_type += 1
 
-        self.terms = terms
+    def prime(self):
+        self.init_attributes()
+        self.init_terms()
 
-    def get_params(self):
-        return {
-            key: value for key, value in vars(self).items() if key != 'terms'
-        }
-
-    def save_config(self, path):
+    def save(self, path):
         """Saves the config to the disk. These are the precise parameters
         needed to reconstruct the input parameters in its entirety."""
 
-        assert self.terms is None
         with open(path, 'w') as outfile:
-            yaml.dump(self.get_params(), outfile, default_flow_style=False)
+            yaml.dump(self._params, outfile, default_flow_style=False)
+
+    def __iter__(self):
+        self.counter = 0
+        return self
+
+    def __next__(self):
+        if self.counter >= self.counter_max:
+            raise StopIteration
+        d = copy.deepcopy(self._params)
+        M_N_permutation = self.N_M_permutations[self.counter]
+        d['M_extent'] = M_N_permutation[0]
+        d['N_bosons'] = M_N_permutation[1]
+        input_params = InputParameters(d)
+        self.counter += 1
+        return input_params

@@ -6,9 +6,7 @@ __email__ = "x94carbone@gmail.com"
 
 
 from datetime import datetime
-import numpy as np
 import os
-import pickle
 import yaml
 
 from ggce.engine.structures import InputParameters
@@ -182,11 +180,7 @@ class SlurmWriter:
             SBATCH_lines.append(f"#SBATCH -J GGCE")
 
         # Out/err stream directories ------------------------------------------
-        job_data_directory = self.get_val("job_data_directory")
-        if job_data_directory is not None:
-            base_directory = job_data_directory
-        else:
-            base_directory = "job_data"
+        base_directory = utils.JOB_DATA_PATH
         if stream_name is None:
             SBATCH_lines.append(
                 f"#SBATCH --output={base_directory}/GGCE_%A.out"
@@ -257,22 +251,45 @@ class SlurmWriter:
             f.write(f"\n{last_line}")
 
 
-class Prime:
-    """Prepares the computation for submission by evaluating all jobs to be
-    run, and saving them to a working directory.
-
-    TODO: detailed docstring
-    """
-
+class BaseOverlord:
     def __init__(self, cl_args):
-
-        now = datetime.now()
-        self.dt_string = now.strftime("%Y-%m-%d-%H:%M:%S")
-
-        # The directories important for everything we do here.
         self.cache_dir = utils.get_cache_dir()
         self.package_dir = utils.get_package_dir()
         self.cl_args = cl_args
+        self.queue_path = utils.LIFO_QUEUE_PATH
+
+
+class Prime(BaseOverlord):
+    """Prepares the computation for submission by evaluating all jobs to be
+    run, and saving them to a working directory.
+
+    Attributes
+    ----------
+    dt_string : str
+        Datetime set at the time the class is initialized.
+    cache_dir : str
+        Path to the location for saving the results. Checks the environment
+        variable GGCE_CACHE_DIR; defaults to a local directory "cache".
+    package_dir : str
+        Path to the location of the packages. Checks the environment variable
+        GGCE_PACKAGES_DIR; defaults to local directory "packages".
+    cl_args : dict
+        Dictionary representation of the command line arguments.
+    staged_package_path : str
+        The specific path to the directory for storing results for this
+        particular trial.
+
+    Parameters
+    ----------
+    cl_args
+        Command line arguments Namespace directly from argparse.
+    """
+
+    def __init__(self, cl_args):
+        super().__init__(cl_args)
+
+        now = datetime.now()
+        self.dt_string = now.strftime("%Y-%m-%d-%H:%M:%S")
 
         # Select the user-specified package to run
         package_name = self.cl_args.package
@@ -315,7 +332,7 @@ class Prime:
         os.makedirs(pack_name, exist_ok=False)
         bold_str = utils.bold(f"-P {basename}")
         dlog.info(f"Submit with {bold_str}")
-        return pack_name
+        return pack_name, basename
 
     def _get_config_files(self):
         """Returns a list of all the staged config files in this package,
@@ -325,99 +342,68 @@ class Prime:
         # Load in all files
         all_files = utils.listdir_fullpath(self.staged_package_path)
 
-        if self.cl_args.c_to_run is not None:
-            c_to_run = [f"{xx:02}" for xx in self.cl_args.c_to_run]
-
-        tmp_staged_configs = [s for s in all_files if "config.yaml" in s]
-        tmp_staged_configs.sort()
+        tmp_staged_configs = [s for s in all_files if ".yaml" in s]
         configs = dict()
+
+        if len(tmp_staged_configs) < 1:
+            dlog.error("Len of staged configs is less than 1")
+
         for jj, f in enumerate(tmp_staged_configs):
             fname = f.split("/")[-1]
 
             # Skip configs not specified
             if self.cl_args.c_to_run is not None:
-                fn = int(fname[:2])
-
-                # We only use the first two numbers to index the config
-                if f"{fn:02}" not in c_to_run:
+                if fname not in self.cl_args.c_to_run:
                     dlog.debug(f"Skipping config {fname}")
                     continue
 
             configs[fname] = yaml.safe_load(open(f))
-            dlog.debug(f"Preparing config {fname}")
 
         return configs
 
-    @staticmethod
-    def _get_M_N_eta_k_mapping(M_N_eta_k):
-        """Returns a nested dictionary containing the mappings between the
-        following variables: config -> M -> N -> eta."""
-
-        return {
-            'M': {M: cc for cc, M in enumerate(M_N_eta_k[0])},
-            'N': {N: cc for cc, N in enumerate(M_N_eta_k[1])},
-            'eta': {eta: cc for cc, eta in enumerate(M_N_eta_k[2])},
-            'k_units_pi': {k: cc for cc, k in enumerate(M_N_eta_k[3])}
-        }
-
-    def _ready_configs(self, configs, package_cache_path):
+    def _ready_package(self, configs, package_cache_path):
         """Uses the list of configs passed and the command line information
-        to produce the computation-ready input file information.
-            The idea is to create a mapping:
-            omega + config -> directory location
-        """
+        to produce the computation-ready input file information."""
 
-        if self.cl_args.linspacek:
-            if len(self.cl_args.k_units_pi) != 3:
-                msg = "With --linspacek specified, -k requires 3 arguments: " \
-                    "k0, kf and the number of k-points"
-                dlog.critical(msg)
-                raise RuntimeError(msg)
+        # Iterate over the loaded config dictionaries
+        cl_args = dict(vars(self.cl_args))
+        package_configs_directory = os.path.join(package_cache_path, "configs")
+        os.makedirs(package_configs_directory, exist_ok=False)
+        for config_name, config_dict in configs.items():
 
-        N_M_eta_k = [
-            self.cl_args.M, self.cl_args.N, self.cl_args.eta,
-            list(np.linspace(*self.cl_args.k_units_pi, endpoint=True))
-            if self.cl_args.linspacek else self.cl_args.k_units_pi
-        ]
-        n_kpts = len(N_M_eta_k[3])
-        M_N_eta_k_mapping = Prime._get_M_N_eta_k_mapping(N_M_eta_k)
+            # For each config dictionary, initialize the InputParameters
+            # object, and parse that, iterating through it to produce all
+            # M/N permutations
+            upper_inp = InputParameters(config_dict, cl_args)
+            for sub_cc, inp in enumerate(upper_inp):
 
-        # Maps the config index to the object itself
-        config_mapping = dict()
+                name = f"{config_name}_{sub_cc:03}"
+                t = os.path.join(package_configs_directory, name)
+                inp.save(t)
+                dlog.debug(f"Prepared config {name}")
 
-        # Master list of every job to execute. Maps the config index to a
-        # list of frequency gridpoints
-        master_mapping = dict()
+    def _append_queue(self, package_basename):
+        """For convenience, so the user doesn't need to copy/paste the package
+        names each time they submit a job. This is a LIFO (last in first out)
+        queue, so the most recent primed job will be the one submitted if the
+        user does not specify a package."""
 
-        cc = 0
-        total = 0
-        for config_name, config in configs.items():
+        if os.path.exists(self.queue_path):
+            queue = yaml.safe_load(open(self.queue_path))
+            queue['trials'].append({
+                'date_primed': self.dt_string,
+                'package_basename': package_basename
+            })
+        else:
+            queue = {
+                'trials': [{
+                    'date_primed': self.dt_string,
+                    'package_basename': package_basename
+                }]
+            }
 
-            if 'linspacek' in list(config.keys()):
-                dlog.warning("k-entries in config is deprecated")
-
-            # Get the frequency grid
-            grid = list(np.sort(np.concatenate([
-                np.linspace(*c, endpoint=True)
-                for c in config['linspace_params']
-            ])))
-            total += len(grid)
-
-            # Each config gets its own directory in the package_cache_path
-            config_mapping[cc] = config
-            master_mapping[cc] = grid
-            dlog.debug(f"Prepared config {config_name} ({cc})")
-
-            cc += 1
-
-        pickle_dict = (
-            master_mapping, config_mapping, M_N_eta_k_mapping,
-            package_cache_path
-        )
-        pickle_path = os.path.join(package_cache_path, "protocol.pkl")
-        pickle.dump(pickle_dict, open(pickle_path, 'wb'), protocol=4)
-        total *= n_kpts
-        dlog.info(f"Total {total} k x w-points primed for computation")
+        with open(self.queue_path, 'w') as f:
+            yaml.dump(queue, f, default_flow_style=False)
 
     def scaffold(self):
         """Primes the computation by constructing all permutations of jobs
@@ -425,34 +411,61 @@ class Prime:
         This file is then read by the RANK=0 MPI process and distributed to
         the workers during execution."""
 
-        package_cache_path = self._setup_cache_target()
+        package_cache_path, package_basename = self._setup_cache_target()
         configs = self._get_config_files()
-        self._ready_configs(configs, package_cache_path)
+        self._ready_package(configs, package_cache_path)
+        self._append_queue(package_basename)
 
 
-class Submitter:
+class Submitter(BaseOverlord):
     """TODO: detailed docstring"""
 
     def __init__(self, cl_args):
+        super().__init__(cl_args)
 
-        # The directories important for everything we do here.
-        self.cache_dir = utils.get_cache_dir()
-        self.package_dir = utils.get_package_dir()
-        self.cl_args = cl_args
+    def _load_last_package_from_LIFO_queue(self):
+        """Loads the last entry in the saved LIFO queue, returns that entry,
+        and pops that entry from the list, resaving the file."""
+
+        queue = yaml.safe_load(open(self.queue_path))
+
+        if len(queue['trials']) < 1:
+            msg = "LIFO queue is empty, run prime before execute. Exiting."
+            dlog.error(msg)
+            exit(0)
+
+        # Get the last entry
+        last_entry = queue['trials'][-1]
+
+        # Resave the file
+        queue['trials'] = queue['trials'][:-1]
+        with open(self.queue_path, 'w') as f:
+            yaml.dump(queue, f, default_flow_style=False)
+
+        return last_entry['package_basename']
 
     def submit_mpi(self):
         """Submits the packages as specified by the cl_args."""
 
-        all_cache = utils.listdir_fullpath(self.cache_dir)
-        all_cache.sort()
+        # Get the absolute path to the package, and raise a critical error if
+        # the user-specified package does not exist. We also check the LIFO
+        # queue if the package is not specified.
+        if self.cl_args.package is not None:
+            basename = self.cl_args.package
+        else:
+            basename = self._load_last_package_from_LIFO_queue()
+            bold_basename = utils.bold(basename)
+            dlog.info(f"Using package {bold_basename} from LIFO queue")
 
-        basename = self.cl_args.package
         package = os.path.join(self.cache_dir, basename)
         if not os.path.isdir(package):
             msg = f"Cached package path {package} does not exist"
             dlog.critical(msg)
             raise RuntimeError(msg)
 
+        # Initialize the SlurmWriter, which checks a default config file
+        # specified in the command line arguments, and overrides those defaults
+        # with other command line arguments.
         slurm_writer = SlurmWriter(self.cl_args)
 
         dlog.debug(f"Package path {package}")
@@ -487,10 +500,12 @@ class Submitter:
             with open(fname, 'w') as f:
                 f.write(f"export OMP_NUM_THREADS={local_threads}\n")
                 f.write(exe)
-            dlog.info(f"Run {fname} to execute trials")
+            bash_execute = utils.bold(f"bash {fname}")
+            dlog.info(f"Run {bash_execute} to execute trials")
 
         # Else we go through the protocol of submitting a job via SLURM
         else:
+            os.makedirs(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
             args = f"{package} {debug} {dryrun}"
             out = utils.run_command(f"sbatch submit.sbatch {args}")
@@ -499,32 +514,3 @@ class Submitter:
             else:
                 dlog.error(f"{basename} submit - failure (err code {out})")
             utils.run_command(f"mv submit.sbatch {package}")
-
-
-class Auxiliary:
-    """A class containing debugging and other methods for studying the
-    structure of the produced equations."""
-
-    @staticmethod
-    def analyze_XN(M, N, model='H'):
-        """For any given M and N, there is a hierarchy of equations generated
-        in the number of bosons. At every configuration with n bosons, it
-        couples to all legally-accessible configurations with n pm 1 bosons.
-        This method analyzes the precise number of equations at each
-        level of the hierarchy, for specified M and max N. Note that this
-        result also depends on the model, which is Holstein by default."""
-
-        with utils.DisableLogger():
-            input_params = InputParameters(
-                M=M, N=N, eta=1.0, t=1.0, Omega=1.0, lambd=1.0, model=model,
-                config_filter='no_filter'
-            )
-            input_params.init_terms()
-            sy = system.System(input_params)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-
-        # These are the equations of the closure.
-        dat = [(key, len(value)) for key, value in sy.equations.items()]
-        dat.sort(key=lambda x: x[0])
-        return [d[0] for d in dat], [d[1] for d in dat]
