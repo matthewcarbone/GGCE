@@ -4,4 +4,4 @@ results/
 nb/
 *.sh
 slurm_config.yaml
-.LIFO_queue.txt
+.LIFO_queue.yaml
