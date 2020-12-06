@@ -27,6 +27,9 @@ from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
 
 
+PRINT_EVERY_PERCENT = 20
+
+
 class LoggerOnRank:
 
     def __init__(self, rank, logger, debug_flag=False):
@@ -71,7 +74,7 @@ def prep_jobs(k_grid, w_grid, rank, world_size):
     return jobs[rank]
 
 
-def prime_system(inp, logger):
+def prime_system(inp):
     t0 = time.time()
     with utils.DisableLogger():
         sy = system.System(inp)
@@ -80,8 +83,7 @@ def prime_system(inp, logger):
         sy.generate_unique_terms()
         sy.prime_solver()
     dt = (time.time() - t0) / 60.0
-    dlog.info(f"Solver primed in {dt:.01}m")
-    return sy
+    return (sy, dt)
 
 
 def state_fname(k, w):
@@ -154,7 +156,7 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
     # Check early exit criterion
     donefile = os.path.join(state_dir, "DONE")
     if os.path.isfile(donefile):
-        dlog.debug(f"Target {target_dir} is complete")
+        dlog.warning(f"Target {target_dir} is complete")
         return
 
     # If there are calculations to run, prepare the system
@@ -164,13 +166,16 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
     k_grid = inp.get_k_grid()  # In units of pi!
     sy = None
     if not dry_run:
-        sy = prime_system(inp)
+        sy, dt = prime_system(inp)
+        dlog.info(f"Solver primed in {dt:.01}m")
     if dry_run and rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
     jobs = prep_jobs(k_grid, w_grid, rank, world_size)
 
-    for (k_u_pi, frequency_gridpoint) in jobs:
+    L = len(jobs)
+    print_every = L // PRINT_EVERY_PERCENT
+    for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
 
         exists, state_fname_path = \
             check_state(state_dir, k_u_pi, frequency_gridpoint)
@@ -183,7 +188,7 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
             with utils.DisableLogger():
                 G, meta = sy.solve(k_u_pi * np.pi, frequency_gridpoint)
             A = -G.imag / np.pi
-            computation_time = sum(meta['time'])
+            computation_time = sum(meta['time']) / 60.0
             largest_mat_dim = meta['inv'][0]
             logger.debug(
                 f"Solved A({k_u_pi:.02f}pi, {frequency_gridpoint:.02f}) "
@@ -191,6 +196,8 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
             )
             if A < 0.0:
                 logger.error(f"Negative spectral weight: {A:.02e}")
+            if cc % print_every == 0 or cc == 0:
+                logger.info(f"{cc:05}/{L:05} done in {computation_time:.02f}m")
             sys.stdout.flush()
 
         else:
@@ -218,26 +225,26 @@ def cleanup(jobs, mpi_info, config_path, config_map):
     target_dir = config_map[os.path.basename(config_path)]
     state_dir = os.path.join(target_dir, "STATE")
 
-    for (k_u_pi, frequency_gridpoint) in jobs:
+    # Check to make sure there are still w-points to delete in the
+    # state directory, this avoids possible race conditions.
+    donefile = os.path.join(state_dir, "DONE")
+    N_in_state = os.listdir(state_dir)
+    if os.path.isfile(donefile) and len(N_in_state) == 1:
+        logger.debug(f"Target {target_dir} is done")
+        return
 
-        # Check to make sure there are still w-points to delete in the
-        # state directory, this avoids possible race conditions.
-        donefile = os.path.join(state_dir, "DONE.txt")
-        N_in_state = os.listdir(state_dir)
-        if os.path.isfile(donefile) and len(N_in_state) == 1:
-            logger.debug(f"Target {target_dir} is done")
-            continue
+    for (k_u_pi, frequency_gridpoint) in jobs:
 
         state_fname_path = os.path.join(
             state_dir, state_fname(k_u_pi, frequency_gridpoint)
         )
         os.remove(state_fname_path)
 
-        # Add a new file
-        with open(donefile, 'a') as f:
-            f.write(f"RANK {mpi_info.rank:05} TAGGED\n")
+    # Add a new file
+    with open(donefile, 'a') as f:
+        f.write(f"RANK {mpi_info.RANK:05} TAGGED\n")
 
-        logger.debug(f"Confirming target {target_dir} is DONE")
+    logger.debug(f"Confirming target {target_dir} is DONE")
 
 
 if __name__ == '__main__':
@@ -272,7 +279,7 @@ if __name__ == '__main__':
         config_map = yaml.safe_load(open(
             os.path.join(base_path, "config_map.yaml")
         ))
-        dlog.info(f"Confirming COMM world size: {mpi_info.world_size}")
+        dlog.info(f"Confirming COMM world size: {mpi_info.SIZE}")
         dlog.info(f"Running {len(all_configs_paths)} config files")
     else:
         COMM_timer = None

@@ -154,7 +154,7 @@ class System:
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = self.input_params.n_boson_types
+        self.n_boson_types = self.model_params.n_boson_types
 
         self.master_f_arg_list = None
 

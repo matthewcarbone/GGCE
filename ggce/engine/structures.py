@@ -166,7 +166,7 @@ class InputParameters:
             model=d.get("model")
         )
 
-    def get_w_wgrid(self):
+    def get_w_grid(self):
         """"""
 
         return list(np.sort(np.concatenate([
@@ -176,7 +176,7 @@ class InputParameters:
 
     def get_k_grid(self):
         return list(np.linspace(*self.k_grid_info, endpoint=True)) \
-            if list(self.linspacek) else self.k_grid_info
+            if self.linspacek else self.k_grid_info
 
     def init_attributes(self):
         self._from_dict(self._params)

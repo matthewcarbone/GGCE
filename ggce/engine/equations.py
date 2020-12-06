@@ -178,7 +178,7 @@ class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
     def __init__(self, input_params):
-        config = np.zeros((input_params.n_boson_types, 1))
+        config = np.zeros((input_params.model_params.n_boson_types, 1))
         super().__init__(config_index=config, input_params=input_params)
 
     def bias(self, k, w):
@@ -192,6 +192,7 @@ class GreenEquation(Equation):
 
     def initialize_terms(self):
         """Override for the Green's function other terms."""
+        model_params = self.input_params.model_params
 
         # Only instance where we actually use the base FDeltaTerm class
         self.terms_list = []
@@ -202,10 +203,10 @@ class GreenEquation(Equation):
             # Only boson creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
             if hterm.dagger == '+':
-                n = np.zeros((self.input_params.n_boson_types, 1)).astype(int)
+                n = np.zeros((model_params.n_boson_types, 1)).astype(int)
                 n[hterm.boson_type, :] = 1
                 t = terms_module.EOMTerm(
                     boson_config=n, hterm=hterm,
-                    model_params=self.input_params.model_params
+                    model_params=model_params
                 )
                 self.terms_list.append(t)
