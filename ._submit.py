@@ -128,7 +128,7 @@ def check_state(state_dir, k_u_pi, w):
     return exists, state_fname_path
 
 
-def calculate(mpi_info, config_path, config_map, dry_run=False):
+def calculate(mpi_info, package_path, config_path, dry_run=False):
     """Runs the calculations.
 
     Parameters
@@ -136,11 +136,9 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
     mpi_info : RankTools
         Helper class containing information about the communicator and contains
         the logger on this rank.
+    package_path : str
     config_path : str
         Location of the particular config file to load.
-    config_map : dict
-        A dictionary mapping the config_path basename to the absolute path
-        target.
     """
 
     logger = mpi_info.logger
@@ -149,7 +147,8 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
 
     # Target directory, will contain res.txt (the results) and STATE, which
     # tracks which calculations were completed.
-    target_dir = config_map[os.path.basename(config_path)]
+    base = os.path.splitext(os.path.basename(config_path))[0]
+    target_dir = os.path.join(package_path, "results", base)
     res_file = os.path.join(target_dir, "res.txt")
     state_dir = os.path.join(target_dir, "STATE")
 
@@ -212,7 +211,7 @@ def calculate(mpi_info, config_path, config_map, dry_run=False):
     return jobs
 
 
-def cleanup(jobs, mpi_info, config_path, config_map):
+def cleanup(jobs, mpi_info, package_path, config_path):
     """Cleans up the directories by removing specific files that indicate which
     jobs are complete. Mainly, this is done to allow for checkpointing and to
     reduce the number of files when creating a compressed file of the
@@ -222,7 +221,8 @@ def cleanup(jobs, mpi_info, config_path, config_map):
 
     # Target directory, will contain res.txt (the results) and STATE, which
     # tracks which calculations were completed.
-    target_dir = config_map[os.path.basename(config_path)]
+    base = os.path.splitext(os.path.basename(config_path))[0]
+    target_dir = os.path.join(package_path, "results", base)
     state_dir = os.path.join(target_dir, "STATE")
 
     # Check to make sure there are still w-points to delete in the
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     COMM = MPI.COMM_WORLD  # Default MPI communicator
 
     # The first argument passed is the base path for the calculation.
-    base_path = str(sys.argv[1])
+    package_path = str(sys.argv[1])
 
     # The second argument is if to run in debug mode or not
     debug = int(sys.argv[2])
@@ -273,29 +273,24 @@ if __name__ == '__main__':
         # and the package_cache_path is the base cache path.
         COMM_timer = time.time()
         all_configs_paths = utils.listdir_fullpath(
-            os.path.join(base_path, "configs")
+            os.path.join(package_path, "configs")
         )
         all_configs_paths.sort()
-        config_map = yaml.safe_load(open(
-            os.path.join(base_path, "config_map.yaml")
-        ))
         dlog.info(f"Confirming COMM world size: {mpi_info.SIZE}")
         dlog.info(f"Running {len(all_configs_paths)} config files")
     else:
         COMM_timer = None
         all_configs_paths = None
-        config_map = None
 
     rank_timer = time.time()
     all_configs_paths = COMM.bcast(all_configs_paths, root=0)
-    config_map = COMM.bcast(config_map, root=0)
 
     dlog.debug("<- RANK starting up")
 
     # Iterate over the config files
     jobs_on_config = []
     for config_path in all_configs_paths:
-        j = calculate(mpi_info, config_path, config_map, dry_run=False)
+        j = calculate(mpi_info, package_path, config_path, dry_run=False)
         jobs_on_config.append(j)
 
     rank_timer_dt = (time.time() - rank_timer) / 3600.0
@@ -305,7 +300,7 @@ if __name__ == '__main__':
     COMM.Barrier()
 
     for jobs, config_path in zip(jobs_on_config, all_configs_paths):
-        cleanup(jobs, mpi_info, config_path, config_map)
+        cleanup(jobs, mpi_info, package_path, config_path)
     COMM.Barrier()
 
     if mpi_info.RANK == 0:
