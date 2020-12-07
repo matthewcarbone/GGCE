@@ -19,6 +19,12 @@ from scipy.interpolate import InterpolatedUnivariateSpline as ius
 from ggce.utils import utils
 
 
+def N_M_eta_k_subdir(M, N, eta, k_u_pi, mapping, config_idx):
+    subdir = f"{mapping['M'][M]:03}/{mapping['N'][N]:03}/"
+    subdir += f"{mapping['eta'][eta]:03}/{mapping['k_units_pi'][k_u_pi]:06}"
+    return f"{config_idx:03}/{subdir}"
+
+
 class Results:
 
     @staticmethod
@@ -71,7 +77,7 @@ class Results:
 
             # Then M -> N -> eta -> k_units_pi
             for perm in perms:
-                target = utils.N_M_eta_k_subdir(
+                target = N_M_eta_k_subdir(
                     *perm, M_N_eta_k_mapping, c_idx
                 )
                 target = os.path.join(self.path, target)
