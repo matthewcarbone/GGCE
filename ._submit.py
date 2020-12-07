@@ -173,7 +173,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     jobs = prep_jobs(k_grid, w_grid, rank, world_size)
 
     L = len(jobs)
-    print_every = L // PRINT_EVERY_PERCENT
+    print_every = max(L // PRINT_EVERY_PERCENT, 1)
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
 
         exists, state_fname_path = \
