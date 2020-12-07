@@ -78,12 +78,12 @@ def prime_system(inp):
     t0 = time.time()
     with utils.DisableLogger():
         sy = system.System(inp)
-        sy.initialize_generalized_equations()
-        sy.initialize_equations()
+        T = sy.initialize_generalized_equations()
+        L = sy.initialize_equations()
         sy.generate_unique_terms()
         sy.prime_solver()
     dt = (time.time() - t0) / 60.0
-    return (sy, dt)
+    return (sy, dt, T, L)
 
 
 def state_fname(k, w):
@@ -165,8 +165,8 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     k_grid = inp.get_k_grid()  # In units of pi!
     sy = None
     if not dry_run:
-        sy, dt = prime_system(inp)
-        dlog.info(f"Solver primed in {dt:.01}m")
+        (sy, dt, T, L) = prime_system(inp)
+        dlog.info(f"Solver primed with {T}/{L} terms in {dt:.01}m")
     if dry_run and rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
@@ -289,7 +289,8 @@ if __name__ == '__main__':
 
     # Iterate over the config files
     jobs_on_config = []
-    for config_path in all_configs_paths:
+    for ii, config_path in enumerate(all_configs_paths):
+        dlog.info(f"Starting config {ii:03}")
         j = calculate(mpi_info, package_path, config_path, dry_run=False)
         jobs_on_config.append(j)
 

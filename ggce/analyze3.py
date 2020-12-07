@@ -87,6 +87,8 @@ class Results:
 
         self.defaults = dict()
         for key, value in self._vals.items():
+            # if isinstance(value, list):
+            #     value = [str(v) for v in value]
             if len(np.unique(value)) == 1:
                 self.defaults[key] = value[0]
             else:
@@ -129,6 +131,9 @@ class Results:
             self.master[Results.key_str(**params)] = trial
 
         self.determine_defaults()
+
+        for key, value in self._vals.items():
+            self._vals[key] = np.unique(value, axis=0).tolist()
 
     def info(self):
         for key, value in self._vals.items():
