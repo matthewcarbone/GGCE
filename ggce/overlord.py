@@ -192,12 +192,15 @@ class SlurmWriter:
             )
 
         # Nodes ---------------------------------------------------------------
-        N_tasks = self.get_val("N_tasks")
-        if N_tasks is not None:
-            assert isinstance(N_tasks, int)
-            SBATCH_lines.append(f"#SBATCH -n {N_tasks}")
+        # The user can specify some total number of nodes N and the number of
+        # tasks per node. The total number of tasks is obviously
+        # N * n_tasks_per_node
+        N_nodes = self.get_val("N_nodes")
+        if N_nodes is not None:
+            assert isinstance(N_nodes, int)
+            SBATCH_lines.append(f"#SBATCH -N {N_nodes}")
         else:
-            SBATCH_lines.append(f"#SBATCH -n 1")
+            SBATCH_lines.append(f"#SBATCH -N 1")
 
         # Memory per node -----------------------------------------------------
         mem_per_node = self.get_val("mem_per_node")
@@ -218,17 +221,15 @@ class SlurmWriter:
             raise RuntimeError(msg)
 
         tasks_per_node = self.get_val("tasks_per_node")
-        if tasks_per_node is not None:
-            assert isinstance(tasks_per_node, int)
-            phys_cores_per_task = int(floor(cores_per_node/tasks_per_node))
-            c = phys_cores_per_task * hyperthreads_per_core
-            SBATCH_lines.append(f"#SBATCH -c {c}")
-        else:
-            phys_cores_per_task = 1
-            SBATCH_lines.append("#SBATCH -c 1")
-            dlog.warning(
-                "Tasks per node is not set, defaulting to 1 core/task"
-            )
+        if tasks_per_node is None:
+            msg = "Set the tasks_per_node value in your SLURM config"
+            dlog.critical(msg)
+            raise RuntimeError(msg)
+        assert isinstance(tasks_per_node, int)
+        SBATCH_lines.append(f"#SBATCH --tasks-per-node={tasks_per_node}")
+        phys_cores_per_task = int(floor(cores_per_node/tasks_per_node))
+        c = phys_cores_per_task * hyperthreads_per_core
+        SBATCH_lines.append(f"#SBATCH -c {c}")
 
         return SBATCH_lines, phys_cores_per_task
 
