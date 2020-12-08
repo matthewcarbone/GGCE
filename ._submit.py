@@ -166,7 +166,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     sy = None
     if not dry_run:
         (sy, dt, T, L) = prime_system(inp)
-        dlog.info(f"Solver primed with {T}/{L} terms in {dt:.01}m")
+        dlog.info(f"Solver primed with {T}/{L} terms in {dt:.01f}m")
     if dry_run and rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
