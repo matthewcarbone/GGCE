@@ -83,7 +83,7 @@ def global_parser(sys_argv):
         help='Values for k in units of pi.'
     )
     prime_sp.add_argument(
-        '--linspacek', default=False, dest='linspacek',
+        '--linspacek', default=None, dest='linspacek',
         action='store_true',
         help='If True, then the user is required to provide three values for '
         'the -k flag: the k0, kf and total number of k points.'
