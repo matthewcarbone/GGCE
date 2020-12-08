@@ -166,7 +166,8 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     sy = None
     if not dry_run:
         (sy, dt, T, L) = prime_system(inp)
-        dlog.info(f"Solver primed with {T}/{L} terms in {dt:.01f}m")
+        if rank == 0:
+            dlog.info(f"Solver primed with {T}/{L} terms in {dt:.01f}m")
     if dry_run and rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
@@ -174,6 +175,8 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
 
     L = len(jobs)
     print_every = max(L // PRINT_EVERY_PERCENT, 1)
+
+    overall_config_time = time.time()
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
 
         exists, state_fname_path = \
@@ -195,7 +198,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
             )
             if A < 0.0:
                 logger.error(f"Negative spectral weight: {A:.02e}")
-            if cc % print_every == 0 or cc == 0:
+            if (cc % print_every == 0 or cc == 0) and rank == 0:
                 logger.info(f"{cc:05}/{L:05} done in {computation_time:.02f}m")
             sys.stdout.flush()
 
@@ -208,7 +211,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
             largest_mat_dim, state_fname_path
         )
 
-    return jobs
+    return jobs, time.time() - overall_config_time
 
 
 def cleanup(jobs, mpi_info, package_path, config_path):
@@ -290,9 +293,20 @@ if __name__ == '__main__':
     # Iterate over the config files
     jobs_on_config = []
     for ii, config_path in enumerate(all_configs_paths):
-        dlog.info(f"Starting config {ii:03}")
-        j = calculate(mpi_info, package_path, config_path, dry_run=False)
-        jobs_on_config.append(j)
+        if mpi_info.RANK == 0:
+            dlog.info(f"Starting config {ii:03}")
+        c_jobs, elapsed = \
+            calculate(mpi_info, package_path, config_path, dry_run=dry_run)
+        jobs_on_config.append(c_jobs)
+
+        elapsed = COMM.gather(elapsed, root=0)
+
+        if mpi_info.RANK == 0:
+            avg = np.mean(elapsed) / 60.0
+            sd = np.std(elapsed) / 60.0
+            dlog.info(f"Done in {avg:.02f} +/- {sd:.02f} m")
+
+        COMM.Barrier()
 
     rank_timer_dt = (time.time() - rank_timer) / 3600.0
     dlog.info(f"Done in {rank_timer_dt:.02f}h and waiting for other ranks")
