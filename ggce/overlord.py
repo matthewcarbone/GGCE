@@ -6,11 +6,11 @@ __email__ = "x94carbone@gmail.com"
 
 
 from datetime import datetime
+from math import floor
 import os
 import yaml
 
 from ggce.engine.structures import InputParameters
-from ggce.engine import system
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 
@@ -90,19 +90,14 @@ class SlurmWriter:
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-    def get_other_lines(self):
+    def get_other_lines(self, phys_cores_per_task):
         """Lines corresponding to other quantities, like the number of threads
         or the modules."""
 
         lines = []
 
         # Threads -------------------------------------------------------------
-        threads_per_task = self.get_val("threads_per_task")
-        if threads_per_task is not None:
-            lines.append(f"export OMP_NUM_THREADS={threads_per_task}")
-        else:
-            lines.append(f"export OMP_NUM_THREADS=1")
-            dlog.warning("Threads/process not set, defaulting to 1")
+        lines.append(f"export OMP_NUM_THREADS={phys_cores_per_task}")
 
         # Modules -------------------------------------------------------------
         # Only check the config for this
@@ -197,12 +192,12 @@ class SlurmWriter:
             )
 
         # Nodes ---------------------------------------------------------------
-        N_nodes = self.get_val("N_nodes")
-        if N_nodes is not None:
-            assert isinstance(N_nodes, int)
-            SBATCH_lines.append(f"#SBATCH -N {N_nodes}")
+        N_tasks = self.get_val("N_tasks")
+        if N_tasks is not None:
+            assert isinstance(N_tasks, int)
+            SBATCH_lines.append(f"#SBATCH -n {N_tasks}")
         else:
-            SBATCH_lines.append(f"#SBATCH -N 1")
+            SBATCH_lines.append(f"#SBATCH -n 1")
 
         # Memory per node -----------------------------------------------------
         mem_per_node = self.get_val("mem_per_node")
@@ -211,15 +206,31 @@ class SlurmWriter:
             SBATCH_lines.append(f"#SBATCH --mem={mem_per_node}")
 
         # MPI tasks/node ------------------------------------------------------
+        cores_per_node = self.get_val("cores_per_node")
+        if cores_per_node is None:
+            msg = "Set the cores_per_node value in your SLURM config"
+            dlog.critical(msg)
+            raise RuntimeError(msg)
+        hyperthreads_per_core = self.get_val("hyperthreads_per_core")
+        if hyperthreads_per_core is None:
+            msg = "Set the hyperthreads_per_core value in your SLURM config"
+            dlog.critical(msg)
+            raise RuntimeError(msg)
+
         tasks_per_node = self.get_val("tasks_per_node")
         if tasks_per_node is not None:
             assert isinstance(tasks_per_node, int)
-            SBATCH_lines.append(f"#SBATCH --tasks-per-node={tasks_per_node}")
+            phys_cores_per_task = int(floor(cores_per_node/tasks_per_node))
+            c = phys_cores_per_task * hyperthreads_per_core
+            SBATCH_lines.append(f"#SBATCH -c {c}")
         else:
-            SBATCH_lines.append(f"#SBATCH --tasks-per-node=1")
-            dlog.warning("Tasks per node is not set, defaulting to 1")
+            phys_cores_per_task = 1
+            SBATCH_lines.append("#SBATCH -c 1")
+            dlog.warning(
+                "Tasks per node is not set, defaulting to 1 core/task"
+            )
 
-        return SBATCH_lines
+        return SBATCH_lines, phys_cores_per_task
 
     def write(self, target, stream_name=None):
         """Takes command line arguments, initializes the configuration and
@@ -227,16 +238,19 @@ class SlurmWriter:
         default values in the config if the command line values are not None.
         This method parses these two dictionaries accordingly."""
 
-        standard_lines = self.get_standard_lines(stream_name=stream_name)
+        standard_lines, phys_cores_per_task \
+            = self.get_standard_lines(stream_name=stream_name)
         requeue_lines = self.get_requeue_lines() if self.cl_args['requeue'] \
             else []
-        other_lines = self.get_other_lines()
+        other_lines = self.get_other_lines(phys_cores_per_task)
+        bind_cores = self.get_val("bind_cores")
 
         # The last line is always the same unless requeue
+        bind_str = "--cpu-bind=cores" if bind_cores else ""
         if self.cl_args['requeue']:
-            last_line = 'srun python3 ._submit.py "$@" &\nwait'
+            last_line = f'srun {bind_str} python3 ._submit.py "$@" &\nwait'
         else:
-            last_line = 'srun python3 ._submit.py "$@"'
+            last_line = f'srun {bind_str} python3 ._submit.py "$@"'
 
         with open(target, 'w') as f:
             f.write("#!/bin/bash\n\n")
@@ -494,10 +508,7 @@ class Submitter(BaseOverlord):
                 local_procs = 1
                 dlog.warning("Local procs not set, defaulting to 1")
 
-            local_threads = self.cl_args.threads_per_task
-            if local_threads is None:
-                local_threads = 1
-                dlog.warning("Local threads not set, defaulting to 1")
+            local_threads = 1
 
             exe = f"mpiexec -np {local_procs} python3 ._submit.py " \
                 f"{package} {debug} {dryrun}"

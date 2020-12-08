@@ -139,11 +139,7 @@ def global_parser(sys_argv):
         '-c', '--constraint', dest='constraint', default=None, type=str
     )
     slurm.add_argument('-q', '--queue', dest='qos', default=None, type=str)
-    slurm.add_argument('-N', '--nodes', dest='N_nodes', default=None, type=int)
-    slurm.add_argument(
-        '-d', '--threads', default=None, dest='threads_per_task', type=int,
-        help='Number of threads/MPI process.'
-    )
+    slurm.add_argument('-n', '--tasks', dest='N_tasks', default=None, type=int)
     slurm.add_argument(
         '-s', '--tasks_per_node', dest='tasks_per_node', default=None,
         type=int
