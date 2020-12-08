@@ -45,7 +45,7 @@ def global_parser(sys_argv):
         'command line arguments override config file defaults.'
     )
     prime_sp.add_argument(
-        '-C', '--configs', type=int, nargs='+', default=None, dest='c_to_run',
+        '-C', '--configs', type=str, nargs='+', default=None, dest='c_to_run',
         help='Names of the configs within the specified package to run. '
         'Defaults to running all configs in the package.'
     )
