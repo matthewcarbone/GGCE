@@ -246,12 +246,21 @@ class SlurmWriter:
         other_lines = self.get_other_lines(phys_cores_per_task)
         bind_cores = self.get_val("bind_cores")
 
+        cluster = self.loaded_config.get("cluster")
+
         # The last line is always the same unless requeue
-        bind_str = "--cpu-bind=cores" if bind_cores else ""
-        if self.cl_args['requeue']:
-            last_line = f'srun {bind_str} python3 ._submit.py "$@" &\nwait'
+        if cluster == "Cori":
+            bind_str = " --cpu-bind=cores" if bind_cores else ""
+            if self.cl_args['requeue']:
+                last_line = f'srun{bind_str} python3 ._submit.py "$@" &\nwait'
+            else:
+                last_line = f'srun{bind_str} python3 ._submit.py "$@"'
+        elif cluster == "rr":
+            last_line = f'mpiexec python3 ._submit.py "$@"'
         else:
-            last_line = f'srun {bind_str} python3 ._submit.py "$@"'
+            msg = f"Unknown cluster {cluster}"
+            dlog.critical(msg)
+            raise RuntimeError(msg)
 
         with open(target, 'w') as f:
             f.write("#!/bin/bash\n\n")
