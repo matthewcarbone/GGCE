@@ -89,7 +89,7 @@ class Results:
         for key, value in self._vals.items():
             # if isinstance(value, list):
             #     value = [str(v) for v in value]
-            if len(np.unique(value)) == 1:
+            if len(np.unique(value, axis=0).tolist()) == 1:
                 self.defaults[key] = value[0]
             else:
                 self.defaults[key] = None
