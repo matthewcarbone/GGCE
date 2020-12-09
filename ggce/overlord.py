@@ -101,10 +101,10 @@ class SlurmWriter:
 
         # Modules -------------------------------------------------------------
         # Only check the config for this
-        modules = self.loaded_config.get("modules")
-        if modules is not None:
-            for mod in modules:
-                lines.append(f"module load {mod}")
+        other_lines = self.loaded_config.get("other_lines")
+        if other_lines is not None:
+            for line in other_lines:
+                lines.append(f"{line}")
 
         return lines
 
