@@ -96,15 +96,15 @@ class SlurmWriter:
 
         lines = []
 
-        # Threads -------------------------------------------------------------
-        lines.append(f"export OMP_NUM_THREADS={phys_cores_per_task}")
-
         # Modules -------------------------------------------------------------
         # Only check the config for this
         other_lines = self.loaded_config.get("other_lines")
         if other_lines is not None:
             for line in other_lines:
                 lines.append(f"{line}")
+
+        # Threads -------------------------------------------------------------
+        lines.append(f"export OMP_NUM_THREADS={phys_cores_per_task}")
 
         return lines
 
