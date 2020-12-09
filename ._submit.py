@@ -87,7 +87,7 @@ def prime_system(inp):
 
 
 def state_fname(k, w):
-    return f"{k:.08f}_{w:.08f}"
+    return f"{k:.08f}_{w:.08f}.txt"
 
 
 def dryrun_random_result():
@@ -98,18 +98,14 @@ def dryrun_random_result():
     return (G, 0.0, 0)
 
 
-def write_results(
-    res_file, k, w, G, elapsed_time, largest_mat_dim, state_fname_path
-):
+def write_results(k, w, G, elapsed_time, largest_mat_dim, state_fname_path):
     """Writes the results of a computation to disk."""
 
-    with open(res_file, "a") as f:
+    with open(state_fname_path, "a") as f:
         f.write(
             f"{k:.08f}\t{w:.08f}\t{G.real:.08f}\t{G.imag:.08f}"
             f"\t{elapsed_time:.02e}\t{largest_mat_dim}\n"
         )
-    with open(state_fname_path, 'w') as f:
-        f.write("DONE\n")
 
 
 def check_state(state_dir, k_u_pi, w):
@@ -149,7 +145,6 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     # tracks which calculations were completed.
     base = os.path.splitext(os.path.basename(config_path))[0]
     target_dir = os.path.join(package_path, "results", base)
-    res_file = os.path.join(target_dir, "res.txt")
     state_dir = os.path.join(target_dir, "STATE")
 
     # Check early exit criterion
@@ -207,11 +202,44 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
 
         # Write results to disk
         write_results(
-            res_file, k_u_pi, frequency_gridpoint, G, computation_time,
+            k_u_pi, frequency_gridpoint, G, computation_time,
             largest_mat_dim, state_fname_path
         )
 
     return jobs, time.time() - overall_config_time
+
+
+def concat(jobs, mpi_info, package_path, config_path):
+    """Cleans up the directories by removing specific files that indicate which
+    jobs are complete. Mainly, this is done to allow for checkpointing and to
+    reduce the number of files when creating a compressed file of the
+    results."""
+
+    logger = mpi_info.logger
+
+    # Target directory, will contain res.txt (the results) and STATE, which
+    # tracks which calculations were completed.
+    base = os.path.splitext(os.path.basename(config_path))[0]
+    target_dir = os.path.join(package_path, "results", base)
+    state_dir = os.path.join(target_dir, "STATE")
+
+    # Check to make sure there are still w-points to delete in the
+    # state directory, this avoids possible race conditions.
+    donefile = os.path.join(state_dir, "DONE")
+    N_in_state = os.listdir(state_dir)
+    if os.path.isfile(donefile) and len(N_in_state) == 1:
+        logger.debug(f"Target {target_dir} is done")
+        return
+
+    results = []
+    for (k_u_pi, frequency_gridpoint) in jobs:
+
+        state_fname_path = os.path.join(
+            state_dir, state_fname(k_u_pi, frequency_gridpoint)
+        )
+        results.append(np.loadtxt(state_fname_path, delimiter='\t').tolist())
+
+    return results
 
 
 def cleanup(jobs, mpi_info, package_path, config_path):
@@ -310,8 +338,18 @@ if __name__ == '__main__':
 
     rank_timer_dt = (time.time() - rank_timer) / 3600.0
     dlog.info(f"Done in {rank_timer_dt:.02f}h and waiting for other ranks")
+    COMM.Barrier()
 
-    # Stop all processes here until all complete
+    for jobs, config_path in zip(jobs_on_config, all_configs_paths):
+        res = concat(jobs, mpi_info, package_path, config_path)
+        res = COMM.gather(res, root=0)
+        if mpi_info.RANK == 0:
+            res = utils.flatten(res)
+            res = np.array(res).reshape(-1, 6)
+            base = os.path.splitext(os.path.basename(config_path))[0]
+            target_dir = os.path.join(package_path, "results", base)
+            res_file = os.path.join(target_dir, "res.txt")
+            np.savetxt(res_file, res)
     COMM.Barrier()
 
     for jobs, config_path in zip(jobs_on_config, all_configs_paths):
