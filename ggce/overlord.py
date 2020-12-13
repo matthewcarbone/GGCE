@@ -104,7 +104,12 @@ class SlurmWriter:
                 lines.append(f"{line}")
 
         # Threads -------------------------------------------------------------
-        lines.append(f"export OMP_NUM_THREADS={phys_cores_per_task}")
+        max_threads = self.loaded_config.get("max_threads")
+        if max_threads is None:
+            threads = phys_cores_per_task
+        else:
+            threads = min(phys_cores_per_task, max_threads)
+        lines.append(f"export OMP_NUM_THREADS={threads}")
 
         return lines
 
