@@ -408,6 +408,21 @@ class System:
                 jj_basis = self.recursion_solver_basis[n_bosons_shift][t_id]
                 mat[ii_basis, jj_basis] += term.coefficient(k, w)
 
+    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A):
+
+        # Fill beta
+        t0 = time.time()
+        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n)
+        dt = time.time() - t0
+        dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
+
+        identity = np.eye(beta_n.shape[0], A.shape[1])
+
+        t0 = time.time()
+        initial_A_shape = A.shape
+
+        return identity - beta_n @ A, initial_A_shape
+
     def _log_solve_info(self):
         """Pipes some of the current solving information to the outstream."""
 
@@ -447,33 +462,24 @@ class System:
             alpha_n = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
             meta['alphas'].append((d_n, d_n_m_1))
 
+            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
+            meta['betas'].append((d_n, d_n_p_1))
+            to_inv, initial_A_shape = \
+                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A)
+
             # Fill alpha
             t0 = time.time()
             self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n)
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
-            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
-            meta['betas'].append((d_n, d_n_p_1))
-
-            # Fill beta
-            t0 = time.time()
-            self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n)
-            dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
-
-            identity = np.eye(beta_n.shape[0], A.shape[1])
-
-            t0 = time.time()
-            initial_A_shape = A.shape
-
             # This is the rate-limiting step ##################################
-            A = linalg.inv(identity - beta_n @ A) @ alpha_n
+            A = linalg.inv(to_inv) @ alpha_n
             ###################################################################
 
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
-            meta['inv'].append(identity.shape[0])
+            meta['inv'].append(to_inv.shape[0])
             meta['time'].append(time.time() - t0)
 
         # The final answer is actually A_1. It is related to G via the vector
