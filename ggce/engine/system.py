@@ -474,7 +474,7 @@ class System:
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
             # This is the rate-limiting step ##################################
-            A = linalg.inv(to_inv) @ alpha_n
+            A = linalg.solve(to_inv, alpha_n)
             ###################################################################
 
             dt = time.time() - t0
