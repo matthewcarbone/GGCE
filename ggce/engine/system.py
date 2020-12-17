@@ -4,15 +4,128 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+from collections import OrderedDict
 import copy
 import numpy as np
 from scipy import linalg
 import time
 
-from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
-from ggce.equations import Equation, GreenEquation
-from ggce.physics import total_generalized_equations
+from ggce.engine.equations import Equation, GreenEquation
+from ggce.engine.physics import total_generalized_equations
+
+
+def configuration_space_generator(length, total_sum):
+    """Generator for yielding all possible combinations of integers of
+    length `length` that sum to total_sum. Not that cases such as
+    length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
+    out, since these do not correspond to valid f-functions.
+
+    Source of algorithm:
+    https://stackoverflow.com/questions/7748442/
+    generate-all-possible-lists-of-length-n-that-sum-to-s-in-python
+    """
+
+    if length == 1:
+        yield (total_sum,)
+    else:
+        for value in range(total_sum + 1):
+            for permutation in configuration_space_generator(
+                length - 1, total_sum - value
+            ):
+                r = (value,) + permutation
+                yield r
+
+
+class ConfigurationSpaceGenerator:
+    """Helper class for generating configuration spaces of bosons.
+
+    Parameters
+    ----------
+    absolute_extent : int
+        The maximum extent of the cloud. Note that this is NOT trivially
+        the sum(M) since there are different ways in which the clouds can
+        overlap. Take for instance, two boson types, with M1 = 3 and M2 = 2.
+        These clouds can overlap such that absolute extent is at most 5,
+        and they can also overlap such that the maximal extent is 3.
+    M : list
+        Length of the allowed cloud extent for each boson type.
+    N : list
+        Total number of maximum allowed bosons for each boson type. The
+        absolute maximum number of bosons is trivially sum(N).
+    """
+
+    def __init__(self, absolute_extent, M, N):
+        self.absolute_extent = absolute_extent
+        assert self.absolute_extent >= max(M)
+        self.M = M
+        self.N = N
+        self.N_2d = np.atleast_2d(self.N).T
+        self.n_boson_types = len(self.M)
+        assert len(self.N) == self.n_boson_types
+
+    def extent_of_1d(self, config1d):
+        """Gets the extent of a 1d vector."""
+
+        where_nonzero = np.where(config1d != 0)[0]
+        L = len(where_nonzero)
+        if L < 2:
+            return L
+
+        minimum_index = min(where_nonzero)
+        maximum_index = max(where_nonzero)
+        return maximum_index - minimum_index + 1
+
+    def is_legal(self, config):
+        """Checks the condition of a config. If legal, returns True, else
+        returns False."""
+
+        # First, check that the edges of the cloud have at least one boson
+        # of either type on it.
+        if np.sum(config[:, 0]) < 1 or np.sum(config[:, -1]) < 1:
+            return False
+
+        # Second, check that the boson numbers for each boson type are
+        # satisfied
+        if not np.all(config.sum(axis=1, keepdims=True) <= self.N_2d):
+            return False
+
+        # Finally, check that each boson type satisifes its extent rule
+        if any([
+            self.M[ii] < self.extent_of_1d(c1d)
+            for ii, c1d in enumerate(config)
+        ]):
+            return False
+
+        return True
+
+    def __call__(self):
+        """Generates all possible configurations of bosons for the composite
+        system. Then, reduce that space down based on the specific rules for
+        each boson type."""
+
+        nb_max = sum(self.N)
+        config_dict = {N: [] for N in range(1, nb_max + 1)}
+        for nb in range(1, nb_max + 1):
+            for z in range(1, self.absolute_extent + 1):
+                c = list(
+                    configuration_space_generator(z * self.n_boson_types, nb)
+                )
+
+                # Reshape everything properly:
+                c = [np.array(z).reshape(self.n_boson_types, -1) for z in c]
+
+                # Now, we get all of the LEGAL nvecs, which are those in
+                # which at least a single boson of any type is on both
+                # edges of the cloud.
+                tmp_legal_configs = [
+                    nn for nn in c if self.is_legal(nn)
+                ]
+
+                # Extend the temporary config
+                config_dict[nb].extend(tmp_legal_configs)
+
+        return config_dict
 
 
 class System:
@@ -27,34 +140,21 @@ class System:
         delta values.
     """
 
-    def _log_configuration(self):
-        """Pipes configuration information to the outstream in debug mode."""
-
-        dlog.debug("Initializing System class")
-        for key, value in vars(self.config).items():
-            if key == 'terms':
-                dlog.debug(f"n terms = {len(value)}")
-            else:
-                dlog.debug(f"{key}: {value}")
-
-    def __init__(self, config):
+    def __init__(self, input_params):
         """Initializer.
 
         Parameters
         ----------
-        config : InputParameters
+        input_params : InputParameters
             Container for the full set of parameters.
         """
 
-        self.config = config
-        filter_type = None if self.config.config_filter == 'no_filter' \
-            else self.config.config_filter
-        self.config_filter = utils.ConfigFilter(filter_type=filter_type)
-        self._log_configuration()
+        self.input_params = input_params
+        self.model_params = self.input_params.model_params
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = 1  # config.n_unique_bosons
+        self.n_boson_types = self.model_params.n_boson_types
 
         self.master_f_arg_list = None
 
@@ -66,21 +166,26 @@ class System:
         self.basis = dict()
         self.unique_short_identifiers = set()
 
-    def _ma_sanity_check(self, n):
-        return int(7 * n + 1 + 5 * n * (n - 1) / 2)
+        # Total number of bosons allowed is the sum of the number of bosons
+        # allowed for each boson type
+        self.N_total_max = sum(self.model_params.N)
 
-    def _append_generalized_equation(self, n_bosons, n_mat):
-
-        eq = Equation(
-            n_mat, config=self.config, config_filter=self.config_filter
+        # Config space generator
+        self.config_space_generator = ConfigurationSpaceGenerator(
+            self.model_params.absolute_extent,
+            self.model_params.M, self.model_params.N
         )
+
+    def _append_generalized_equation(self, n_bosons, config):
+
+        eq = Equation(config, input_params=self.input_params)
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
 
         # Initialize the specific terms which constitute the f_n(delta)
         # EOM, such as f_n'(1), f_n''(0), etc.
-        eq.initialize_terms()
+        eq.initialize_terms(self.config_space_generator)
 
         # Initialize the required values for delta (arguments of f) as
         # derived from the terms themselves, used later when generating
@@ -89,7 +194,7 @@ class System:
 
         # Append a master dictionary at the System object level that
         # keeps track of all the f_arg values required for each value of
-        # n_mat.
+        # the config.
         self._append_master_dictionary(eq)
 
         # Finally, append the equation to a master list of generalized
@@ -99,74 +204,32 @@ class System:
         except KeyError:
             self.generalized_equations[n_bosons] = [eq]
 
-    def _extend_legal_configs(self, n_bosons, n_mats):
-        """Appends a new configuration to the dictionary legal_n_mats."""
+    def _extend_legal_configs(self, n_bosons, configs):
+        """Appends a new configuration to the dictionary legal configs."""
 
-        for n_mat in n_mats:
-            self._append_generalized_equation(n_bosons, n_mat)
+        for config in configs:
+            self._append_generalized_equation(n_bosons, config)
 
     def initialize_generalized_equations(self):
         """Starting with values for the order of the momentum approximation
         and the maximum allowed number of bosons, this method generates a list
-        of n_mat lists, consisting of all possible legal contributions,
+        of config arrays, consisting of all possible legal contributions,
         meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
         sum of all of the entries equals n, where n = [1, ..., n_max]."""
 
         t0 = time.time()
 
-        # Special case: we can count the total terms and compare it to the
-        # Berciu paper to be sure we have the correct n_mat terms calculated
-        berciu_condition = self.config.M == 3 and 'EFB' in self.config.model \
-            and self.n_boson_types == 1
-
-        if berciu_condition:
-            _totals = 0
-            _b_totals = 0
+        allowed_configs = self.config_space_generator()
 
         # Generate all possible numbers of bosons consistent with n_max.
-        for n_bosons in range(1, self.config.N + 1):
-
-            # Iterate over all possible lengths consistent with the MA. For
-            # each boson type in the range, construct the allowed permutations.
-            for z in range(1, self.config.M + 1):
-
-                z_n_configuration_space = \
-                    list(utils.configuration_space_generator(z, n_bosons))
-
-                # Now, we get all of the LEGAL nvecs, which are those in
-                # which at least a single boson of any type is on both
-                # edges of the cloud.
-                tmp_legal_configs = [
-                    nn for nn in z_n_configuration_space
-                    if self.config_filter(nn)
-                ]
-
-                # Berciu special case, track based on the analysis in her
-                # paper
-                if berciu_condition:
-                    if z == 1:
-                        _totals += len(tmp_legal_configs) * 8
-                    elif z == 2:
-                        _totals += len(tmp_legal_configs) * 7
-                    elif z == 3:
-                        _totals += len(tmp_legal_configs) * 5
-
-                self._extend_legal_configs(n_bosons, tmp_legal_configs)
-
-            if self.config.M == 3 and 'EFB' in self.config.model:
-                _b_totals += self._ma_sanity_check(n_bosons)
-
-        if berciu_condition:
-            dlog.debug(
-                f"Special case: MA(3) Berciu terms {_totals} vs {_b_totals} "
-                "(predicted vs truth)"
-            )
+        for n_bosons, configs in allowed_configs.items():
+            self._extend_legal_configs(n_bosons, configs)
 
         # Manually append the Green's function (do the same as above except)
         # for this special case. Note that no matter what this is always
         # neded, but the form of the GreenEquation EOM will differ depending
         # on the system type.
-        eq = GreenEquation(config=self.config)
+        eq = GreenEquation(input_params=self.input_params)
         eq.initialize_index_term()
         eq.initialize_terms()
         eq._populate_f_arg_terms()
@@ -182,11 +245,15 @@ class System:
         L = sum([len(val) for val in self.generalized_equations.values()])
         dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
 
-        # Plus one for the Green's function
-        T = int(total_generalized_equations(self.config.M, self.config.N) + 1)
-        dlog.debug(f"Predicted {T} equations from combinatorics equations")
+        # Need to generalize this
+        if self.n_boson_types == 1:
+            # Plus one for the Green's function
+            T = 1 + total_generalized_equations(
+                self.model_params.M, self.model_params.N, self.n_boson_types
+            )
+            dlog.debug(f"Predicted {T} equations from combinatorics equations")
 
-        assert T == L
+            assert T == L
 
         totals = self._get_total_terms()
         dlog.debug(f"Predicting {totals} total terms")
@@ -195,6 +262,8 @@ class System:
         # all the keys:
         for key, _ in self.generalized_equations.items():
             self.equations[key] = []
+
+        return L
 
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
@@ -235,7 +304,7 @@ class System:
 
         for n_bosons, l_eqs in self.generalized_equations.items():
             for eq in l_eqs:
-                n_mat_id = eq.index_term._get_n_mat_identifier()
+                n_mat_id = eq.index_term._get_boson_config_identifier()
                 l_deltas = self.master_f_arg_list[n_mat_id]
                 for true_delta in l_deltas:
                     eq_copy = copy.deepcopy(eq)
@@ -246,6 +315,8 @@ class System:
 
         L = sum([len(val) for val in self.equations.values()])
         dlog.info(f"({dt:.02f}s) Generated {L} equations")
+
+        return L
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
@@ -268,15 +339,13 @@ class System:
 
         eqs_dict = self.generalized_equations if generalized \
             else self.equations
-        for n_bosons, eqs in eqs_dict.items():
+        od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
+        for n_bosons, eqs in od.items():
             print(f"{n_bosons}")
             print("-" * 60)
             for eq in eqs:
                 eq.visualize(full=full, coef=coef)
             print("\n")
-
-    def visualize_filter(self, M, N):
-        self.config_filter.visualize(M, N)
 
     def generate_unique_terms(self):
         """Constructs the basis for the problem, which is a mapping between
@@ -297,6 +366,8 @@ class System:
             dlog.info(f"({dt:.02f}s) Closure is valid")
         else:
             dlog.critical("Invalid closure!")
+            print(self.unique_short_identifiers - all_terms_rhs)
+            print(all_terms_rhs - self.unique_short_identifiers)
             raise RuntimeError("Invalid closure!")
 
     def prime_solver(self):
@@ -331,16 +402,31 @@ class System:
             ii_basis = self.recursion_solver_basis[n_bosons][index_term_id]
 
             for term in eq.terms_list:
-                if term.n_bosons != n_bosons_shift:
+                if term.get_total_bosons() != n_bosons_shift:
                     continue
                 t_id = term.identifier()
                 jj_basis = self.recursion_solver_basis[n_bosons_shift][t_id]
                 mat[ii_basis, jj_basis] += term.coefficient(k, w)
 
+    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A):
+
+        # Fill beta
+        t0 = time.time()
+        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n)
+        dt = time.time() - t0
+        dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
+
+        identity = np.eye(beta_n.shape[0], A.shape[1])
+
+        t0 = time.time()
+        initial_A_shape = A.shape
+
+        return identity - beta_n @ A, initial_A_shape
+
     def _log_solve_info(self):
         """Pipes some of the current solving information to the outstream."""
 
-        d = copy.deepcopy(vars(self.config))
+        d = copy.deepcopy(vars(self.input_params))
         d['terms'] = len(d['terms'])
         dlog.debug(f"Solving recursively: {d}")
 
@@ -359,13 +445,15 @@ class System:
             'time': []
         }
 
-        for n_bosons in range(self.config.N, 0, -1):
+        total_bosons = np.sum(self.model_params.N)
+
+        for n_bosons in range(total_bosons, 0, -1):
 
             t0 = time.time()
             d_n = len(self.recursion_solver_basis[n_bosons])
             d_n_m_1 = len(self.recursion_solver_basis[n_bosons - 1])
 
-            if n_bosons == self.config.N:
+            if n_bosons == total_bosons:
                 A = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
                 self._compute_alpha_beta_(n_bosons, -1, k, w, A)
                 continue
@@ -374,30 +462,24 @@ class System:
             alpha_n = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
             meta['alphas'].append((d_n, d_n_m_1))
 
+            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
+            meta['betas'].append((d_n, d_n_p_1))
+            to_inv, initial_A_shape = \
+                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A)
+
             # Fill alpha
             t0 = time.time()
             self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n)
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
-            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
-            meta['betas'].append((d_n, d_n_p_1))
+            # This is the rate-limiting step ##################################
+            A = linalg.solve(to_inv, alpha_n)
+            ###################################################################
 
-            # Fill beta
-            t0 = time.time()
-            self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n)
-            dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
-
-            # Expensive...
-            identity = np.eye(beta_n.shape[0], A.shape[1])
-
-            t0 = time.time()
-            initial_A_shape = A.shape
-            A = linalg.inv(identity - beta_n @ A) @ alpha_n
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
-            meta['inv'].append(identity.shape[0])
+            meta['inv'].append(to_inv.shape[0])
             meta['time'].append(time.time() - t0)
 
         # The final answer is actually A_1. It is related to G via the vector

@@ -83,7 +83,7 @@ def setup_logger(name, log_file):
     logger.setLevel(logging.DEBUG)
 
     handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(logging.INFO)
     handler.setFormatter(color_formatter)
     handler.addFilter(LevelFilter(10, 20))
     logger.addHandler(handler)
@@ -96,7 +96,7 @@ def setup_logger(name, log_file):
 
     if log_file is not None:
         handler = logging.FileHandler(log_file)
-        handler.setLevel(logging.WARN)
+        handler.setLevel(logging.DEBUG)
         handler.setFormatter(color_formatter)
         logger.addHandler(handler)
 

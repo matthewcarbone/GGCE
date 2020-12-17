@@ -42,18 +42,19 @@ def generalized_equations_combinatorics_term(m, n):
     return comb(m + n - 3, n - 2, exact=True)
 
 
-def total_generalized_equations(M, N):
+def total_generalized_equations(M, N, nbt):
     """Gets the total number of generalized equations as predicted by the
     combinatorics equation described in
     generalized_equations_combinatorics_term.
     """
 
-    return sum([
+    bosons = [sum([
         sum([
             generalized_equations_combinatorics_term(m, n)
-            for n in range(1, N + 1)
-        ]) for m in range(1, M + 1)
-    ])
+            for n in range(1, N[bt] + 1)
+        ]) for m in range(1, M[bt] + 1)
+    ]) for bt in range(nbt)]
+    return int(np.prod(bosons))
 
     # total = 0
     # for nn in range(1, N + 1):

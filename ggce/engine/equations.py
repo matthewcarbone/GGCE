@@ -5,10 +5,10 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import copy
+import numpy as np
 
-from ggce import physics
-from ggce import terms as terms_module
-from ggce.utils import utils
+from ggce.engine import physics
+from ggce.engine import terms as terms_module
 
 
 class Equation:
@@ -37,25 +37,24 @@ class Equation:
         particular _n_mat_identifier.
     """
 
-    def __init__(self, n_mat_index, config, config_filter=None):
+    def __init__(self, config_index, input_params):
         """Initializer.
 
         Parameters
         ----------
-        n_mat_index : list
+        config_index : np.ndarray
             The list of integers representing the f-subscript. In order to be
             a valid f-function, the first and last indexes must be at least
             one. These properties are asserted in the setter for this
             parameter. This means that only allowed f-function subscripts can
             be passed to this function.
-        config : InputParameters
+        input_params : InputParameters
             Container for the full set of parameters.
         """
 
-        self.n_mat_index = n_mat_index
+        self.config_index = config_index
         self.f_arg_terms = None
-        self.config = config
-        self.config_filter = config_filter
+        self.input_params = input_params
 
     def bias(self, k, w):
         """The default value for the bias is 0, except in the case of the
@@ -67,13 +66,14 @@ class Equation:
         """Initializes the index which is used as a reference to the equation.
         """
 
-        if len(self.n_mat_index) == 1 and self.n_mat_index[0] == 0:
+        # Pass over the Green's function
+        if self.config_index.shape[1] == 1 and np.sum(self.config_index) == 0:
             pass
         else:
-            assert self.n_mat_index[0] > 0
-            assert self.n_mat_index[-1] > 0
+            assert np.any(self.config_index[:, 0]) > 0
+            assert np.any(self.config_index[:, -1]) > 0
 
-        self.index_term = terms_module.IndexTerm(copy.copy(self.n_mat_index))
+        self.index_term = terms_module.IndexTerm(copy.copy(self.config_index))
 
     def visualize(self, full=True, coef=None):
         """Prints the representative strings of the terms for both the indexer
@@ -90,7 +90,7 @@ class Equation:
             id1 = term.identifier(full=full)
             if coef is not None:
                 id1 += f" -> {term.coefficient(*coef)}"
-            print("\t", id1)
+            print("\t", id1, term.f_arg)
 
     def _populate_f_arg_terms(self):
         """Populates the required f_arg terms for the 'rhs' (in self.terms_list)
@@ -102,7 +102,7 @@ class Equation:
 
         self.f_arg_terms = dict()
         for ii, term in enumerate(self.terms_list):
-            n_mat_identifier = term._get_n_mat_identifier()
+            n_mat_identifier = term._get_boson_config_identifier()
             try:
                 self.f_arg_terms[n_mat_identifier].append(term.f_arg)
             except KeyError:
@@ -116,93 +116,97 @@ class Equation:
         for ii in range(len(self.terms_list)):
             self.terms_list[ii].increment_g_arg(delta)
 
-    def initialize_terms(self):
+    def initialize_terms(self, config_space_generator):
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
+        ae = self.input_params.model_params.absolute_extent
+
         self.terms_list = []
-        assert all([n >= 0 for n in self.n_mat_index])
-        N = sum(self.n_mat_index)
+        assert np.all(self.config_index >= 0)
 
         # Iterate over all possible types of the coupling operators
-        for v_term in self.config.terms:
+        for hterm in self.input_params.terms:
+
+            # Boson type
+            bt = hterm.boson_type
 
             # We separate the two cases for creation and annihilation operators
             # on the boson operator 'b'
-            if v_term.dagger == '-':
+            if hterm.dagger == '-':
 
                 # Iterate over the site indexes for the term's alpha-index
-                for gamma_idx, nval in enumerate(self.n_mat_index):
+                for loc, nval in enumerate(self.config_index[bt, :]):
 
                     # Do not annihilate the vacuum, this term comes to 0
                     # anyway.
                     if nval == 0:
                         continue
 
-                    constant_prefactor = v_term.sign * self.config.g * nval
-
                     t = terms_module.AnnihilationTerm(
-                        copy.copy(self.n_mat_index), hterm=v_term,
-                        constant_prefactor=constant_prefactor
+                        copy.copy(self.config_index), hterm=hterm,
+                        model_params=self.input_params.model_params,
+                        constant_prefactor=hterm.g * nval
                     )
-                    t.step(gamma_idx)
-
-                    # Check the filter for the new configuration, which may not
-                    # be legal, since we might have added/removed a boson in an
-                    # illegal place based on the filter parameters.
-                    if not self.config_filter(t.n_mat):
-                        continue
-
+                    t.step(loc)
                     t.check_if_green_and_simplify()
-                    self.terms_list.append(t)
+                    if t.config.is_green():
+                        self.terms_list.append(t)
+                    elif config_space_generator.is_legal(t.config.config):
+                        self.terms_list.append(t)
 
             # Don't want to create an equation corresponding to more than
             # the maximum number of allowed bosons.
-            elif v_term.dagger == '+' and N + 1 <= self.config.N:
-                for gamma_idx in range(
-                    len(self.n_mat_index) - self.config.M, self.config.M
-                ):
+            elif hterm.dagger == '+':
+                for loc in range(self.config_index.shape[1] - ae, ae):
 
-                    constant_prefactor = v_term.sign * self.config.g
                     t = terms_module.CreationTerm(
-                        copy.copy(self.n_mat_index), hterm=v_term,
-                        constant_prefactor=constant_prefactor
+                        copy.copy(self.config_index), hterm=hterm,
+                        model_params=self.input_params.model_params,
+                        constant_prefactor=hterm.g
                     )
-                    t.step(gamma_idx)
-
-                    if not self.config_filter(t.n_mat):
-                        continue
-
+                    t.step(loc)
                     t.check_if_green_and_simplify()
 
-                    self.terms_list.append(t)
+                    if t.config.is_green():
+                        self.terms_list.append(t)
+                    elif config_space_generator.is_legal(t.config.config):
+                        self.terms_list.append(t)
 
 
 class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
-    def __init__(self, config):
-        super().__init__(n_mat_index=[0], config=config)
+    def __init__(self, input_params):
+        config = np.zeros((input_params.model_params.n_boson_types, 1))
+        super().__init__(config_index=config, input_params=input_params)
 
     def bias(self, k, w):
         """Initializes the bias for the Green's function."""
 
         return physics.G0_k_omega(
-            k, w, self.config.a, self.config.eta, self.config.t
+            k, w, self.input_params.model_params.a,
+            self.input_params.model_params.eta,
+            self.input_params.model_params.t
         )
 
     def initialize_terms(self):
         """Override for the Green's function other terms."""
+        model_params = self.input_params.model_params
 
         # Only instance where we actually use the base FDeltaTerm class
         self.terms_list = []
 
         # Iterate over all possible types of the coupling operators
-        for v_term in self.config.terms:
+        for hterm in self.input_params.terms:
 
             # Only boson creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
-            if v_term.dagger == '+':
-                n = [1]
-                t = terms_module.EOMTerm(n_mat=n, hterm=v_term)
+            if hterm.dagger == '+':
+                n = np.zeros((model_params.n_boson_types, 1)).astype(int)
+                n[hterm.boson_type, :] = 1
+                t = terms_module.EOMTerm(
+                    boson_config=n, hterm=hterm,
+                    model_params=model_params
+                )
                 self.terms_list.append(t)

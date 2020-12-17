@@ -5,18 +5,24 @@ __maintainer__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Prototype"
 
-import os
-import yaml
-import numpy as np
 import copy
+import os
+
+from itertools import product
+import numpy as np
+import pickle
+
 from scipy.signal import find_peaks
 from scipy import interpolate
 from scipy.interpolate import InterpolatedUnivariateSpline as ius
 
+from ggce.utils import utils
 
-def listdir_fullpath(d):
-    dirs = [os.path.join(d, f) for f in os.listdir(d)]
-    return [d for d in dirs if os.path.isdir(d)]
+
+def N_M_eta_k_subdir(M, N, eta, k_u_pi, mapping, config_idx):
+    subdir = f"{mapping['M'][M]:03}/{mapping['N'][N]:03}/"
+    subdir += f"{mapping['eta'][eta]:03}/{mapping['k_units_pi'][k_u_pi]:06}"
+    return f"{config_idx:03}/{subdir}"
 
 
 class Results:
@@ -24,7 +30,7 @@ class Results:
     @staticmethod
     def key_str(config, value):
         t = f"{config['model']}_{config['Omega']}_{config['t']}_"
-        t += f"{value['k_units_pi']}_{value['lambda']}_{value['M']}" \
+        t += f"{value['k_units_pi']:.08f}_{config['lambda']}_{value['M']}" \
             + f"_{value['N']}_{value['eta']}"
         return t
 
@@ -35,9 +41,9 @@ class Results:
         self.vals['model'].append(config['model'])
         self.vals['Omega'].append(config['Omega'])
         self.vals['t'].append(config['t'])
+        self.vals['lambda'].append(config['lambda'])
 
         self.vals['k_units_pi'].append(value['k_units_pi'])
-        self.vals['lambda'].append(value['lambda'])
         self.vals['M'].append(value['M'])
         self.vals['N'].append(value['N'])
         self.vals['eta'].append(value['eta'])
@@ -55,29 +61,40 @@ class Results:
             'eta': [], 'k_units_pi': []
         }
 
-        dirs = listdir_fullpath(self.path)
+        (
+            master_list, config_mapping, M_N_eta_k_mapping, package_cache_path
+        ) = pickle.load(open(os.path.join(self.path, 'protocol.pkl'), 'rb'))
+        perms = list(product(
+            M_N_eta_k_mapping['M'], M_N_eta_k_mapping['N'],
+            M_N_eta_k_mapping['eta'], M_N_eta_k_mapping['k_units_pi']
+        ))
 
-        for d in dirs:
-            config = yaml.safe_load(open(os.path.join(d, "config.yaml")))
-            mapping = yaml.safe_load(open(os.path.join(d, "mapping.yaml")))
+        config_directories = utils.listdir_fullpath_dirs_only(self.path)
 
-            # These lower level directories correspond to the parameter sets
-            # iterated over in a single config file
-            for key, value in mapping.items():
-                subdir = os.path.join(d, f"{key:03}")
+        # Nesting begins with the configs
+        for c_idx, c_dir in enumerate(config_directories):
+            config = config_mapping[c_idx]
 
-                # Then we iterate over the partitionings of the grid within a
-                # single trial
-                A = np.concatenate([
-                    np.loadtxt(os.path.join(p, "res.txt"))
-                    for p in listdir_fullpath(subdir)
-                ], axis=0)
+            # Then M -> N -> eta -> k_units_pi
+            for perm in perms:
+                target = N_M_eta_k_subdir(
+                    *perm, M_N_eta_k_mapping, c_idx
+                )
+                target = os.path.join(self.path, target)
+
+                (M, N, eta, k_units_pi) = perm
+
+                value = {'k_units_pi': k_units_pi, 'M': M, 'N': N, 'eta': eta}
+
+                # G contains w, G.real, G.imag, elapsed time and largest matrix
+                # size.
+                G = np.loadtxt(os.path.join(target, 'res.txt'))
 
                 # Sort by w, just in case the results are not already sorted
-                A = A[A[:, 0].argsort()]
+                G = G[G[:, 0].argsort()]
 
                 # Assign this entry a key
-                self.master[self._assign_key(config, value)] = A
+                self.master[self._assign_key(config, value)] = G
 
         self.defaults = dict()
         for key in list(self.vals.keys()):
@@ -103,6 +120,8 @@ class Results:
             't': kwargs['t'] if 't' in keys else self.defaults['t'],
             'Omega': kwargs['Omega']
             if 'Omega' in keys else self.defaults['Omega'],
+            'lambda': kwargs['lam']
+            if 'lam' in keys else self.defaults['lambda']
         }
 
         value = {
@@ -110,11 +129,13 @@ class Results:
             'N': kwargs['N'] if 'N' in keys else self.defaults['N'],
             'eta': kwargs['eta'] if 'eta' in keys else self.defaults['eta'],
             'k_units_pi': kwargs['k']
-            if 'k' in keys else self.defaults['k_units_pi'],
-            'lambda': kwargs['lam']
-            if 'lam' in keys else self.defaults['lambda'],
+            if 'k' in keys else self.defaults['k_units_pi']
         }
-        return self.master[Results.key_str(config, value)]
+
+        G = self.master[Results.key_str(config, value)]
+
+        # Return the frequency grid and A(k, w)
+        return G[:, 0], -G[:, 2] / np.pi
 
     def lambda_band(
         self, interp=False, cutoff=False, cutoff_eps=1e-6,
@@ -129,24 +150,20 @@ class Results:
             kwargs['lam'] = lambd
             A = self.__call__(**kwargs)
 
-            try:
-                if not interp:
-                    y = A[:, 1]
-                    x = A[:, 0]
-                    peaks = find_peaks(y)
-                    band.append(x[peaks[0][0]])
+            if not interp:
+                y = A[1]
+                x = A[0]
+                peaks = find_peaks(y)
+                band.append(x[peaks[0][0]])
 
-                else:
-                    spl = ius(A[:, 0], A[:, 1])
-                    x = np.linspace(A[:, 0][0], A[:, 0][-1], 1000000)
-                    y = spl(x, ext='zeros')
-                    # loc = np.argmax(y)
-                    peaks = find_peaks(y)
-                    band.append(x[peaks[0][0]])
-                    # band.append(x[loc])
-
-            except IndexError:
-                continue
+            else:
+                spl = ius(A[:, 0], A[:, 1])
+                x = np.linspace(A[:, 0][0], A[:, 0][-1], 1000000)
+                y = spl(x, ext='zeros')
+                # loc = np.argmax(y)
+                peaks = find_peaks(y)
+                band.append(x[peaks[0][0]])
+                # band.append(x[loc])
 
         if cutoff:
 
@@ -208,14 +225,14 @@ class Results:
             A2 = self.__call__(**d2)
 
             # Find the ballpark maxima
-            m1 = find_peaks(A1[:, 1])[0][0]
-            m2 = find_peaks(A2[:, 1])[0][0]
+            m1 = find_peaks(A1[1])[0][0]
+            m2 = find_peaks(A2[1])[0][0]
 
-            w1 = A1[:, 0][m1]
-            a1 = A1[:, 1][m1]
+            w1 = A1[0][m1]
+            a1 = A1[1][m1]
 
             # We use the SAME omega value here
-            a2 = A2[:, 1][m2]
+            a2 = A2[1][m2]
 
             epsilon = (
                 a1 * (w1 + 1j * d1["eta"]) - a2 * (w1 + 1j * d2["eta"])
@@ -223,6 +240,16 @@ class Results:
             band.append(epsilon.real)
 
         return self.vals['lambda'], np.array(band)
+
+    def k_v_w_no_interp(self, **kwargs):
+
+        band = []
+        for k in self.vals['k_units_pi']:
+            kwargs['k'] = k
+            A = self.__call__(**kwargs)
+            band.append(A[1])
+        Z = np.array(band)
+        return A[0], self.vals['k_units_pi'], Z
 
     def k_v_w(self, ninterp_w=1000, ninterp_k=1000, **kwargs):
         """Returns a band structure-like plot of k vs w."""
@@ -234,8 +261,8 @@ class Results:
         for k in self.vals['k_units_pi']:
             kwargs['k'] = k
             A = self.__call__(**kwargs)
-            overall_maximum_w = max(overall_maximum_w, np.max(A[:, 0]))
-            overall_minimum_w = min(overall_minimum_w, np.min(A[:, 0]))
+            overall_maximum_w = max(overall_maximum_w, np.max(A[0]))
+            overall_minimum_w = min(overall_minimum_w, np.min(A[0]))
 
         band = []
         wgrid = np.linspace(
@@ -250,7 +277,7 @@ class Results:
         for k in self.vals['k_units_pi']:
             kwargs['k'] = k
             A = self.__call__(**kwargs)
-            A_interp = np.interp(wgrid, A[:, 0], A[:, 1], right=0, left=0)
+            A_interp = np.interp(wgrid, A[0], A[1], right=0, left=0)
             band.append(A_interp)
 
         Z = np.array(band)
