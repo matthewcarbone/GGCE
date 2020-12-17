@@ -8,11 +8,16 @@ from collections import OrderedDict
 import copy
 import numpy as np
 from scipy import linalg
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import spsolve
+
 import time
 
 from ggce.utils.logger import default_logger as dlog
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
+
+BYTES_TO_MB = 1048576
 
 
 def configuration_space_generator(length, total_sum):
@@ -386,8 +391,57 @@ class System:
                 eq.index_term.identifier(): ii
                 for ii, eq in enumerate(equations)
             }
+        cc = 0
+        for _, equations in self.equations.items():
+            for eq in equations:
+                self.basis[eq.index_term.identifier()] = cc
+                cc += 1
         dt = time.time() - t0
-        dlog.info(f"({dt:.02f}s) Recursive solver primed")
+        dlog.info(f"({dt:.02f}s) Solvers primed")
+
+    def sparse_solve(self, k, w):
+        """Executes a oneshot sparse solver. Each row/column corresponds to a
+        different f_n(delta) function."""
+
+        t0_all = time.time()
+
+        # Initialize the sparse matrix to solve
+        row_ind = []
+        col_ind = []
+        dat = []
+        total_bosons = np.sum(self.model_params.N)
+        for n_bosons in range(total_bosons, 0, -1):
+            equations_n = self.equations[n_bosons]
+            for ii, eq in enumerate(equations_n):
+                row_dict = dict()
+                index_term_id = eq.index_term.identifier()
+                ii_basis = self.recursion_solver_basis[n_bosons][index_term_id]
+                for term in eq.terms_list:
+                    jj = self.basis[term.identifier()]
+
+                    try:
+                        row_dict[jj] += term.coefficient(k, w)
+                    except KeyError:
+                        row_dict[jj] = term.coefficient(k, w)
+
+                row_ind.extend([ii_basis for _ in range(len(row_dict))])
+                col_ind.extend([key for key, _ in row_dict.items()])
+                dat.extend([value for _, value in row_dict.items()])
+
+        X = coo_matrix((
+            np.array(dat, dtype=np.complex64),
+            (np.array(row_ind), np.array(col_ind))
+        )).tocsr()
+
+        size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
+
+        dlog.debug(f"\tMemory usage of sparse X is {size:.02f} MB")
+
+        # Initialize the corresponding sparse vector
+        # {G}(0)
+
+
+        return X
 
     def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
