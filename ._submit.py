@@ -192,7 +192,9 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
 
     L = len(jobs)
     print_every = int(max(L * PRINT_EVERY_PERCENT / 100.0, 1))
-    dlog.info(f"Printing every {print_every} jobs")
+
+    if rank == 0:
+        dlog.info(f"Printing every {print_every} jobs")
 
     overall_config_time = time.time()
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
