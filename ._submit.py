@@ -27,7 +27,7 @@ from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
 
 
-PRINT_EVERY_PERCENT = 20
+PRINT_EVERY_PERCENT = 10.0
 
 
 class LoggerOnRank:
@@ -124,7 +124,26 @@ def check_state(state_dir, k_u_pi, w):
     return exists, state_fname_path
 
 
-def calculate(mpi_info, package_path, config_path, dry_run=False):
+def early_exit_criteria(state_dir, k_grid, w_grid, jobs):
+    """Checks for two things: 1) Does the DONE file exist, and 2) if the
+    DONE file does not exist, has every calculation on this rank been
+    completed."""
+
+    donefile = os.path.join(state_dir, "DONE")
+    if os.path.isfile(donefile):
+        return True
+
+    # Check secondary early exit critiera: this allows us to skip priming
+    # the computation if all jobs on this rank are finished
+    jobnames_todo = set([state_fname(k, w) for (k, w) in jobs])
+    jobnames_existing = set(os.listdir(state_dir))
+    if jobnames_todo.issubset(jobnames_existing):
+        return True
+
+    return False
+
+
+def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
     """Runs the calculations.
 
     Parameters
@@ -135,6 +154,8 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     package_path : str
     config_path : str
         Location of the particular config file to load.
+    solver : int
+        The solver type. 0 for contiued fraction, 1 for direct sparse.
     """
 
     logger = mpi_info.logger
@@ -147,17 +168,19 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     target_dir = os.path.join(package_path, "results", base)
     state_dir = os.path.join(target_dir, "STATE")
 
-    # Check early exit criterion
-    donefile = os.path.join(state_dir, "DONE")
-    if os.path.isfile(donefile):
-        dlog.warning(f"Target {target_dir} is complete")
-        return
-
     # If there are calculations to run, prepare the system
     inp = InputParameters(yaml.safe_load(open(config_path)))
     inp.prime()
     w_grid = inp.get_w_grid()
     k_grid = inp.get_k_grid()  # In units of pi!
+    jobs = prep_jobs(k_grid, w_grid, rank, world_size)
+
+    # Check early exit
+    if early_exit_criteria(state_dir, k_grid, w_grid, jobs):
+        dlog.warning(f"Already done on target: {target_dir}")
+        return jobs, 0.0
+
+    # Prime the real system or use a dummy one if dealing with a dry run
     sy = None
     if not dry_run:
         (sy, dt, T, L) = prime_system(inp)
@@ -167,10 +190,8 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
     if dry_run and rank == 0:
         logger.warning("Running in dry run mode: G is randomly generated")
 
-    jobs = prep_jobs(k_grid, w_grid, rank, world_size)
-
     L = len(jobs)
-    print_every = max(L // PRINT_EVERY_PERCENT, 1)
+    print_every = max(L * PRINT_EVERY_PERCENT / 100.0, 1)
 
     overall_config_time = time.time()
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
@@ -184,7 +205,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
         # Solve the system
         if not dry_run:
             with utils.DisableLogger():
-                G, meta = sy.solve(k_u_pi * np.pi, frequency_gridpoint)
+                G, meta = sy.solve(k_u_pi * np.pi, frequency_gridpoint, solver)
             A = -G.imag / np.pi
             computation_time = meta['time'][-1] / 60.0
             largest_mat_dim = meta['inv'][0]
@@ -230,7 +251,7 @@ def concat(jobs, mpi_info, package_path, config_path):
     N_in_state = os.listdir(state_dir)
     if os.path.isfile(donefile) and len(N_in_state) == 1:
         logger.debug(f"Target {target_dir} is done")
-        return
+        return 'DONE'
 
     results = []
     for (k_u_pi, frequency_gridpoint) in jobs:
@@ -292,6 +313,9 @@ if __name__ == '__main__':
     # The third argument is whether to run in dry run mode or now
     dry_run = int(sys.argv[3])
 
+    # Type of solver
+    solver = int(sys.argv[4])
+
     # MPI info includes the logger on that rank
     mpi_info = RankTools(COMM, _dlog, debug)
     dlog = mpi_info.logger
@@ -310,6 +334,9 @@ if __name__ == '__main__':
         all_configs_paths.sort()
         dlog.info(f"Confirming COMM world size: {mpi_info.SIZE}")
         dlog.info(f"Running {len(all_configs_paths)} config files")
+        dlog.info(f"Will use solver type {solver}")
+        dlog.info(f"Dryrun is {dry_run}; debug is {debug}")
+        dlog.info(f"Package path is {package_path}")
     else:
         COMM_timer = None
         all_configs_paths = None
@@ -325,7 +352,9 @@ if __name__ == '__main__':
         if mpi_info.RANK == 0:
             dlog.info(f"Starting config {ii:03}")
         c_jobs, elapsed = \
-            calculate(mpi_info, package_path, config_path, dry_run=dry_run)
+            calculate(
+                mpi_info, package_path, config_path, solver, dry_run=dry_run
+            )
         jobs_on_config.append(c_jobs)
 
         elapsed = COMM.gather(elapsed, root=0)
@@ -345,6 +374,8 @@ if __name__ == '__main__':
         res = concat(jobs, mpi_info, package_path, config_path)
         res = COMM.gather(res, root=0)
         if mpi_info.RANK == 0:
+            if all([r == 'DONE' for r in res]):
+                continue
             res = utils.flatten(res)
             res = np.array(res).reshape(-1, 6)
             base = os.path.splitext(os.path.basename(config_path))[0]

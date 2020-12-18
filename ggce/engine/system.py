@@ -399,9 +399,16 @@ class System:
         dt = time.time() - t0
         dlog.info(f"({dt:.02f}s) Solvers primed")
 
-    def sparse_solve(self, k, w):
+    def one_shot_sparse_solve(self, k, w):
         """Executes a oneshot sparse solver. Each row/column corresponds to a
         different f_n(delta) function."""
+
+        meta = {
+            'alphas': [],
+            'betas': [],
+            'inv': [],
+            'time': []
+        }
 
         t0_all = time.time()
 
@@ -455,7 +462,10 @@ class System:
         dt = time.time() - t0_all
         dlog.debug(f"Sparse matrices solved in {dt:.02f} s")
 
-        return G, dt
+        meta['time'] = [dt]
+        meta['inv'] = [len(self.basis)]
+
+        return G, meta
 
     def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
@@ -498,7 +508,7 @@ class System:
         d['terms'] = len(d['terms'])
         dlog.debug(f"Solving recursively: {d}")
 
-    def solve(self, k, w):
+    def continued_fraction_dense_solve(self, k, w):
         """Executes the solution for some given k, w. Also returns the shapes
         of all computed matrices."""
 
@@ -582,3 +592,11 @@ class System:
         dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
 
         return G, meta
+
+    def solve(self, k, w, solver):
+        if solver == 0:
+            return self.continued_fraction_dense_solve(k, w)
+        elif solver == 1:
+            return self.one_shot_sparse_solve(k, w)
+        else:
+            raise RuntimeError(f"Unknown solver type {solver}")
