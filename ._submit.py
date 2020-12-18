@@ -191,9 +191,7 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
         logger.warning("Running in dry run mode: G is randomly generated")
 
     L = len(jobs)
-    print(L)
     print_every = max(L * PRINT_EVERY_PERCENT / 100.0, 1)
-    print(print_every)
 
     overall_config_time = time.time()
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
@@ -204,7 +202,6 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
             logger.debug(f"Target {state_fname_path} exists, continuing")
             continue
 
-        compute_t = time.time()
         # Solve the system
         if not dry_run:
             with utils.DisableLogger():
@@ -225,17 +222,11 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
         else:
             G, computation_time, largest_mat_dim = dryrun_random_result()
 
-        compute_t = time.time() - compute_t
-
         # Write results to disk
-        write_t = time.time()
         write_results(
             k_u_pi, frequency_gridpoint, G, computation_time,
             largest_mat_dim, state_fname_path
         )
-        write_t = time.time() - write_t
-
-        print(f"Times: compute: {compute_t:.08f}, write:{write_t:.08f}")
 
     return jobs, time.time() - overall_config_time
 
