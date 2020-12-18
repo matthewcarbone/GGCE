@@ -510,6 +510,7 @@ class Submitter(BaseOverlord):
 
         dryrun = int(self.cl_args.dryrun)
         debug = int(self.cl_args.debug)
+        solver = int(self.cl_args.solver)
 
         # If bash is true, then we save a local run script, which the
         # user can run separately using bash.
@@ -526,7 +527,7 @@ class Submitter(BaseOverlord):
             local_threads = 1
 
             exe = f"mpiexec -np {local_procs} python3 ._submit.py " \
-                f"{package} {debug} {dryrun}"
+                f"{package} {debug} {dryrun} {solver}"
             fname = f"submit_{basename}.sh"
             with open(fname, 'w') as f:
                 f.write(f"export OMP_NUM_THREADS={local_threads}\n")
@@ -538,7 +539,7 @@ class Submitter(BaseOverlord):
         else:
             os.makedirs(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
-            args = f"{package} {debug} {dryrun}"
+            args = f"{package} {debug} {dryrun} {solver}"
             out = utils.run_command(f"sbatch submit.sbatch {args}")
             if out == 0:
                 dlog.info(f"{basename} submit - success")

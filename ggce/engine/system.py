@@ -8,11 +8,16 @@ from collections import OrderedDict
 import copy
 import numpy as np
 from scipy import linalg
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import spsolve
+
 import time
 
 from ggce.utils.logger import default_logger as dlog
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
+
+BYTES_TO_MB = 1048576
 
 
 def configuration_space_generator(length, total_sum):
@@ -386,8 +391,81 @@ class System:
                 eq.index_term.identifier(): ii
                 for ii, eq in enumerate(equations)
             }
+        cc = 0
+        for _, equations in self.equations.items():
+            for eq in equations:
+                self.basis[eq.index_term.identifier()] = cc
+                cc += 1
         dt = time.time() - t0
-        dlog.info(f"({dt:.02f}s) Recursive solver primed")
+        dlog.info(f"({dt:.02f}s) Solvers primed")
+
+    def one_shot_sparse_solve(self, k, w):
+        """Executes a oneshot sparse solver. Each row/column corresponds to a
+        different f_n(delta) function."""
+
+        meta = {
+            'alphas': [],
+            'betas': [],
+            'inv': [],
+            'time': []
+        }
+
+        t0_all = time.time()
+
+        # Initialize the sparse matrix to solve
+        row_ind = []
+        col_ind = []
+        dat = []
+        total_bosons = np.sum(self.model_params.N)
+        for n_bosons in range(total_bosons + 1):
+            for eq in self.equations[n_bosons]:
+                row_dict = dict()
+                index_term_id = eq.index_term.identifier()
+                ii_basis = self.basis[index_term_id]
+                for term in eq.terms_list + [eq.index_term]:
+                    jj = self.basis[term.identifier()]
+                    try:
+                        row_dict[jj] += term.coefficient(k, w)
+                    except KeyError:
+                        row_dict[jj] = term.coefficient(k, w)
+
+                row_ind.extend([ii_basis for _ in range(len(row_dict))])
+                col_ind.extend([key for key, _ in row_dict.items()])
+                dat.extend([value for _, value in row_dict.items()])
+
+        X = coo_matrix((
+            np.array(dat, dtype=np.complex64),
+            (np.array(row_ind), np.array(col_ind))
+        )).tocsr()
+
+        size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
+
+        dlog.debug(f"\tMemory usage of sparse X is {size:.02f} MB")
+
+        # Initialize the corresponding sparse vector
+        # {G}(0)
+        row_ind = np.array([self.basis['{G}(0)']])
+        col_ind = np.array([0])
+        v = coo_matrix((
+            np.array([self.equations[0][0].bias(k, w)], dtype=np.complex64),
+            (row_ind, col_ind)
+        )).tocsr()
+
+        res = spsolve(X, v)
+        G = res[self.basis['{G}(0)']]
+
+        if -G.imag / np.pi < 0.0:
+            dlog.error(
+                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
+            )
+
+        dt = time.time() - t0_all
+        dlog.debug(f"Sparse matrices solved in {dt:.02f} s")
+
+        meta['time'] = [dt]
+        meta['inv'] = [len(self.basis)]
+
+        return G, meta
 
     def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
@@ -430,7 +508,7 @@ class System:
         d['terms'] = len(d['terms'])
         dlog.debug(f"Solving recursively: {d}")
 
-    def solve(self, k, w):
+    def continued_fraction_dense_solve(self, k, w):
         """Executes the solution for some given k, w. Also returns the shapes
         of all computed matrices."""
 
@@ -474,13 +552,16 @@ class System:
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
             # This is the rate-limiting step ##################################
+            t0 = time.time()
             A = linalg.solve(to_inv, alpha_n)
+            dt = time.time() - t0
             ###################################################################
 
-            dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
+            dlog.debug(
+                f"({dt:.02f}s inv) A2 {initial_A_shape} -> A1 {A.shape}"
+            )
             meta['inv'].append(to_inv.shape[0])
-            meta['time'].append(time.time() - t0)
+            meta['time'].append(dt)
 
         # The final answer is actually A_1. It is related to G via the vector
         # equation V_1 = A_1 G, where G is a scalar. It turns out that the
@@ -506,7 +587,16 @@ class System:
             )
 
         dt_all = time.time() - t0_all
+        meta['time'].append(dt_all)  # Last entry is the total
 
         dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
 
         return G, meta
+
+    def solve(self, k, w, solver):
+        if solver == 0:
+            return self.continued_fraction_dense_solve(k, w)
+        elif solver == 1:
+            return self.one_shot_sparse_solve(k, w)
+        else:
+            raise RuntimeError(f"Unknown solver type {solver}")

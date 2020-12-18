@@ -118,6 +118,12 @@ def global_parser(sys_argv):
         'no actual GGCE calculations run.'
     )
     execute_sp.add_argument(
+        '--solver', default=0, dest='solver', type=int,
+        help='Set the solver type. Options are as follows: 0 = dense solver '
+        'using the continued fraction method. 1 = direct sparse solve on the '
+        'entire matrix at once.'
+    )
+    execute_sp.add_argument(
         '-P', '--package', type=str, default=None, dest='package',
         help='Name of the package to prime. Packages must be contained in the '
         '`package_dir` directory. If unspecified, defaults to the last primed '
