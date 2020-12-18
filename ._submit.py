@@ -191,7 +191,7 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
         logger.warning("Running in dry run mode: G is randomly generated")
 
     L = len(jobs)
-    print_every = max(L * PRINT_EVERY_PERCENT / 100.0, 1)
+    print_every = int(max(L * PRINT_EVERY_PERCENT / 100.0, 1))
 
     overall_config_time = time.time()
     for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
