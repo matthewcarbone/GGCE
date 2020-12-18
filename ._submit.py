@@ -186,7 +186,7 @@ def calculate(mpi_info, package_path, config_path, dry_run=False):
             with utils.DisableLogger():
                 G, meta = sy.solve(k_u_pi * np.pi, frequency_gridpoint)
             A = -G.imag / np.pi
-            computation_time = sum(meta['time']) / 60.0
+            computation_time = meta['time'][-1] / 60.0
             largest_mat_dim = meta['inv'][0]
             logger.debug(
                 f"Solved A({k_u_pi:.02f}pi, {frequency_gridpoint:.02f}) "

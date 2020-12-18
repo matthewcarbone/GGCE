@@ -410,15 +410,13 @@ class System:
         col_ind = []
         dat = []
         total_bosons = np.sum(self.model_params.N)
-        for n_bosons in range(total_bosons, 0, -1):
-            equations_n = self.equations[n_bosons]
-            for ii, eq in enumerate(equations_n):
+        for n_bosons in range(total_bosons + 1):
+            for eq in self.equations[n_bosons]:
                 row_dict = dict()
                 index_term_id = eq.index_term.identifier()
-                ii_basis = self.recursion_solver_basis[n_bosons][index_term_id]
-                for term in eq.terms_list:
+                ii_basis = self.basis[index_term_id]
+                for term in eq.terms_list + [eq.index_term]:
                     jj = self.basis[term.identifier()]
-
                     try:
                         row_dict[jj] += term.coefficient(k, w)
                     except KeyError:
@@ -439,9 +437,25 @@ class System:
 
         # Initialize the corresponding sparse vector
         # {G}(0)
+        row_ind = np.array([self.basis['{G}(0)']])
+        col_ind = np.array([0])
+        v = coo_matrix((
+            np.array([self.equations[0][0].bias(k, w)], dtype=np.complex64),
+            (row_ind, col_ind)
+        )).tocsr()
 
+        res = spsolve(X, v)
+        G = res[self.basis['{G}(0)']]
 
-        return X
+        if -G.imag / np.pi < 0.0:
+            dlog.error(
+                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
+            )
+
+        dt = time.time() - t0_all
+        dlog.debug(f"Sparse matrices solved in {dt:.02f} s")
+
+        return G, dt
 
     def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
@@ -528,13 +542,16 @@ class System:
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
             # This is the rate-limiting step ##################################
+            t0 = time.time()
             A = linalg.solve(to_inv, alpha_n)
+            dt = time.time() - t0
             ###################################################################
 
-            dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) A2 {initial_A_shape} -> A1 {A.shape}")
+            dlog.debug(
+                f"({dt:.02f}s inv) A2 {initial_A_shape} -> A1 {A.shape}"
+            )
             meta['inv'].append(to_inv.shape[0])
-            meta['time'].append(time.time() - t0)
+            meta['time'].append(dt)
 
         # The final answer is actually A_1. It is related to G via the vector
         # equation V_1 = A_1 G, where G is a scalar. It turns out that the
@@ -560,6 +577,7 @@ class System:
             )
 
         dt_all = time.time() - t0_all
+        meta['time'].append(dt_all)  # Last entry is the total
 
         dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
 
