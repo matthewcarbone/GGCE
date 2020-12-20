@@ -88,6 +88,19 @@ class Trial:
         Z = -np.array(band) / np.pi
         return A[:, 0], self.k_grid, Z
 
+    def ground_state_dispersion(self):
+        """Returns the ground state dispersion computed as the lowest
+        energy peak energy as a function of k."""
+
+        energies = []
+        for k in self.k_grid:
+            G = self(k)
+            w = G[:, 0]
+            A = -G[:, 2] / np.pi
+            energies.append(w[find_peaks(A)[0][0]])
+
+        return self.k_grid, energies
+
 
 class Results:
 
