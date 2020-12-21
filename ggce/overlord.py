@@ -147,7 +147,16 @@ class SlurmWriter:
         else:
             dlog.warning("Constraint unspecified and not `no_constraint`")
 
-        # Constraint ----------------------------------------------------------
+        # Account -------------------------------------------------------------
+        account = self.get_val("account")
+        if account == 'no_account':
+            pass
+        elif account is not None:
+            SBATCH_lines.append(f"#SBATCH --account={constraint}")
+        else:
+            dlog.warning("Account unspecified and not `no_account`")
+
+        # QOS -----------------------------------------------------------------
         qos = self.get_val("qos")
         if qos == 'no_qos':
             pass
