@@ -360,7 +360,6 @@ if __name__ == '__main__':
         mpi_info.logger.info(f"Running {len(all_configs_paths)} config files")
         mpi_info.logger.info(f"Will use solver type {solver}")
         mpi_info.logger.info(f"Dryrun is {dry_run}; debug is {debug}")
-        mpi_info.logger.info(f"Package path is {package_path}")
     else:
         COMM_timer = None
         all_configs_paths = None
