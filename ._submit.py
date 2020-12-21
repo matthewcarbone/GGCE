@@ -15,8 +15,10 @@ mpiexec -np 4 python3 ._submit.py /Users/mc/Data/scratch/GGCE/000_TEST2 1
 from itertools import product
 import numpy as np
 import os
+import pickle
 import sys
 import time
+import uuid
 import yaml
 
 from mpi4py import MPI
@@ -65,86 +67,31 @@ class RankTools:
             LoggerOnRank(rank=self.RANK, logger=logger, debug_flag=bool(debug))
 
 
-def prep_jobs(k_grid, w_grid, rank, world_size):
-    """Prepares the jobs to run by assigning each MPI process a chunk of the
-    total job list."""
+class Buffer:
 
-    jobs = list(product(k_grid, w_grid))
-    jobs = [jobs[ii::world_size] for ii in range(world_size)]
-    return jobs[rank]
+    def __init__(self, nbuff, target_directory):
+        self.nbuff = nbuff
+        self.counter = 0
+        self.queue = []
+        self.target_directory = target_directory
 
+    def flush(self):
+        if self.counter > 0:
+            f = f"{uuid.uuid4().hex}.pkl"
+            path = os.path.join(self.target_directory, f)
+            pickle.dump(self.queue, open(path, 'wb'), protocol=4)
+            self.counter = 0
+            self.queue = []
 
-def prime_system(inp):
-    t0 = time.time()
-    with utils.DisableLogger():
-        sy = system.System(inp)
-        T = sy.initialize_generalized_equations()
-        L = sy.initialize_equations()
-        sy.generate_unique_terms()
-        sy.prime_solver()
-    dt = (time.time() - t0) / 60.0
-    return (sy, dt, T, L)
-
-
-def state_fname(k, w):
-    return f"{k:.08f}_{w:.08f}.txt"
+    def __call__(self, val):
+        self.queue.append(val)
+        self.counter += 1
+        if self.counter >= self.nbuff:
+            self.flush()
 
 
-def dryrun_random_result():
-    """Returns a random value for G, 0.0 for the elapsed time, and 0 for the
-    maximum matrix size."""
-
-    G = np.abs(np.random.random()) + np.abs(np.random.random()) * 1j
-    return (G, 0.0, 0)
-
-
-def write_results(k, w, G, elapsed_time, largest_mat_dim, state_fname_path):
-    """Writes the results of a computation to disk."""
-
-    with open(state_fname_path, "a") as f:
-        f.write(
-            f"{k:.08f}\t{w:.08f}\t{G.real:.08f}\t{G.imag:.08f}"
-            f"\t{elapsed_time:.02e}\t{largest_mat_dim}\n"
-        )
-
-
-def check_state(state_dir, k_u_pi, w):
-    """Always returns the state file path, but also checks if the file already
-    exists. Returns True if the file does exist, else False."""
-
-    state_fname_path = os.path.join(
-        state_dir, state_fname(k_u_pi, w)
-    )
-
-    # Never re-run a result if it exists already
-    exists = False
-    if os.path.isfile(state_fname_path):
-        exists = True
-
-    return exists, state_fname_path
-
-
-def early_exit_criteria(state_dir, k_grid, w_grid, jobs):
-    """Checks for two things: 1) Does the DONE file exist, and 2) if the
-    DONE file does not exist, has every calculation on this rank been
-    completed."""
-
-    donefile = os.path.join(state_dir, "DONE")
-    if os.path.isfile(donefile):
-        return True
-
-    # Check secondary early exit critiera: this allows us to skip priming
-    # the computation if all jobs on this rank are finished
-    jobnames_todo = set([state_fname(k, w) for (k, w) in jobs])
-    jobnames_existing = set(os.listdir(state_dir))
-    if jobnames_todo.issubset(jobnames_existing):
-        return True
-
-    return False
-
-
-def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
-    """Runs the calculations.
+class Executor:
+    """
 
     Parameters
     ----------
@@ -158,149 +105,207 @@ def calculate(mpi_info, package_path, config_path, solver, dry_run=False):
         The solver type. 0 for contiued fraction, 1 for direct sparse.
     """
 
-    logger = mpi_info.logger
-    rank = mpi_info.RANK
-    world_size = mpi_info.SIZE
+    @staticmethod
+    def dryrun_random_result():
+        """Returns a random value for G, 0.0 for the elapsed time, and 0 for
+        the maximum matrix size."""
 
-    # Target directory, will contain res.txt (the results) and STATE, which
-    # tracks which calculations were completed.
-    base = os.path.splitext(os.path.basename(config_path))[0]
-    target_dir = os.path.join(package_path, "results", base)
-    state_dir = os.path.join(target_dir, "STATE")
+        G = np.abs(np.random.random()) + np.abs(np.random.random()) * 1j
+        return (G, 0.0, 0)
 
-    # If there are calculations to run, prepare the system
-    inp = InputParameters(yaml.safe_load(open(config_path)))
-    inp.prime()
-    w_grid = inp.get_w_grid()
-    k_grid = inp.get_k_grid()  # In units of pi!
-    jobs = prep_jobs(k_grid, w_grid, rank, world_size)
+    def find_remaining_jobs(self):
+        """Loads in all indexes of the already completed jobs.
+        Note set behavior: set([1, 2, 3]) - set([1, 4, 5, 6]) = {2, 3}
+        """
 
-    # Check early exit
-    if early_exit_criteria(state_dir, k_grid, w_grid, jobs):
-        dlog.warning(f"Already done on target: {target_dir}")
-        return jobs, 0.0
+        checkpoints = utils.listdir_fullpath(self.state_dir)
+        completed_jobs = []
+        for f in checkpoints:
+            loaded_jobs = pickle.load(open(f, 'rb'))
 
-    # Prime the real system or use a dummy one if dealing with a dry run
-    sy = None
-    if not dry_run:
-        (sy, dt, T, L) = prime_system(inp)
-        if rank == 0:
-            nm = f"{inp.model_params.M}/{inp.model_params.N}"
-            dlog.info(f"Solver {nm} primed with {T}/{L} terms in {dt:.01f}m")
-    if dry_run and rank == 0:
-        logger.warning("Running in dry run mode: G is randomly generated")
+            # The first two points are the k and w points
+            completed_jobs.extend([tuple(ll[:2]) for ll in loaded_jobs])
 
-    L = len(jobs)
-    print_every = int(max(L * PRINT_EVERY_PERCENT / 100.0, 1))
+        self.jobs = list(set(self.jobs) - set(completed_jobs))
 
-    if rank == 0:
-        dlog.info(f"Printing every {print_every} jobs")
+    def prep_jobs(self, k_grid, w_grid):
+        """Prepares the jobs to run by assigning each MPI process a chunk of
+        the total job list."""
 
-    overall_config_time = time.time()
-    for cc, (k_u_pi, frequency_gridpoint) in enumerate(jobs):
+        jobs = list(product(k_grid, w_grid))
+        jobs = [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+        return jobs[self.RANK]
 
-        exists, state_fname_path = \
-            check_state(state_dir, k_u_pi, frequency_gridpoint)
-        if exists:
-            logger.debug(f"Target {state_fname_path} exists, continuing")
-            continue
+    def prep_concat(self):
+        """Loads in the full paths to the data in STATE and returns the
+        jobs to load and combine on this rank."""
 
-        # Solve the system
-        if not dry_run:
-            with utils.DisableLogger():
-                G, meta = sy.solve(k_u_pi * np.pi, frequency_gridpoint, solver)
-            A = -G.imag / np.pi
-            computation_time = meta['time'][-1] / 60.0
-            largest_mat_dim = meta['inv'][0]
-            logger.debug(
-                f"Solved A({k_u_pi:.02f}pi, {frequency_gridpoint:.02f}) "
-                f"= {A:.02f} in {computation_time:.02f}m"
+        jobs = utils.listdir_fullpath(self.state_dir)
+        jobs = [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+        return jobs[self.RANK]
+
+    def __init__(self, rank_tool, package_path, config_path, solver, dry_run):
+        self.logger = rank_tool.logger
+        self.SIZE = rank_tool.SIZE
+        self.RANK = rank_tool.RANK
+        self.dry_run = dry_run
+        self.solver = solver
+        base = os.path.splitext(os.path.basename(config_path))[0]
+        self.config_path = config_path
+        self.target_dir = os.path.join(package_path, "results", base)
+        self.state_dir = os.path.join(self.target_dir, "STATE")
+        self.done_file = os.path.join(self.target_dir, "DONE")
+
+    def check_done_file(self):
+        """Checks the calculation directory for a file DONE. If it exists,
+        it indicates that all computations have been saved to res.txt for this
+        config."""
+
+        if os.path.isfile(self.done_file):
+            return True
+        return False
+
+    def prime_system(self):
+        """Prepares the system object by using the stored input parameters."""
+
+        t0 = time.time()
+        sy = system.System(self.inp)
+        T = sy.initialize_generalized_equations()
+        L = sy.initialize_equations()
+        sy.generate_unique_terms()
+        sy.prime_solver()
+        dt = (time.time() - t0) / 60.0
+        return (sy, dt, T, L)
+
+    def finalize(self):
+        """Cleans up the state files by concatenating them. Each rank will
+        read in a random sample of the data saved to STATE, and concatenate
+        them into numpy arrays. Those numpy arrays will then be passed to
+        the 0th rank, concatenated one more time, and saved to disk."""
+
+        to_concat_on_rank = self.prep_concat()  # Full paths
+        final = []
+        for f in to_concat_on_rank:
+            final.extend(pickle.load(open(f, 'rb')))
+
+        return np.array(final)
+
+    def save_final(self, arr):
+        """Saves the final res.npy file. Must be executed on rank 0. If it
+        is called on another rank it will silently do nothing."""
+
+        if self.RANK != 0:
+            return
+
+        res_file = os.path.join(self.target_dir, "res.npy")
+        with open(res_file, 'wb') as f:
+            np.save(f, arr)
+
+    def cleanup(self):
+        """Removes all STATE files and saves the donefile."""
+
+        to_delete_on_rank = self.prep_concat()  # Full paths
+        for f in to_delete_on_rank:
+            os.remove(f)
+
+        with open(self.done_file, 'a') as f:
+            f.write(f"RANK {self.RANK:05} tagged\n")
+
+    def calculate(self):
+        """If there are any to run, executes the calculations. Returns the
+        total elapsed time of the computations."""
+
+        # First, check if everything is done on this config.
+        if self.check_done_file():
+            self.logger.warning(f"DONE file exists {self.config_path}")
+            return 0.0
+
+        # Initialize the input parameters
+        self.inp = InputParameters(yaml.safe_load(open(self.config_path)))
+        self.inp.prime()
+
+        # 8 decimal precision
+        w_grid = np.round(self.inp.get_w_grid(), 8)
+        k_grid = np.round(self.inp.get_k_grid(), 8)  # In units of pi!
+        self.jobs = self.prep_jobs(k_grid, w_grid)
+
+        # Check if there are remaining jobs on this rank
+        if len(self.jobs) == 0:
+            self.logger.warning(f"No jobs to run {self.config_path}")
+            return
+
+        # Load in all jobs which have been completed and get the remaining
+        # jobs to run on this rank by comparing the sets. This will modify
+        # the jobs attribute.
+        self.find_remaining_jobs()
+
+        # Construct the size of the buffer. To avoid lots of read/write
+        # operations (especially when checkpointing), jobs will be buffered
+        # so every N_buff jobs information will be pickled to the STATE
+        # directory.
+        nbuff = int(max(len(self.jobs) // 100, 1))
+        buffer = Buffer(nbuff, self.state_dir)
+
+        # Prepare the system object. We disable the system logger unless on
+        # rank 0 so as to reduce bloat to the output stream.
+        sy = None
+        if not self.dry_run:
+            if self.RANK == 0:
+                (sy, dt, T, L) = self.prime_system()
+            else:
+                with utils.DisableLogger():
+                    (sy, dt, T, L) = self.prime_system()
+        elif self.RANK == 0:
+            self.logger.warning(
+                "Running in dry run mode: G is randomly generated"
             )
-            if A < 0.0:
-                logger.error(f"Negative spectral weight: {A:.02e}")
-            if (cc % print_every == 0 or cc == 0) and rank == 0:
-                logger.info(f"{cc:05}/{L:05} done in {computation_time:.02f}m")
-            sys.stdout.flush()
 
-        else:
-            G, computation_time, largest_mat_dim = dryrun_random_result()
+        # Get the total number of jobs
+        L = len(self.jobs)
+        print_every = int(max(L * PRINT_EVERY_PERCENT / 100.0, 1))
+        if self.RANK == 0:
+            self.logger.info(f"Printing every {print_every} jobs")
 
-        # Write results to disk
-        write_results(
-            k_u_pi, frequency_gridpoint, G, computation_time,
-            largest_mat_dim, state_fname_path
-        )
+        # Main calculation loop. Only jobs that need to be run are included
+        # in the jobs attribute.
+        overall_config_time = time.time()
+        for cc, (_k, _w) in enumerate(self.jobs):
 
-    return jobs, time.time() - overall_config_time
+            # Solve the system
+            if not dry_run:
+                with utils.DisableLogger():
+                    G, meta = sy.solve(_k * np.pi, _w, self.solver)
+                A = -G.imag / np.pi
+                computation_time = meta['time'][-1] / 60.0
+                largest_mat_dim = meta['inv'][0]
+                self.logger.debug(
+                    f"Solved A({_k:.02f}pi, {_w:.02f}) "
+                    f"= {A:.02f} in {computation_time:.02f}m"
+                )
 
+                if A < 0.0:
+                    self.logger.error(f"Negative spectral weight: {A:.02e}")
+                    sys.stdout.flush()
 
-def concat(jobs, mpi_info, package_path, config_path):
-    """Cleans up the directories by removing specific files that indicate which
-    jobs are complete. Mainly, this is done to allow for checkpointing and to
-    reduce the number of files when creating a compressed file of the
-    results."""
+                if (cc % print_every == 0 or cc == 0) and self.RANK == 0:
+                    self.logger.info(
+                        f"{cc:05}/{L:05} done in {computation_time:.02f}m"
+                    )
+                    sys.stdout.flush()
 
-    logger = mpi_info.logger
+            else:
+                G, computation_time, largest_mat_dim = \
+                    Executor.dryrun_random_result()
 
-    # Target directory, will contain res.txt (the results) and STATE, which
-    # tracks which calculations were completed.
-    base = os.path.splitext(os.path.basename(config_path))[0]
-    target_dir = os.path.join(package_path, "results", base)
-    state_dir = os.path.join(target_dir, "STATE")
+            val = [_k, _w, G.real, G.imag, computation_time, largest_mat_dim]
 
-    # Check to make sure there are still w-points to delete in the
-    # state directory, this avoids possible race conditions.
-    donefile = os.path.join(state_dir, "DONE")
-    N_in_state = os.listdir(state_dir)
-    if os.path.isfile(donefile) and len(N_in_state) == 1:
-        logger.debug(f"Target {target_dir} is done")
-        return 'DONE'
+            # Buffer will automatically flush
+            buffer(val)
 
-    results = []
-    for (k_u_pi, frequency_gridpoint) in jobs:
+        # Flush the buffer manually at the end if necessary
+        buffer.flush()
 
-        state_fname_path = os.path.join(
-            state_dir, state_fname(k_u_pi, frequency_gridpoint)
-        )
-        results.append(np.loadtxt(state_fname_path, delimiter='\t').tolist())
-
-    return results
-
-
-def cleanup(jobs, mpi_info, package_path, config_path):
-    """Cleans up the directories by removing specific files that indicate which
-    jobs are complete. Mainly, this is done to allow for checkpointing and to
-    reduce the number of files when creating a compressed file of the
-    results."""
-
-    logger = mpi_info.logger
-
-    # Target directory, will contain res.txt (the results) and STATE, which
-    # tracks which calculations were completed.
-    base = os.path.splitext(os.path.basename(config_path))[0]
-    target_dir = os.path.join(package_path, "results", base)
-    state_dir = os.path.join(target_dir, "STATE")
-
-    # Check to make sure there are still w-points to delete in the
-    # state directory, this avoids possible race conditions.
-    donefile = os.path.join(state_dir, "DONE")
-    N_in_state = os.listdir(state_dir)
-    if os.path.isfile(donefile) and len(N_in_state) == 1:
-        logger.debug(f"Target {target_dir} is done")
-        return
-
-    for (k_u_pi, frequency_gridpoint) in jobs:
-
-        state_fname_path = os.path.join(
-            state_dir, state_fname(k_u_pi, frequency_gridpoint)
-        )
-        os.remove(state_fname_path)
-
-    # Add a new file
-    with open(donefile, 'a') as f:
-        f.write(f"RANK {mpi_info.RANK:05} TAGGED\n")
-
-    logger.debug(f"Confirming target {target_dir} is DONE")
+        return time.time() - overall_config_time
 
 
 if __name__ == '__main__':
@@ -321,7 +326,6 @@ if __name__ == '__main__':
 
     # MPI info includes the logger on that rank
     mpi_info = RankTools(COMM, _dlog, debug)
-    dlog = mpi_info.logger
 
     if mpi_info.RANK == 0:
         # Load in the data, which will be used to process into the jobs. The
@@ -335,63 +339,64 @@ if __name__ == '__main__':
             os.path.join(package_path, "configs")
         )
         all_configs_paths.sort()
-        dlog.info(f"Confirming COMM world size: {mpi_info.SIZE}")
-        dlog.info(f"Running {len(all_configs_paths)} config files")
-        dlog.info(f"Will use solver type {solver}")
-        dlog.info(f"Dryrun is {dry_run}; debug is {debug}")
-        dlog.info(f"Package path is {package_path}")
+        mpi_info.logger.info(f"Confirming COMM world size: {mpi_info.SIZE}")
+        mpi_info.logger.info(f"Running {len(all_configs_paths)} config files")
+        mpi_info.logger.info(f"Will use solver type {solver}")
+        mpi_info.logger.info(f"Dryrun is {dry_run}; debug is {debug}")
+        mpi_info.logger.info(f"Package path is {package_path}")
     else:
         COMM_timer = None
         all_configs_paths = None
 
     rank_timer = time.time()
-    all_configs_paths = COMM.bcast(all_configs_paths, root=0)
-
-    dlog.debug("<- RANK starting up")
 
     # Iterate over the config files
-    jobs_on_config = []
-    for ii, config_path in enumerate(all_configs_paths):
-        if mpi_info.RANK == 0:
-            dlog.info(f"Starting config {ii:03}")
-        c_jobs, elapsed = \
-            calculate(
-                mpi_info, package_path, config_path, solver, dry_run=dry_run
-            )
-        jobs_on_config.append(c_jobs)
+    all_configs_paths = COMM.bcast(all_configs_paths, root=0)
+    for config_path in all_configs_paths:
 
+        # Startup the Executor, which is a helper class for running the
+        # calculation using an MPI implementation
+        executor = Executor(
+            mpi_info, package_path, config_path, solver, dry_run
+        )
+
+        # Run the calculation on this rank
+        elapsed = executor.calculate()
+
+        # Collect the runtimes for each of these processes. This also serves
+        # as a barrier.
         elapsed = COMM.gather(elapsed, root=0)
 
+        # Print some useful information about how fast the overall process
+        # was and how imbalanced the loads were
         if mpi_info.RANK == 0:
             avg = np.mean(elapsed) / 60.0
             sd = np.std(elapsed) / 60.0
-            dlog.info(f"Done in {avg:.02f} +/- {sd:.02f} m")
-
+            mpi_info.logger.info(f"Done in {avg:.02f} +/- {sd:.02f} m")
         COMM.Barrier()
 
-    rank_timer_dt = (time.time() - rank_timer) / 3600.0
-    dlog.info(f"Done in {rank_timer_dt:.02f}h and waiting for other ranks")
-    COMM.Barrier()
-
-    for jobs, config_path in zip(jobs_on_config, all_configs_paths):
-        res = concat(jobs, mpi_info, package_path, config_path)
+        # Begin the concatenation process of collecting all of the STATE files
+        res = executor.finalize()
         res = COMM.gather(res, root=0)
+
+        # Concatenate the results on rank 0 and save to disk
         if mpi_info.RANK == 0:
-            if all([r == 'DONE' for r in res]):
-                continue
-            res = utils.flatten(res)
-            res = np.array(res).reshape(-1, 6)
-            base = os.path.splitext(os.path.basename(config_path))[0]
-            target_dir = os.path.join(package_path, "results", base)
-            res_file = os.path.join(target_dir, "res.txt")
-            np.savetxt(res_file, res)
-    COMM.Barrier()
+            res = np.concatenate(res, axis=0)
+            executor.save_final(res)
+        COMM.Barrier()
 
-    for jobs, config_path in zip(jobs_on_config, all_configs_paths):
-        cleanup(jobs, mpi_info, package_path, config_path)
-    COMM.Barrier()
+        # Final step is to cleanup the old pickle state files and save the
+        # done file
+        executor.cleanup()
+        COMM.Barrier()
 
+        # Last step is to delete STATE
+        if mpi_info.RANK == 0:
+            os.rmdir(executor.state_dir)
+        COMM.Barrier()
+
+    COMM.Barrier()
     if mpi_info.RANK == 0:
         time.sleep(1)
         dt = (time.time() - COMM_timer) / 3600.0
-        dlog.info(f"All ranks done in {dt:.02f}h")
+        mpi_info.logger.info(f"All ranks done in {dt:.02f}h")
