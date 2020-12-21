@@ -219,7 +219,7 @@ class Executor:
         # First, check if everything is done on this config.
         if self.check_done_file():
             self.logger.warning(f"DONE file exists {self.config_path}")
-            return -1
+            return 0.0
 
         # Initialize the input parameters
         self.inp = InputParameters(yaml.safe_load(open(self.config_path)))
@@ -233,7 +233,7 @@ class Executor:
         # Check if there are remaining jobs on this rank
         if len(self.jobs) == 0:
             self.logger.warning(f"No jobs to run {self.config_path}")
-            return
+            return 0.0
 
         # Load in all jobs which have been completed and get the remaining
         # jobs to run on this rank by comparing the sets. This will modify
