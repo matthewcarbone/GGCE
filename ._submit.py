@@ -245,6 +245,8 @@ class Executor:
         # so every N_buff jobs information will be pickled to the STATE
         # directory.
         nbuff = int(max(len(self.jobs) // 100, 1))
+        if self.RANK == 0:
+            self.logger.info(f"Buffer will flush every {nbuff} results")
         buffer = Buffer(nbuff, self.state_dir)
 
         # Prepare the system object. We disable the system logger unless on
