@@ -5,21 +5,21 @@ __maintainer__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Prototype"
 
-import copy
 import os
 
-from itertools import product
 import numpy as np
-import pickle
 import yaml
 
+from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
-from scipy import interpolate
-from scipy.interpolate import InterpolatedUnivariateSpline as ius
 
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 from ggce.engine.structures import InputParameters
+
+
+def lorentzian(x, x0, a, gam):
+    return np.abs(a) * gam**2 / (gam**2 + (x - x0)**2)
 
 
 class Trial:
@@ -27,17 +27,19 @@ class Trial:
     parameters. This class is a helper for querying trials based on the
     parameters specified, and returning spectral functions A(w)."""
 
-    def __init__(self, package_path, config_fname, res="res.txt"):
+    def __init__(self, package_path, config_fname, res="res.npy"):
 
         # Load in the initial data
         c_dir_name = os.path.splitext(config_fname)[0]
         trial_directory = os.path.join(package_path, "results", c_dir_name)
-        results_matrix = np.loadtxt(os.path.join(trial_directory, res))
-        state_dir = os.path.join(trial_directory, "STATE")
-        if os.path.isdir(state_dir):
-            if not os.path.exists(os.path.join(state_dir, "DONE")):
-                msg = "Trial is not confirmed finished: check STATE"
-                dlog.warning(msg)
+        path = os.path.join(trial_directory, res)
+        try:
+            results_matrix = np.loadtxt(path)
+        except UnicodeDecodeError:
+            results_matrix = np.load(open(path, 'rb'))
+        if not os.path.exists(os.path.join(trial_directory, "DONE")):
+            msg = "Trial is not confirmed finished: check STATE"
+            dlog.warning(msg)
 
         # Parse the results matrix
         config_path = os.path.join(package_path, "configs", config_fname)
@@ -88,16 +90,32 @@ class Trial:
         Z = -np.array(band) / np.pi
         return A[:, 0], self.k_grid, Z
 
-    def ground_state_dispersion(self):
+    def ground_state_dispersion(self, lorentzian_fit=None, offset=5):
         """Returns the ground state dispersion computed as the lowest
-        energy peak energy as a function of k."""
+        energy peak energy as a function of k.
+
+        Parameters
+        ----------
+        lorentzian_fit : tuple
+            Whether or not to attempt to fit the ground state peak to a
+            Lorentzian before finding the location of the state.
+        """
 
         energies = []
         for k in self.k_grid:
             G = self(k)
             w = G[:, 0]
             A = -G[:, 2] / np.pi
-            energies.append(w[find_peaks(A)[0][0]])
+            argmax = find_peaks(A)[0][0]
+            w_loc = w[argmax]
+            if lorentzian_fit:
+                eta = self.inp.model_params.eta
+                popt, _ = curve_fit(
+                    lorentzian, w[argmax-offset:argmax+offset],
+                    A[argmax-offset:argmax+offset], p0=[w_loc, A[argmax], eta]
+                )
+                w_loc = popt[0]
+            energies.append(w_loc)
 
         return self.k_grid, energies
 
