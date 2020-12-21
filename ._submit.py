@@ -66,6 +66,12 @@ class RankTools:
         self.logger = \
             LoggerOnRank(rank=self.RANK, logger=logger, debug_flag=bool(debug))
 
+    def chunk_jobs(self, jobs):
+        """Returns self.SIZE chunks, each of which is a list which is a
+        reasonably equally distributed representation of jobs."""
+
+        return [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+
 
 class Buffer:
 
@@ -133,18 +139,11 @@ class Executor:
         the total job list."""
 
         jobs = list(product(k_grid, w_grid))
-        jobs = [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
-        return jobs[self.RANK]
-
-    def prep_concat(self):
-        """Loads in the full paths to the data in STATE and returns the
-        jobs to load and combine on this rank."""
-
-        jobs = utils.listdir_fullpath(self.state_dir)
-        jobs = [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+        jobs = self.rank_tool.chunk_jobs(jobs)
         return jobs[self.RANK]
 
     def __init__(self, rank_tool, package_path, config_path, solver, dry_run):
+        self.rank_tool = rank_tool
         self.logger = rank_tool.logger
         self.SIZE = rank_tool.SIZE
         self.RANK = rank_tool.RANK
@@ -169,6 +168,10 @@ class Executor:
         """Prepares the system object by using the stored input parameters."""
 
         t0 = time.time()
+        nm = f"{self.inp.model_params.M}/{self.inp.model_params.N}"
+        mod = self.inp.model_params.model
+        if self.RANK == 0:
+            self.logger.info(f"Priming with M/N = {nm}, model={mod}")
         sy = system.System(self.inp)
         T = sy.initialize_generalized_equations()
         L = sy.initialize_equations()
@@ -177,13 +180,12 @@ class Executor:
         dt = (time.time() - t0) / 60.0
         return (sy, dt, T, L)
 
-    def finalize(self):
+    def finalize(self, to_concat_on_rank):
         """Cleans up the state files by concatenating them. Each rank will
         read in a random sample of the data saved to STATE, and concatenate
         them into numpy arrays. Those numpy arrays will then be passed to
         the 0th rank, concatenated one more time, and saved to disk."""
 
-        to_concat_on_rank = self.prep_concat()  # Full paths
         final = []
         for f in to_concat_on_rank:
             final.extend(pickle.load(open(f, 'rb')))
@@ -201,10 +203,9 @@ class Executor:
         with open(res_file, 'wb') as f:
             np.save(f, arr)
 
-    def cleanup(self):
+    def cleanup(self, to_delete_on_rank):
         """Removes all STATE files and saves the donefile."""
 
-        to_delete_on_rank = self.prep_concat()  # Full paths
         for f in to_delete_on_rank:
             os.remove(f)
 
@@ -218,7 +219,7 @@ class Executor:
         # First, check if everything is done on this config.
         if self.check_done_file():
             self.logger.warning(f"DONE file exists {self.config_path}")
-            return 0.0
+            return -1
 
         # Initialize the input parameters
         self.inp = InputParameters(yaml.safe_load(open(self.config_path)))
@@ -280,7 +281,7 @@ class Executor:
                 largest_mat_dim = meta['inv'][0]
                 self.logger.debug(
                     f"Solved A({_k:.02f}pi, {_w:.02f}) "
-                    f"= {A:.02f} in {computation_time:.02f}m"
+                    f"= {A:.02f} in {computation_time:.02f} m"
                 )
 
                 if A < 0.0:
@@ -289,7 +290,7 @@ class Executor:
 
                 if (cc % print_every == 0 or cc == 0) and self.RANK == 0:
                     self.logger.info(
-                        f"{cc:05}/{L:05} done in {computation_time:.02f}m"
+                        f"{cc:05}/{L:05} done in {computation_time:.02f} m"
                     )
                     sys.stdout.flush()
 
@@ -336,9 +337,24 @@ if __name__ == '__main__':
         # trial. The N_M_eta_permutations is a list of the (M, N, eta) to run,
         # and the package_cache_path is the base cache path.
         COMM_timer = time.time()
-        all_configs_paths = utils.listdir_fullpath(
+        _all_configs_paths = utils.listdir_fullpath(
             os.path.join(package_path, "configs")
         )
+
+        # Remove any config with a donefile
+        # base = os.path.splitext(os.path.basename(config_path))[0]
+        # self.config_path = config_path
+        # self.target_dir = os.path.join(package_path, "results", base)
+        # self.state_dir = os.path.join(self.target_dir, "STATE")
+        # self.done_file = os.path.join(self.target_dir, "DONE")
+        all_configs_paths = []
+        for config in _all_configs_paths:
+            base = os.path.splitext(os.path.basename(config))[0]
+            target_dir = os.path.join(package_path, "results", base)
+            done_file = os.path.join(target_dir, "DONE")
+            if not os.path.isfile(done_file):
+                all_configs_paths.append(config)
+
         all_configs_paths.sort()
         mpi_info.logger.info(f"Confirming COMM world size: {mpi_info.SIZE}")
         mpi_info.logger.info(f"Running {len(all_configs_paths)} config files")
@@ -361,6 +377,9 @@ if __name__ == '__main__':
             mpi_info, package_path, config_path, solver, dry_run
         )
 
+        # ---------------------------------------------------------------------
+        # CALCULATE -----------------------------------------------------------
+
         # Run the calculation on this rank
         elapsed = executor.calculate()
 
@@ -373,12 +392,31 @@ if __name__ == '__main__':
         if mpi_info.RANK == 0:
             avg = np.mean(elapsed) / 60.0
             sd = np.std(elapsed) / 60.0
-            mpi_info.logger.info(f"Done in {avg:.02f} +/- {sd:.02f} m")
+            mpi_info.logger.info(
+                f"CALCULATE done in {avg:.02f} +/- {sd:.02f} m"
+            )
         COMM.Barrier()
 
+        # ---------------------------------------------------------------------
+        # FINALIZE ------------------------------------------------------------
+
+        # Let the 0th rank list all files in the current config directory and
+        # scatter them to the respective ranks.
+        if mpi_info.RANK == 0:
+            tmp_t = time.time()
+            state_files = utils.listdir_fullpath(executor.state_dir)
+            state_files = mpi_info.chunk_jobs(state_files)
+        else:
+            state_files = None
+        state_files = COMM.scatter(state_files, root=0)
+
         # Begin the concatenation process of collecting all of the STATE files
-        res = executor.finalize()
+        res = executor.finalize(state_files)
         res = COMM.gather(res, root=0)
+
+        if mpi_info.RANK == 0:
+            tmp_t = (time.time() - tmp_t) / 60.0
+            mpi_info.logger.info(f"FINALIZE done in {tmp_t:.02f} m")
 
         # Concatenate the results on rank 0 and save to disk
         if mpi_info.RANK == 0:
@@ -386,18 +424,26 @@ if __name__ == '__main__':
             executor.save_final(res)
         COMM.Barrier()
 
-        # Final step is to cleanup the old pickle state files and save the
-        # done file
-        executor.cleanup()
+        # ---------------------------------------------------------------------
+        # CLEANUP -------------------------------------------------------------
+
+        if mpi_info.RANK == 0:
+            tmp_t = time.time()
+
+        executor.cleanup(state_files)
         COMM.Barrier()
 
         # Last step is to delete STATE
         if mpi_info.RANK == 0:
             os.rmdir(executor.state_dir)
+
+        if mpi_info.RANK == 0:
+            tmp_t = (time.time() - tmp_t) / 60.0
+            mpi_info.logger.info(f"CLEANUP done in {tmp_t:.02f} m")
         COMM.Barrier()
 
     COMM.Barrier()
     if mpi_info.RANK == 0:
         time.sleep(1)
         dt = (time.time() - COMM_timer) / 3600.0
-        mpi_info.logger.info(f"All ranks done in {dt:.02f}h")
+        mpi_info.logger.info(f"ALL done in {dt:.02f} h")
