@@ -172,6 +172,12 @@ class SlurmWriter:
             SBATCH_lines.append(f"#SBATCH --mail-user={email}")
             SBATCH_lines.append(f"#SBATCH --mail-type=ALL")
 
+        # Exclusive flag ------------------------------------------------------
+        exclusive = self.get_val("exclusive")
+        if exclusive is not None:
+            if exclusive:
+                SBATCH_lines.append(f"#SBATCH --exclusive")
+
         # Job name ------------------------------------------------------------
         job_name = self.get_val("job_name")
         if job_name is not None:
@@ -260,7 +266,7 @@ class SlurmWriter:
                 last_line = f'srun{bind_str} python3 ._submit.py "$@" &\nwait'
             else:
                 last_line = f'srun{bind_str} python3 ._submit.py "$@"'
-        elif cluster == "rr":
+        elif cluster == "rr" or cluster == 'habanero':
             last_line = f'mpiexec python3 ._submit.py "$@"'
         else:
             msg = f"Unknown cluster {cluster}"
