@@ -304,6 +304,7 @@ class Executor:
 
         # Flush the buffer manually at the end if necessary
         buffer.flush()
+        sys.stdout.flush()
 
         return time.time() - overall_config_time
 
