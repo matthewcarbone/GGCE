@@ -152,7 +152,7 @@ class SlurmWriter:
         if account == 'no_account':
             pass
         elif account is not None:
-            SBATCH_lines.append(f"#SBATCH --account={constraint}")
+            SBATCH_lines.append(f"#SBATCH --account={account}")
         else:
             dlog.warning("Account unspecified and not `no_account`")
 
