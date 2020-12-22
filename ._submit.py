@@ -29,7 +29,7 @@ from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
 
 
-PRINT_EVERY_PERCENT = 10.0
+PRINT_EVERY_PERCENT = 5.0
 
 
 class LoggerOnRank:
@@ -370,13 +370,16 @@ if __name__ == '__main__':
 
     # Iterate over the config files
     all_configs_paths = COMM.bcast(all_configs_paths, root=0)
-    for config_path in all_configs_paths:
+    for config_index, config_path in enumerate(all_configs_paths):
 
         # Startup the Executor, which is a helper class for running the
         # calculation using an MPI implementation
         executor = Executor(
             mpi_info, package_path, config_path, solver, dry_run
         )
+        if mpi_info.RANK == 0:
+            L = len(all_configs_paths)
+            mpi_info.logger.info(f"Starting config {config_index}/{L}")
 
         # ---------------------------------------------------------------------
         # CALCULATE -----------------------------------------------------------
