@@ -62,13 +62,32 @@ class SlurmWriter:
         return [
             f"#SBATCH --time-min={t_min}",
             f"#SBATCH --comment={t_total}",
-            f"#SBATCH --signal=B:USR1@60",   # catch signal 60 s from kill
+            "#SBATCH --signal=B:USR1@60",   # catch signal 60 s from kill
             "#SBATCH --requeue",
             "#SBATCH --open-mode=append\n",
             "ckpt_command=\n",
             ". /usr/common/software/variable-time-job/setup.sh",
             "requeue_job func_trap USR1",
             "#\n",
+        ]
+
+    def _get_requeue_Habanero(self):
+        """Get's the requeue lines for the Habanero cluster."""
+
+        requeue_fn = """\n
+requeue_job()
+{
+    echo "requeue n.o. $SLURM_RESTART_COUNT"
+    date
+    scontrol requeue $SLURM_JOBID
+}\n
+        """
+
+        return [
+            "#SBATCH --signal=B:USR1@60",  # catch sig term 60 s from end
+            "#SBATCH --requeue",  # Enable requeuing
+            requeue_fn,
+            "trap 'requeue_job' USR1"
         ]
 
     def get_requeue_lines(self):
@@ -83,8 +102,12 @@ class SlurmWriter:
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-        if cluster == "Cori":
+        if cluster == "Cori" or cluster == "cori":
             return self._get_requeue_Cori()
+
+        # Using rr to test the requeue script
+        elif cluster == "Habanero" or cluster == "habanero" or cluster == "rr":
+            return self._get_requeue_Habanero()
         else:
             msg = f"Unsupported cluster {cluster} for requeue"
             dlog.critical(msg)
@@ -275,8 +298,13 @@ class SlurmWriter:
                 last_line = f'srun{bind_str} python3 ._submit.py "$@" &\nwait'
             else:
                 last_line = f'srun{bind_str} python3 ._submit.py "$@"'
-        elif cluster == "rr" or cluster == 'habanero':
+        elif cluster == "rr":
             last_line = f'mpiexec python3 ._submit.py "$@"'
+        elif cluster == "habanero":
+            if self.cl_args['requeue']:
+                last_line = f'mpiexec python3 ._submit.py "$@" &\nwait'
+            else:
+                last_line = f'mpiexec python3 ._submit.py "$@"'
         else:
             msg = f"Unknown cluster {cluster}"
             dlog.critical(msg)
