@@ -298,9 +298,7 @@ requeue_job()
                 last_line = f'srun{bind_str} python3 ._submit.py "$@" &\nwait'
             else:
                 last_line = f'srun{bind_str} python3 ._submit.py "$@"'
-        elif cluster == "rr":
-            last_line = f'mpiexec python3 ._submit.py "$@"'
-        elif cluster == "habanero":
+        elif cluster == "rr" or cluster == 'habanero' or cluster == 'Habanero':
             if self.cl_args['requeue']:
                 last_line = f'mpiexec python3 ._submit.py "$@" &\nwait'
             else:
