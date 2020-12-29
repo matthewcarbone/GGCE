@@ -38,8 +38,9 @@ class Trial:
         except UnicodeDecodeError:
             results_matrix = np.load(open(path, 'rb'))
         if not os.path.exists(os.path.join(trial_directory, "DONE")):
-            msg = "Trial is not confirmed finished: check STATE"
-            dlog.warning(msg)
+            if res != "res.txt":
+                msg = "Trial is not confirmed finished: check STATE"
+                dlog.warning(msg)
 
         # Parse the results matrix
         config_path = os.path.join(package_path, "configs", config_fname)
@@ -122,7 +123,7 @@ class Trial:
 
 class Results:
 
-    def __init__(self, package_path):
+    def __init__(self, package_path, res="res.npy"):
 
         self.path = package_path
         self.master = dict()
@@ -133,7 +134,9 @@ class Results:
         # Nesting begins with the configs
         for config_dir in config_directories:
             base_config_name = os.path.basename(config_dir)
-            self.master[base_config_name] = Trial(self.path, base_config_name)
+            self.master[base_config_name] = Trial(
+                self.path, base_config_name, res=res
+            )
 
     def __call__(self, config_name):
         return self.master[config_name]
