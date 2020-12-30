@@ -142,13 +142,16 @@ class Executor:
         jobs = self.rank_tool.chunk_jobs(jobs)
         return jobs[self.RANK]
 
-    def __init__(self, rank_tool, package_path, config_path, solver, dry_run):
+    def __init__(
+        self, rank_tool, package_path, config_path, solver, dry_run, nbuff
+    ):
         self.rank_tool = rank_tool
         self.logger = rank_tool.logger
         self.SIZE = rank_tool.SIZE
         self.RANK = rank_tool.RANK
         self.dry_run = dry_run
         self.solver = solver
+        self.nbuff = nbuff
         base = os.path.splitext(os.path.basename(config_path))[0]
         self.config_path = config_path
         self.target_dir = os.path.join(package_path, "results", base)
@@ -244,7 +247,10 @@ class Executor:
         # operations (especially when checkpointing), jobs will be buffered
         # so every N_buff jobs information will be pickled to the STATE
         # directory.
-        nbuff = int(max(len(self.jobs) // 100, 1))
+        if self.nbuff > 0:
+            nbuff = self.nbuff
+        else:
+            nbuff = int(max(len(self.jobs) // 100, 1))
         if self.RANK == 0:
             self.logger.info(f"Buffer will flush every {nbuff} results")
         buffer = Buffer(nbuff, self.state_dir)
@@ -302,6 +308,10 @@ class Executor:
 
             val = [_k, _w, G.real, G.imag, computation_time, largest_mat_dim]
 
+            if self.RANK == 0 and cc == 0:
+                est_size = int(largest_mat_dim**2 * 16.0 / 1e9)
+                self.logger.info(f"Largest matrix size: {est_size}GB")
+
             # Buffer will automatically flush
             buffer(val)
 
@@ -327,6 +337,10 @@ if __name__ == '__main__':
 
     # Type of solver
     solver = int(sys.argv[4])
+
+    # Number of calculation steps before flushing the buffer. Default CL arg
+    # is -1 corresponding to int(max(calculations // 100, 1)).
+    nbuff = int(sys.argv[5])
 
     # MPI info includes the logger on that rank
     mpi_info = RankTools(COMM, _dlog, debug)
@@ -375,7 +389,7 @@ if __name__ == '__main__':
         # Startup the Executor, which is a helper class for running the
         # calculation using an MPI implementation
         executor = Executor(
-            mpi_info, package_path, config_path, solver, dry_run
+            mpi_info, package_path, config_path, solver, dry_run, nbuff
         )
         if mpi_info.RANK == 0:
             L = len(all_configs_paths)

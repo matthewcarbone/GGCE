@@ -124,6 +124,11 @@ def global_parser(sys_argv):
         'entire matrix at once.'
     )
     execute_sp.add_argument(
+        '--buffer', default=-1, dest='nbuff', type=int,
+        help='Sets the number of calculations before the buffer flushes. '
+        'Default is set to the total calculations // 100.'
+    )
+    execute_sp.add_argument(
         '-P', '--package', type=str, default=None, dest='package',
         help='Name of the package to prime. Packages must be contained in the '
         '`package_dir` directory. If unspecified, defaults to the last primed '
