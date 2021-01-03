@@ -285,11 +285,11 @@ class Executor:
                 with utils.DisableLogger():
                     G, meta = sy.solve(_k * np.pi, _w, self.solver)
                 A = -G.imag / np.pi
-                computation_time = meta['time'][-1] / 60.0
+                tcomp = meta['time'][-1] / 60.0
                 largest_mat_dim = meta['inv'][0]
                 self.logger.debug(
                     f"Solved A({_k:.02f}pi, {_w:.02f}) "
-                    f"= {A:.02f} in {computation_time:.02f} m"
+                    f"= {A:.02f} in {tcomp:.02f} m"
                 )
 
                 if A < 0.0:
@@ -297,16 +297,13 @@ class Executor:
                     sys.stdout.flush()
 
                 if (cc % print_every == 0 or cc == 0) and self.RANK == 0:
-                    self.logger.info(
-                        f"{cc:05}/{L:05} done in {computation_time:.02f} m"
-                    )
+                    self.logger.info(f"{cc:05}/{L:05} done in {tcomp:.02f} m")
                     sys.stdout.flush()
 
             else:
-                G, computation_time, largest_mat_dim = \
-                    Executor.dryrun_random_result()
+                G, tcomp, largest_mat_dim = Executor.dryrun_random_result()
 
-            val = [_k, _w, G.real, G.imag, computation_time, largest_mat_dim]
+            val = [_k, _w, G.real, G.imag, tcomp, largest_mat_dim]
 
             if self.RANK == 0 and cc == 0:
                 est_size = largest_mat_dim**2 * 16.0 / 1e9
