@@ -309,8 +309,8 @@ class Executor:
             val = [_k, _w, G.real, G.imag, computation_time, largest_mat_dim]
 
             if self.RANK == 0 and cc == 0:
-                est_size = int(largest_mat_dim**2 * 16.0 / 1e9)
-                self.logger.info(f"Largest matrix size: {est_size}GB")
+                est_size = largest_mat_dim**2 * 16.0 / 1e9
+                self.logger.info(f"Largest matrix size: {est_size:.02f} GB")
 
             # Buffer will automatically flush
             buffer(val)
