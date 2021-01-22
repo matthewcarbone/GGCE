@@ -134,9 +134,13 @@ class Results:
         # Nesting begins with the configs
         for config_dir in config_directories:
             base_config_name = os.path.basename(config_dir)
-            self.master[base_config_name] = Trial(
-                self.path, base_config_name, res=res
-            )
+            try:
+                self.master[base_config_name] = Trial(
+                    self.path, base_config_name, res=res
+                )
+            except OSError:  # File not found, i.e. we didn't complete trial
+                print(f"Cannot find {base_config_name}")
+                pass
 
     def __call__(self, config_name):
         return self.master[config_name]
