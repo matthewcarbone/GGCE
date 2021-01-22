@@ -258,7 +258,7 @@ class System:
             )
             dlog.debug(f"Predicted {T} equations from combinatorics equations")
 
-            assert T == L
+            assert T == L, f"{T}, {L}"
 
         totals = self._get_total_terms()
         dlog.debug(f"Predicting {totals} total terms")
