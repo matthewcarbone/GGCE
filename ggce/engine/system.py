@@ -14,8 +14,10 @@ from scipy.sparse.linalg import spsolve
 import time
 
 from ggce.utils.logger import default_logger as dlog
+from ggce.utils.utils import DisableLogger
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
+from ggce.engine.structures import InputParameters
 
 BYTES_TO_MB = 1048576
 
@@ -600,3 +602,37 @@ class System:
             return self.one_shot_sparse_solve(k, w)
         else:
             raise RuntimeError(f"Unknown solver type {solver}")
+
+
+def n_eq(M, N, model, ae=None, disable_logger=True):
+    """Returns the number of equations in the closure."""
+
+    assert len(M) == len(N) == len(model)
+
+    d = {
+        't': 1.0,
+        'Omega': [1.0 for _ in range(len(M))],
+        'lam': [1.0 for _ in range(len(M))],
+        'M_extent': [M],
+        'N_bosons': [N],
+        'model': model,
+        'eta': 0.1,
+        'w_grid_info': [[-1.0, 1.0, 10]],
+        'k_grid_info': [0.0],
+        'linspacek': False
+    }
+
+    if ae is not None:
+        d['absolute_extent'] = ae
+
+    with DisableLogger(disable_logger):
+        inp = InputParameters(d)
+        assert inp.counter_max == 1
+        for _inp in inp:
+            _inp.prime()
+            sy = System(_inp)
+            T = sy.initialize_generalized_equations()
+            L = sy.initialize_equations()
+            sy.generate_unique_terms()  # Check to ensure no major errors
+
+    return T, L

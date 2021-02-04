@@ -24,11 +24,16 @@ def flatten(t):
 
 class DisableLogger:
 
+    def __init__(self, disable=True):
+        self.disable = disable
+
     def __enter__(self):
-        logging.disable(logging.CRITICAL)
+        if self.disable:
+            logging.disable(logging.CRITICAL)
 
     def __exit__(self, exit_type, exit_value, exit_traceback):
-        logging.disable(logging.NOTSET)
+        if self.disable:
+            logging.disable(logging.NOTSET)
 
 
 # https://stackoverflow.com/questions/8924173/how-do-i-print-bold-text-in-python
