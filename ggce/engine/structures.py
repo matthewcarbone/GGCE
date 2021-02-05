@@ -31,6 +31,8 @@ def model_coupling_map(coupling_type, t, Omega, lam):
         g = lam
     elif coupling_type == 'SSH':  # SSH
         g = math.sqrt(t * Omega * lam / 2.0)
+    elif coupling_type == 'bondSSH':  # bond SSH (note this is a guess)
+        g = math.sqrt(t * Omega * lam)
     else:
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
     return g
@@ -224,6 +226,21 @@ class InputParameters:
                     ),
                     SingleTerm(
                         x=-1, y=0, dagger='-', g=g, boson_type=boson_type
+                    )
+                ])
+            elif model == 'bondSSH':
+                self.terms.extend([
+                    SingleTerm(
+                        x=1, y=0.5, dagger='+', g=g, boson_type=boson_type
+                    ),
+                    SingleTerm(
+                        x=1, y=0.5, dagger='-', g=g, boson_type=boson_type
+                    ),
+                    SingleTerm(
+                        x=-1, y=-0.5, dagger='+', g=g, boson_type=boson_type
+                    ),
+                    SingleTerm(
+                        x=-1, y=-0.5, dagger='-', g=g, boson_type=boson_type
                     )
                 ])
             elif model == 'SSH':
