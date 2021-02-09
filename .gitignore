@@ -1,6 +1,7 @@
 *.pyc
 job_data/
 results/
+inp/
 *.sh
 slurm_config.yaml
 .LIFO_queue.yaml

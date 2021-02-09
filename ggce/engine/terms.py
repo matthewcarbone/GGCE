@@ -368,7 +368,7 @@ class NonIndexTerm(Term):
 
         self.g_arg += location
         self.f_arg -= location
-        self.modify_n_bosons(self.hterm.boson_type, location)
+        self.modify_n_bosons(self.hterm.bt, location)
 
     def coefficient(self, k, w):
 

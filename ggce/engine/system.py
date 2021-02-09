@@ -14,10 +14,8 @@ from scipy.sparse.linalg import spsolve
 import time
 
 from ggce.utils.logger import default_logger as dlog
-from ggce.utils.utils import DisableLogger
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
-from ggce.engine.structures import InputParameters
 
 BYTES_TO_MB = 1048576
 
@@ -147,21 +145,20 @@ class System:
         delta values.
     """
 
-    def __init__(self, input_params):
+    def __init__(self, system_params):
         """Initializer.
 
         Parameters
         ----------
-        input_params : InputParameters
+        system_params : SystemParameters
             Container for the full set of parameters.
         """
 
-        self.input_params = input_params
-        self.model_params = self.input_params.model_params
+        self.system_params = system_params
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = self.model_params.n_boson_types
+        self.n_boson_types = self.system_params.n_boson_types
 
         self.master_f_arg_list = None
 
@@ -175,17 +172,17 @@ class System:
 
         # Total number of bosons allowed is the sum of the number of bosons
         # allowed for each boson type
-        self.N_total_max = sum(self.model_params.N)
+        self.N_total_max = sum(self.system_params.N)
 
         # Config space generator
         self.config_space_generator = ConfigurationSpaceGenerator(
-            self.model_params.absolute_extent,
-            self.model_params.M, self.model_params.N
+            self.system_params.absolute_extent,
+            self.system_params.M, self.system_params.N
         )
 
     def _append_generalized_equation(self, n_bosons, config):
 
-        eq = Equation(config, input_params=self.input_params)
+        eq = Equation(config, system_params=self.system_params)
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
@@ -236,7 +233,7 @@ class System:
         # for this special case. Note that no matter what this is always
         # neded, but the form of the GreenEquation EOM will differ depending
         # on the system type.
-        eq = GreenEquation(input_params=self.input_params)
+        eq = GreenEquation(system_params=self.system_params)
         eq.initialize_index_term()
         eq.initialize_terms()
         eq._populate_f_arg_terms()
@@ -256,7 +253,7 @@ class System:
         if self.n_boson_types == 1:
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
-                self.model_params.M, self.model_params.N, self.n_boson_types
+                self.system_params.M, self.system_params.N, self.n_boson_types
             )
             dlog.debug(f"Predicted {T} equations from combinatorics equations")
 
@@ -418,7 +415,7 @@ class System:
         row_ind = []
         col_ind = []
         dat = []
-        total_bosons = np.sum(self.model_params.N)
+        total_bosons = np.sum(self.system_params.N)
         for n_bosons in range(total_bosons + 1):
             for eq in self.equations[n_bosons]:
                 row_dict = dict()
@@ -506,7 +503,7 @@ class System:
     def _log_solve_info(self):
         """Pipes some of the current solving information to the outstream."""
 
-        d = copy.deepcopy(vars(self.input_params))
+        d = copy.deepcopy(vars(self.system_params))
         d['terms'] = len(d['terms'])
         dlog.debug(f"Solving recursively: {d}")
 
@@ -525,7 +522,7 @@ class System:
             'time': []
         }
 
-        total_bosons = np.sum(self.model_params.N)
+        total_bosons = np.sum(self.system_params.N)
 
         for n_bosons in range(total_bosons, 0, -1):
 
@@ -604,35 +601,35 @@ class System:
             raise RuntimeError(f"Unknown solver type {solver}")
 
 
-def n_eq(M, N, model, ae=None, disable_logger=True):
-    """Returns the number of equations in the closure."""
+# def n_eq(M, N, model, ae=None, disable_logger=True):
+#     """Returns the number of equations in the closure."""
 
-    assert len(M) == len(N) == len(model)
+#     assert len(M) == len(N) == len(model)
 
-    d = {
-        't': 1.0,
-        'Omega': [1.0 for _ in range(len(M))],
-        'lam': [1.0 for _ in range(len(M))],
-        'M_extent': [M],
-        'N_bosons': [N],
-        'model': model,
-        'eta': 0.1,
-        'w_grid_info': [[-1.0, 1.0, 10]],
-        'k_grid_info': [0.0],
-        'linspacek': False
-    }
+#     d = {
+#         't': 1.0,
+#         'Omega': [1.0 for _ in range(len(M))],
+#         'lam': [1.0 for _ in range(len(M))],
+#         'M_extent': [M],
+#         'N_bosons': [N],
+#         'model': model,
+#         'eta': 0.1,
+#         'w_grid_info': [[-1.0, 1.0, 10]],
+#         'k_grid_info': [0.0],
+#         'linspacek': False
+#     }
 
-    if ae is not None:
-        d['absolute_extent'] = ae
+#     if ae is not None:
+#         d['absolute_extent'] = ae
 
-    with DisableLogger(disable_logger):
-        inp = InputParameters(d)
-        assert inp.counter_max == 1
-        for _inp in inp:
-            _inp.prime()
-            sy = System(_inp)
-            T = sy.initialize_generalized_equations()
-            L = sy.initialize_equations()
-            sy.generate_unique_terms()  # Check to ensure no major errors
+#     with DisableLogger(disable_logger):
+#         inp = InputParameters(d)
+#         assert inp.counter_max == 1
+#         for _inp in inp:
+#             _inp.prime()
+#             sy = System(_inp)
+#             T = sy.initialize_generalized_equations()
+#             L = sy.initialize_equations()
+#             sy.generate_unique_terms()  # Check to ensure no major errors
 
-    return T, L
+#     return T, L

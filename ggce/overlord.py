@@ -7,10 +7,10 @@ __email__ = "x94carbone@gmail.com"
 
 from datetime import datetime
 from math import floor
-import os
+from pathlib import Path
 import yaml
 
-from ggce.engine.structures import InputParameters
+from ggce.engine.structures import parse_inp
 from ggce.utils import utils
 from ggce.utils.logger import default_logger as dlog
 
@@ -23,15 +23,15 @@ class SlurmWriter:
     target_dir : str
         The full path location to the directory that will contain the SLURM
         submit script.
-    default_config : dict
+    slurm_config : dict
         A dictionary containing the default configurations for the SLURM
         script. These will be overridden by command line arguments.
     """
 
     def __init__(self, cl_args):
         self.cl_args = dict(vars(cl_args))
-        self.loaded_config = yaml.safe_load(
-            open(self.cl_args['loaded_config_path'])
+        self.slurm_config = yaml.safe_load(
+            open(self.cl_args['slurm_config_path'])
         )
 
     def get_val(self, key):
@@ -41,7 +41,7 @@ class SlurmWriter:
         val = self.cl_args.get(key)
         if val is not None:
             return val
-        val = self.loaded_config.get(key)
+        val = self.slurm_config.get(key)
         return val
 
     def _get_requeue_Cori(self):
@@ -96,7 +96,7 @@ requeue_job()
         the cluster.
         """
 
-        cluster = self.loaded_config.get("cluster")
+        cluster = self.slurm_config.get("cluster")
         if cluster is None:
             msg = "Cluster required for requeue job"
             dlog.critical(msg)
@@ -121,13 +121,13 @@ requeue_job()
 
         # Modules -------------------------------------------------------------
         # Only check the config for this
-        other_lines = self.loaded_config.get("other_lines")
+        other_lines = self.slurm_config.get("other_lines")
         if other_lines is not None:
             for line in other_lines:
                 lines.append(f"{line}")
 
         # Threads -------------------------------------------------------------
-        max_threads = self.loaded_config.get("max_threads")
+        max_threads = self.slurm_config.get("max_threads")
         if max_threads is None:
             threads = phys_cores_per_task
         else:
@@ -289,7 +289,7 @@ requeue_job()
         other_lines = self.get_other_lines(phys_cores_per_task)
         bind_cores = self.get_val("bind_cores")
 
-        cluster = self.loaded_config.get("cluster")
+        cluster = self.slurm_config.get("cluster")
 
         # The last line is always the same unless requeue
         if cluster == "Cori":
@@ -323,10 +323,9 @@ requeue_job()
 
 class BaseOverlord:
     def __init__(self, cl_args):
-        self.cache_dir = utils.get_cache_dir()
-        self.package_dir = utils.get_package_dir()
+        self.cache_dir = Path(utils.get_cache_dir())
         self.cl_args = cl_args
-        self.queue_path = utils.LIFO_QUEUE_PATH
+        self.queue_path = Path(utils.LIFO_QUEUE_PATH)
 
 
 class Prime(BaseOverlord):
@@ -340,9 +339,6 @@ class Prime(BaseOverlord):
     cache_dir : str
         Path to the location for saving the results. Checks the environment
         variable GGCE_CACHE_DIR; defaults to a local directory "cache".
-    package_dir : str
-        Path to the location of the packages. Checks the environment variable
-        GGCE_PACKAGES_DIR; defaults to local directory "packages".
     cl_args : dict
         Dictionary representation of the command line arguments.
     staged_package_path : str
@@ -358,122 +354,80 @@ class Prime(BaseOverlord):
     def __init__(self, cl_args):
         super().__init__(cl_args)
 
-        now = datetime.now()
-        self.dt_string = now.strftime("%Y-%m-%d-%H:%M:%S")
+        self.dt_string = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
         # Select the user-specified package to run
-        package_name = self.cl_args.package
-        package_dir = self.cl_args.package_dir
-        self.staged_package_path = os.path.join(package_dir, package_name)
-        if not os.path.isdir(self.staged_package_path):
-            msg = f"Package path {self.staged_package_path} does not exist"
+        yaml_path = Path(self.cl_args.inp)
+        if not yaml_path.exists():
+            msg = f"Package path {yaml_path} does not exist"
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-        msg = "Selected Package " + utils.bold(f"{self.staged_package_path}")
-        dlog.info(msg)
-
-    def _get_all_packages(self):
-        """Gets all non-template packages from the packages directory.
-        Returns a list of the full paths."""
-
-        all_packages = utils.listdir_fullpath(self.package_dir)
-        all_packages = [
-            p for p in all_packages
-            if ("TEMPLATE" not in p and ".gitignore" not in p)
-        ]
-        dlog.debug(
-            f"Found a total of {len(all_packages)} packages in "
-            f"{self.package_dir}"
-        )
-        return all_packages
+        self.mp, self.gp = parse_inp(yaml_path)
+        self.run_name = yaml_path.stem + "_" + self.dt_string
 
     def _setup_cache_target(self):
         """Creates the necessary directories in the cache."""
 
-        basename = os.path.basename(self.staged_package_path)
-        basename = f"{basename}_{self.dt_string}"
-        if self.cl_args.info is not None:
-            basename = f"{basename}_{self.cl_args.info}"
-        pack_name = os.path.join(self.cache_dir, basename)
+        basename = self.run_name
+        if self.mp.info is not None:
+            basename = f"{self.run_name}_{self.mp.info}"
+        pack_name = Path(self.cache_dir) / Path(basename)
 
         # Create the target directory in the cache
         dlog.debug(f"Making package directory {pack_name}")
-        os.makedirs(pack_name, exist_ok=False)
-        bold_str = utils.bold(f"-P {basename}")
-        dlog.info(f"Submit with {bold_str}")
-        return pack_name, basename
+        pack_name.mkdir(parents=True)
+        bold_str = utils.bold(f"-i {basename}")
+        print(f"Package initialized, submit with {bold_str}")
+        return pack_name
 
-    def _get_config_files(self):
-        """Returns a list of all the staged config files in this package,
-        sorted. Note that config files must contain the substring
-        `config.yaml`."""
-
-        # Load in all files
-        all_files = utils.listdir_fullpath(self.staged_package_path)
-
-        tmp_staged_configs = [s for s in all_files if ".yaml" in s]
-        configs = dict()
-
-        if len(tmp_staged_configs) < 1:
-            dlog.error("Len of staged configs is less than 1")
-
-        for jj, f in enumerate(tmp_staged_configs):
-            fname = f.split("/")[-1]
-
-            # Skip configs not specified
-            if self.cl_args.c_to_run is not None:
-                if fname not in self.cl_args.c_to_run:
-                    dlog.debug(f"Skipping config {fname}")
-                    continue
-
-            configs[fname] = yaml.safe_load(open(f))
-
-        return configs
-
-    def _ready_package(self, configs, package_cache_path):
+    def _ready_package(self, package_cache_path):
         """Uses the list of configs passed and the command line information
         to produce the computation-ready input file information."""
 
-        # Iterate over the loaded config dictionaries
-        cl_args = dict(vars(self.cl_args))
-        package_configs_directory = os.path.join(package_cache_path, "configs")
-        os.makedirs(package_configs_directory, exist_ok=False)
+        # Save the grid information
+        grid_path = package_cache_path / Path("grids.yaml")
+        self.gp.save(grid_path)
 
-        for config_name, config_dict in configs.items():
+        # Create a configs directory
+        config_path = package_cache_path / Path("configs")
+        config_path.mkdir()
 
-            # For each config dictionary, initialize the InputParameters
-            # object, and parse that, iterating through it to produce all
-            # M/N permutations
-            upper_inp = InputParameters(config_dict, cl_args)
+        # Create a results directory
+        results_path = package_cache_path / Path("results")
+        results_path.mkdir()
 
-            for sub_cc, inp in enumerate(upper_inp):
-                name = f"{sub_cc:03}_{config_name}"
-                t = os.path.join(package_configs_directory, name)
-                inp.save(t)
-                dlog.debug(f"Prepared config {name}")
-                name_no_ext = os.path.splitext(name)[0]
-                config_results_path = \
-                    os.path.join(package_cache_path, "results", name_no_ext)
-                os.makedirs(os.path.join(config_results_path, "STATE"))
+        for ii, d in enumerate(self.mp):
+            ii_p = Path(f"{ii:08}.yaml")
 
-    def _append_queue(self, package_basename):
+            # The dictionary `d` should contain all information about that
+            # run permutation. Save that directory
+            d_path = config_path / ii_p
+
+            with open(d_path, 'w') as f:
+                yaml.safe_dump(d, f)
+
+            # Create a results path, along with a STATE directory
+            r_path = results_path / Path(ii_p.stem) / Path("STATE")
+            r_path.mkdir(parents=True)
+
+    def _append_queue(self):
         """For convenience, so the user doesn't need to copy/paste the package
         names each time they submit a job. This is a LIFO (last in first out)
         queue, so the most recent primed job will be the one submitted if the
         user does not specify a package."""
 
-        if os.path.exists(self.queue_path):
+        if self.queue_path.exists():
             queue = yaml.safe_load(open(self.queue_path))
             queue['trials'].append({
                 'date_primed': self.dt_string,
-                'package_basename': package_basename
+                'package_basename': self.run_name
             })
         else:
             queue = {
                 'trials': [{
                     'date_primed': self.dt_string,
-                    'package_basename': package_basename
+                    'package_basename': self.run_name
                 }]
             }
 
@@ -486,10 +440,9 @@ class Prime(BaseOverlord):
         This file is then read by the RANK=0 MPI process and distributed to
         the workers during execution."""
 
-        package_cache_path, package_basename = self._setup_cache_target()
-        configs = self._get_config_files()
-        self._ready_package(configs, package_cache_path)
-        self._append_queue(package_basename)
+        package_cache_path = self._setup_cache_target()
+        self._ready_package(package_cache_path)
+        self._append_queue()
 
 
 class Submitter(BaseOverlord):
@@ -525,15 +478,17 @@ class Submitter(BaseOverlord):
         # Get the absolute path to the package, and raise a critical error if
         # the user-specified package does not exist. We also check the LIFO
         # queue if the package is not specified.
-        if self.cl_args.package is not None:
-            basename = self.cl_args.package
+        if self.cl_args.inp is not None:
+            basename = self.cl_args.inp
+            bold_basename = utils.bold(basename)
+            dlog.info(f"Using specified package {bold_basename}")
         else:
             basename = self._load_last_package_from_LIFO_queue()
             bold_basename = utils.bold(basename)
             dlog.info(f"Using package {bold_basename} from LIFO queue")
 
-        package = os.path.join(self.cache_dir, basename)
-        if not os.path.isdir(package):
+        package = Path(self.cache_dir) / Path(basename)
+        if not package.is_dir():
             msg = f"Cached package path {package} does not exist"
             dlog.critical(msg)
             raise RuntimeError(msg)
@@ -544,7 +499,7 @@ class Submitter(BaseOverlord):
         slurm_writer = SlurmWriter(self.cl_args)
 
         dlog.debug(f"Package path {package}")
-        submit_script = os.path.join(package, "submit.sbatch")
+        submit_script = package / Path("submit.sbatch")
 
         # Write the slurm script regardless of --bash, why not
         slurm_writer.write(submit_script, stream_name=basename)
@@ -579,7 +534,7 @@ class Submitter(BaseOverlord):
 
         # Else we go through the protocol of submitting a job via SLURM
         else:
-            os.makedirs(utils.JOB_DATA_PATH, exist_ok=True)
+            Path.makedir(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
             args = f"{package} {debug} {dryrun} {solver} {nbuff}"
             out = utils.run_command(f"sbatch submit.sbatch {args}")
