@@ -369,15 +369,14 @@ class Prime(BaseOverlord):
     def _setup_cache_target(self):
         """Creates the necessary directories in the cache."""
 
-        basename = self.run_name
         if self.mp.info is not None:
-            basename = f"{self.run_name}_{self.mp.info}"
-        pack_name = Path(self.cache_dir) / Path(basename)
+            self.run_name = f"{self.run_name}_{self.mp.info}"
+        pack_name = Path(self.cache_dir) / Path(self.run_name)
 
         # Create the target directory in the cache
         dlog.debug(f"Making package directory {pack_name}")
         pack_name.mkdir(parents=True)
-        bold_str = utils.bold(f"-i {basename}")
+        bold_str = utils.bold(f"-i {self.run_name}")
         print(f"Package initialized, submit with {bold_str}")
         return pack_name
 
@@ -484,8 +483,7 @@ class Submitter(BaseOverlord):
             dlog.info(f"Using specified package {bold_basename}")
         else:
             basename = self._load_last_package_from_LIFO_queue()
-            bold_basename = utils.bold(basename)
-            dlog.info(f"Using package {bold_basename} from LIFO queue")
+            dlog.info(f"Using package {basename} from LIFO queue")
 
         package = Path(self.cache_dir) / Path(basename)
         if not package.is_dir():
@@ -493,16 +491,8 @@ class Submitter(BaseOverlord):
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-        # Initialize the SlurmWriter, which checks a default config file
-        # specified in the command line arguments, and overrides those defaults
-        # with other command line arguments.
-        slurm_writer = SlurmWriter(self.cl_args)
-
         dlog.debug(f"Package path {package}")
         submit_script = package / Path("submit.sbatch")
-
-        # Write the slurm script regardless of --bash, why not
-        slurm_writer.write(submit_script, stream_name=basename)
 
         dryrun = int(self.cl_args.dryrun)
         debug = int(self.cl_args.debug)
@@ -534,6 +524,11 @@ class Submitter(BaseOverlord):
 
         # Else we go through the protocol of submitting a job via SLURM
         else:
+            # Initialize the SlurmWriter, which checks a default config file
+            # specified in the command line arguments, and overrides those
+            # defaults with other command line arguments.
+            slurm_writer = SlurmWriter(self.cl_args)
+            slurm_writer.write(submit_script, stream_name=basename)
             Path.makedir(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
             args = f"{package} {debug} {dryrun} {solver} {nbuff}"

@@ -188,13 +188,12 @@ class GridParams:
             assert all([isinstance(xx, list) for xx in vals])
             assert all([len(xx) == 3 for xx in vals])
 
-            return list(np.round(np.sort(np.concatenate([
+            return np.round(np.sort(np.concatenate([
                 np.linspace(*c, endpoint=True) for c in vals
-            ])), round_values))
+            ])), round_values)
 
         else:
             assert isinstance(vals, list)
-            assert len(vals) == 3
             return np.round(vals, round_values)
 
     def save(self, path):
