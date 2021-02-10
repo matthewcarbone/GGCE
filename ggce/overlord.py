@@ -529,7 +529,7 @@ class Submitter(BaseOverlord):
             # defaults with other command line arguments.
             slurm_writer = SlurmWriter(self.cl_args)
             slurm_writer.write(submit_script, stream_name=basename)
-            Path.make_dir(utils.JOB_DATA_PATH, exist_ok=True)
+            Path.mkdir(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
             args = f"{package} {debug} {dryrun} {solver} {nbuff}"
             out = utils.run_command(f"sbatch submit.sbatch {args}")
