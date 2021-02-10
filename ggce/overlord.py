@@ -377,7 +377,7 @@ class Prime(BaseOverlord):
         dlog.debug(f"Making package directory {pack_name}")
         pack_name.mkdir(parents=True)
         bold_str = utils.bold(f"-i {self.run_name}")
-        print(f"Package initialized, submit with {bold_str}")
+        dlog.info(f"Package initialized, submit with {bold_str}")
         return pack_name
 
     def _ready_package(self, package_cache_path):
@@ -529,7 +529,7 @@ class Submitter(BaseOverlord):
             # defaults with other command line arguments.
             slurm_writer = SlurmWriter(self.cl_args)
             slurm_writer.write(submit_script, stream_name=basename)
-            Path.makedir(utils.JOB_DATA_PATH, exist_ok=True)
+            Path.make_dir(utils.JOB_DATA_PATH, exist_ok=True)
             utils.run_command(f"mv {submit_script} .")
             args = f"{package} {debug} {dryrun} {solver} {nbuff}"
             out = utils.run_command(f"sbatch submit.sbatch {args}")
