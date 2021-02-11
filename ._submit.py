@@ -328,12 +328,6 @@ if __name__ == '__main__':
     mpi_info = RankTools(COMM, _dlog, debug)
 
     if mpi_info.RANK == 0:
-        # Load in the data, which will be used to process into the jobs. The
-        # master list contains the list of all omega -> config key pairs (which
-        # correspond to the config mapping). The config_mapping maps a number
-        # to an actual python dictionary containing the configuration for that
-        # trial. The N_M_eta_permutations is a list of the (M, N, eta) to run,
-        # and the package_cache_path is the base cache path.
         COMM_timer = time.time()
         configs_path = package_path / Path("configs")
         results_path = package_path / Path("results")

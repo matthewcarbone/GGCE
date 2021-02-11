@@ -443,7 +443,7 @@ class System:
 
         # Initialize the corresponding sparse vector
         # {G}(0)
-        row_ind = np.array([self.basis['{G}(0)']])
+        row_ind = np.array([self.basis['{G}(0.0)']])
         col_ind = np.array([0])
         v = coo_matrix((
             np.array([self.equations[0][0].bias(k, w)], dtype=np.complex64),
@@ -451,7 +451,7 @@ class System:
         )).tocsr()
 
         res = spsolve(X, v)
-        G = res[self.basis['{G}(0)']]
+        G = res[self.basis['{G}(0.0)']]
 
         if -G.imag / np.pi < 0.0:
             dlog.error(
@@ -567,10 +567,10 @@ class System:
         # sum over the terms in this final A are actually -Sigma, where
         # Sigma is the self-energy!
         self_energy_times_G0 = 0.0
+        A = np.atleast_1d(A.squeeze())
         for term in self.equations[0][0].terms_list:
             basis_idx = self.recursion_solver_basis[1][term.identifier()]
-            self_energy_times_G0 += \
-                A.squeeze()[basis_idx] * term.coefficient(k, w)
+            self_energy_times_G0 += A[basis_idx] * term.coefficient(k, w)
 
         # The Green's function is of course given by Dyson's equation.
         eom = self.equations[0]

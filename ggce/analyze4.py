@@ -61,9 +61,9 @@ class Results:
             dat = np.load(open(self.paths['results'] / Path(idx) / res, 'rb'))
             for k_val in self.k_grid:
                 where = np.where(np.abs(dat[:, 0] - k_val) < 1e-7)[0]
-                res = dat[where, 1:]
-                sorted_indices = np.argsort(res[:, 0])
-                self.results[idx][k_val] = res[sorted_indices, :]
+                loaded = dat[where, 1:]
+                sorted_indices = np.argsort(loaded[:, 0])
+                self.results[idx][k_val] = loaded[sorted_indices, :]
 
         # Set the default key values for convenience
         self.defaults = dict()
