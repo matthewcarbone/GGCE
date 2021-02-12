@@ -18,7 +18,12 @@ import yaml
 SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bv", "bt"])
 
 
-def model_coupling_map(coupling_type, t, Omega, lam):
+def model_coupling_map(coupling_type, t, Omega, lam, ignore):
+
+    # If ignore, this simply returns the provided value for lam
+    if ignore:
+        return lam
+
     if coupling_type == 'H':  # Holstein
         return math.sqrt(2.0 * t * Omega * lam)
     elif coupling_type == 'EFB':  # EFB convention lam = g for convenience
@@ -50,7 +55,7 @@ class ModelParams:
 
         # These parameters require a list of lists (for prod or zip), or
         # simply a list (for solo)
-        if param_name in ['M_extent', 'N_bosons', 'Omega', 'lam']:
+        if param_name in ['M_extent', 'N_bosons', 'Omega', 'lam', 'g']:
             assert isinstance(data['vals'], list)
 
             if data['cycle'] == 'solo':
@@ -230,7 +235,13 @@ class SystemParams:
         self.eta = d['broadening']
         self.a = 1.0  # Hard code lattice constant
         self.Omega = d['Omega']
-        self.lambdas = d['lam']
+        self.lambdas = d.get('lam')
+
+        self.use_g = False
+        if self.lambdas is None:
+            self.lambdas = d['g']
+            self.use_g = True
+
         self.models = d['model']
         self.n_boson_types = len(self.models)
 
@@ -269,7 +280,7 @@ class SystemParams:
 
         bt = 0
         for (m, o, lam) in zip(self.models, self.Omega, self.lambdas):
-            g = model_coupling_map(m, self.t, o, lam)
+            g = model_coupling_map(m, self.t, o, lam, self.use_g)
 
             if m == 'H':
                 self.terms.extend([
