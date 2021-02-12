@@ -19,10 +19,6 @@ from ggce.engine.structures import GridParams
 from ggce.utils import utils
 
 
-def lorentzian(x, x0, a, gam):
-    return np.abs(a) * gam**2 / (gam**2 + (x - x0)**2)
-
-
 class Results:
     """Trials are single spectra A(w) for some fixed k, and all other
     parameters. This class is a helper for querying trials based on the
@@ -87,14 +83,49 @@ class Results:
         """Returns the spectrum for a specified k value."""
 
         queried_table = self._query(**kwargs)
-        if len(queried_table.index) > 1:
-            raise RuntimeError("Queried table has more than one row")
-
+        if len(queried_table.index) != 1:
+            raise RuntimeError("Queried table has != 1 row")
         result = self.results[list(queried_table.index)[0]]
-
-        try:
-            G = result[k]
-        except KeyError:
-            raise RuntimeError("Queried k value does not exist")
-
+        G = result[k]  # Query will throw a KeyError if k is not found
         return G[:, 0], -G[:, 2] / np.pi
+
+    def band(self, **kwargs):
+        """Returns the band structure for the provided run parameters."""
+
+        band = []
+        for k in self.k_grid:
+            _, A = self.spectrum(k, **kwargs)
+            band.append(A)
+        return self.w_grid, self.k_grid, np.array(band)
+
+    def ground_state(self, lorentzian_fit=False, offset=5, **kwargs):
+        """Returns the ground state dispersion computed as the lowest
+        energy peak energy as a function of k.
+
+        Parameters
+        ----------
+        lorentzian_fit : tuple
+            Whether or not to attempt to fit the ground state peak to a
+            Lorentzian before finding the location of the state.
+        offset : int
+            The offset to the left and right of the minimum peak used when
+            fitting a lorentzian.
+        """
+
+        queried_table = self._query(**kwargs)
+
+        energies = []
+        for k in self.k_grid:
+            w, A = self.spectrum(k, **kwargs)
+            argmax = find_peaks(A)[0][0]
+            w_loc = w[argmax]
+            if lorentzian_fit:
+                eta = float(queried_table['broadening'])
+                popt, _ = curve_fit(
+                    utils.lorentzian, w[argmax-offset:argmax+offset],
+                    A[argmax-offset:argmax+offset], p0=[w_loc, A[argmax], eta]
+                )
+                w_loc = popt[0]
+            energies.append(w_loc)
+
+        return self.k_grid, np.array(energies)
