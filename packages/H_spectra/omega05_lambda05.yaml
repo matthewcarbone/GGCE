@@ -1,0 +1,38 @@
+# Hopping
+# -------
+t: 1.0
+
+# Broadening
+# ----------
+eta: 0.003
+
+# Boson frequencies and couplings
+# -------------------------------
+# Can also specify the number of M
+# and N per coupling term if desired.
+# Note that for EFB lambda = g
+model: ['H']
+Omega: [0.5]
+lam: [0.5]
+M_extent: [[3], [4], [5], [6]]
+N_bosons: [[6], [7]]
+
+# Frequency grid
+# --------------
+# Information necessary to construct
+# the grid. Each element of the list
+# represents a linspace chunk over
+# that range: [w0, wf, nw].
+w_grid_info:
+    - [-2.5, -1.5, 200]
+
+# Momentum grid
+# -------------
+k_grid_info: [0.0]
+linspacek: False
+
+
+
+
+
+

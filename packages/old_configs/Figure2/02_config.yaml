@@ -1,0 +1,9 @@
+Omega: 0.1
+config_filter: no_filter
+lambda: 1.0
+linspace_params:
+- - -4.0
+  - -1.5
+  - 200
+model: H
+t: 1.0

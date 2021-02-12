@@ -1,0 +1,36 @@
+# Parameter file - GGCE
+# ---------------------
+# EFB example
+
+
+# Hopping
+# -------
+t: 1.0
+
+# Broadening
+# ----------
+eta: 0.005
+
+# Boson frequencies and couplings
+# -------------------------------
+# Can also specify the number of M and N per coupling term
+# if desired. Note that for EFB lambda = g
+model: ['H', 'SSH']
+Omega: [2.5, 0.5]
+lam: [1.0, 1.0]
+M_extent: [[1, 3], [2, 3]]
+N_bosons: [[2, 4], [3, 4], [4, 4]]
+absolute_extent: 3
+
+# Frequency grid
+# --------------
+# Information necessary to construct the grid. Each element
+# of the list represents a linspace chunk over that range:
+# [w0, wf, nw].
+w_grid_info:
+    - [-4.0, -2.0, 200]
+
+# Momentum grid
+# -------------
+k_grid_info: [0.0, 1.0, 100]
+linspacek: true

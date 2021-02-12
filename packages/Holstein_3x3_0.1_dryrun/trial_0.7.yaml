@@ -1,0 +1,21 @@
+M_extent:
+- - 5
+N_bosons:
+- - 9
+Omega:
+- 0.1
+eta: 0.01
+k_grid_info:
+- 0.0
+- 1.0
+- 100
+lam:
+- 0.7
+linspacek: true
+model:
+- H
+t: 1.0
+w_grid_info:
+- - -4.0
+  - -1.2
+  - 200

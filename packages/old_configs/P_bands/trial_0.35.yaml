@@ -1,0 +1,25 @@
+M_extent:
+- - 3
+- - 4
+- - 5
+- - 6
+N_bosons:
+- - 9
+- - 10
+Omega:
+- 1.0
+eta: 0.05
+k_grid_info:
+- 0.0
+- 1.0
+- 101
+lam:
+- 0.35
+linspacek: true
+model:
+- SSH
+t: 1.0
+w_grid_info:
+- - -3.0
+  - 0.0
+  - 200

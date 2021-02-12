@@ -1,0 +1,16 @@
+t: 1.0
+
+eta: 0.01
+
+model: ['H', 'SSH']
+Omega: [2.5, 0.5]
+lam: [1.0, 1.0]
+M_extent: [[2, 4]]
+N_bosons: [[5, 6]]
+absolute_extent: 5
+
+w_grid_info:
+    - [-3.7, -3.0, 500]
+
+k_grid_info: [0.0, 1.0, 101]
+linspacek: True

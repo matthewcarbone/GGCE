@@ -1,0 +1,15 @@
+t: 1.0
+
+eta: 0.005
+
+model: ['H']
+Omega: [0.5]
+lam: [0.8]
+M_extent: [[9]]
+N_bosons: [[9], [10]]
+
+w_grid_info:
+    - [-2.7, -1.5, 240]
+
+k_grid_info: [0.5]
+linspacek: False

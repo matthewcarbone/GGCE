@@ -1,0 +1,16 @@
+# Model type: Holstein (H), EFB (EFB), SSH (SSH)
+model: SSH
+
+# Restrictions on the variational space
+config_filter: no_filter
+
+# Hamiltonian parameters, note that for EFB lambda = g
+t: 1.0
+Omega: 1.0
+lambda: 1.0
+
+# Information necessary to construct the grid. Each element
+# of the list represents a linspace chunk over that range:
+# [w0, wf, nw].
+linspace_params:
+    - [-3.0, -1.0, 100]
