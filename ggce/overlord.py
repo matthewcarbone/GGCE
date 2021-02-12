@@ -354,7 +354,7 @@ class Prime(BaseOverlord):
     def __init__(self, cl_args):
         super().__init__(cl_args)
 
-        self.dt_string = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        self.dt_string = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         # Select the user-specified package to run
         yaml_path = Path(self.cl_args.inp)
