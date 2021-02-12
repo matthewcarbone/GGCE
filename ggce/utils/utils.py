@@ -18,6 +18,10 @@ LIFO_QUEUE_PATH = '.LIFO_queue.yaml'
 JOB_DATA_PATH = 'job_data'
 
 
+def lorentzian(x, x0, a, gam):
+    return abs(a) * gam**2 / (gam**2 + (x - x0)**2)
+
+
 def flatten(t):
     return [item for sublist in t for item in sublist]
 

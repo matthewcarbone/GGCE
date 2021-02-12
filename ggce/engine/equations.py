@@ -37,7 +37,7 @@ class Equation:
         particular _n_mat_identifier.
     """
 
-    def __init__(self, config_index, input_params):
+    def __init__(self, config_index, system_params):
         """Initializer.
 
         Parameters
@@ -48,13 +48,13 @@ class Equation:
             one. These properties are asserted in the setter for this
             parameter. This means that only allowed f-function subscripts can
             be passed to this function.
-        input_params : InputParameters
+        system_params : SystemParams
             Container for the full set of parameters.
         """
 
         self.config_index = config_index
         self.f_arg_terms = None
-        self.input_params = input_params
+        self.system_params = system_params
 
     def bias(self, k, w):
         """The default value for the bias is 0, except in the case of the
@@ -120,20 +120,20 @@ class Equation:
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
-        ae = self.input_params.model_params.absolute_extent
+        ae = self.system_params.absolute_extent
 
         self.terms_list = []
         assert np.all(self.config_index >= 0)
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.input_params.terms:
+        for hterm in self.system_params.terms:
 
             # Boson type
-            bt = hterm.boson_type
+            bt = hterm.bt
 
             # We separate the two cases for creation and annihilation operators
             # on the boson operator 'b'
-            if hterm.dagger == '-':
+            if hterm.d == '-':
 
                 # Iterate over the site indexes for the term's alpha-index
                 for loc, nval in enumerate(self.config_index[bt, :]):
@@ -145,7 +145,7 @@ class Equation:
 
                     t = terms_module.AnnihilationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        model_params=self.input_params.model_params,
+                        model_params=self.system_params,
                         constant_prefactor=hterm.g * nval
                     )
                     t.step(loc)
@@ -157,12 +157,12 @@ class Equation:
 
             # Don't want to create an equation corresponding to more than
             # the maximum number of allowed bosons.
-            elif hterm.dagger == '+':
+            elif hterm.d == '+':
                 for loc in range(self.config_index.shape[1] - ae, ae):
 
                     t = terms_module.CreationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        model_params=self.input_params.model_params,
+                        model_params=self.system_params,
                         constant_prefactor=hterm.g
                     )
                     t.step(loc)
@@ -177,36 +177,34 @@ class Equation:
 class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
-    def __init__(self, input_params):
-        config = np.zeros((input_params.model_params.n_boson_types, 1))
-        super().__init__(config_index=config, input_params=input_params)
+    def __init__(self, system_params):
+        config = np.zeros((system_params.n_boson_types, 1))
+        super().__init__(config_index=config, system_params=system_params)
 
     def bias(self, k, w):
         """Initializes the bias for the Green's function."""
 
         return physics.G0_k_omega(
-            k, w, self.input_params.model_params.a,
-            self.input_params.model_params.eta,
-            self.input_params.model_params.t
+            k, w, self.system_params.a, self.system_params.eta,
+            self.system_params.t
         )
 
     def initialize_terms(self):
         """Override for the Green's function other terms."""
-        model_params = self.input_params.model_params
 
         # Only instance where we actually use the base FDeltaTerm class
         self.terms_list = []
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.input_params.terms:
+        for hterm in self.system_params.terms:
 
             # Only boson creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
-            if hterm.dagger == '+':
-                n = np.zeros((model_params.n_boson_types, 1)).astype(int)
-                n[hterm.boson_type, :] = 1
+            if hterm.d == '+':
+                n = np.zeros((self.system_params.n_boson_types, 1)).astype(int)
+                n[hterm.bt, :] = 1
                 t = terms_module.EOMTerm(
                     boson_config=n, hterm=hterm,
-                    model_params=model_params
+                    model_params=self.system_params
                 )
                 self.terms_list.append(t)

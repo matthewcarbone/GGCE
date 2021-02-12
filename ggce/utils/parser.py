@@ -27,11 +27,6 @@ def global_parser(sys_argv):
         help='Enables the debug logging stream to stdout.'
     )
 
-    ap.add_argument(
-        '--package_dir', dest='package_dir', default='packages',
-        help="The location of the packages."
-    )
-
     subparsers = ap.add_subparsers(
         help='Choices for various priming, execution and post-processing '
         'protocols.', dest='protocol'
@@ -44,60 +39,10 @@ def global_parser(sys_argv):
         'appropriate directories and writing the SLURM submit file. Note that '
         'command line arguments override config file defaults.'
     )
-    prime_sp.add_argument(
-        '-C', '--configs', type=str, nargs='+', default=None, dest='c_to_run',
-        help='Names of the configs within the specified package to run. '
-        'Defaults to running all configs in the package.'
-    )
-    prime_sp.add_argument(
-        '--info', dest='info', default=None,
-        help='Extra information about the package which is appended to the '
-        'package name.'
-    )
-    prime_sp.add_argument(
-        '--model', type=str, nargs='+', default=None, dest='model',
-        help='The model types.'
-    )
-    prime_sp.add_argument(
-        '-N', type=int, nargs='+', default=None, dest='N_bosons',
-        help='Number of bosons.', action='append'
-    )
-    prime_sp.add_argument(
-        '-M', type=int, nargs='+', default=None, dest='M_extent',
-        help='Maximal cloud extent.', action='append'
-    )
-    prime_sp.add_argument(
-        '-O', '--Omega', type=float, nargs='+', default=None,
-        dest='Omega', help='Boson Einsten frequencies.'
-    )
-    prime_sp.add_argument(
-        '-L', '--lam', type=float, nargs='+', default=None,
-        dest='lam', help='Dimensionless effective couplings.'
-    )
-    prime_sp.add_argument(
-        '-e', '--eta', type=float, nargs='+', default=None, dest='eta',
-        help='Broadening parameter.'
-    )
-    prime_sp.add_argument(
-        '-k', type=float, nargs='+', default=None, dest='k_grid_info',
-        help='Values for k in units of pi.'
-    )
-    prime_sp.add_argument(
-        '--linspacek', default=None, dest='linspacek',
-        action='store_true',
-        help='If True, then the user is required to provide three values for '
-        'the -k flag: the k0, kf and total number of k points.'
-    )
-    prime_sp.add_argument(
-        '-w', type=float, nargs='+', default=None, dest='w_grid_info',
-        help='Values for the frequency grid.', action='append'
-    )
 
-    req = prime_sp.add_argument_group("required")
-    req.add_argument(
-        '-P', '--package', type=str, default=None, dest='package',
-        help='Name of the package to prime. Packages must be contained in the '
-        '`package_dir` directory.', required=True
+    prime_sp.add_argument(
+        '-i', '--input', type=str, default='inp/inp.yaml', dest='inp',
+        help='Name of the input file to prime. '
     )
 
     # (2) ---------------------------------------------------------------------
@@ -129,12 +74,10 @@ def global_parser(sys_argv):
         'Default is set to the total calculations // 100.'
     )
     execute_sp.add_argument(
-        '-P', '--package', type=str, default=None, dest='package',
-        help='Name of the package to prime. Packages must be contained in the '
-        '`package_dir` directory. If unspecified, defaults to the last primed '
-        'trial as ordered in the locally stored LIFO queue.'
+        '-i', '--input', type=str, default=None, dest='inp',
+        help='Name of the dir to run. If unspecified, defaults to the last '
+        'primed trial as ordered in the locally stored LIFO queue.'
     )
-
     slurm = execute_sp.add_argument_group(
         "SLURM", "SLURM script parameters used to override defaults "
         "in the slurm_config.yaml file. Note that some parameters must "
@@ -199,7 +142,7 @@ def global_parser(sys_argv):
     )
 
     slurm.add_argument(
-        '--config_path', dest='loaded_config_path',
+        '--slurm_config_path', dest='slurm_config_path',
         default='slurm_config.yaml', type=str, help="SLURM config path"
     )
 

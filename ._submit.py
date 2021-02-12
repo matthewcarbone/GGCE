@@ -14,7 +14,7 @@ mpiexec -np 4 python3 ._submit.py /Users/mc/Data/scratch/GGCE/000_TEST2 1
 
 from itertools import product
 import numpy as np
-import os
+from pathlib import Path
 import pickle
 import sys
 import time
@@ -23,7 +23,7 @@ import yaml
 
 from mpi4py import MPI
 
-from ggce.engine.structures import InputParameters
+from ggce.engine.structures import SystemParams, GridParams
 from ggce.engine import system
 from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
@@ -79,12 +79,11 @@ class Buffer:
         self.nbuff = nbuff
         self.counter = 0
         self.queue = []
-        self.target_directory = target_directory
+        self.target_directory = Path(target_directory)
 
     def flush(self):
         if self.counter > 0:
-            f = f"{uuid.uuid4().hex}.pkl"
-            path = os.path.join(self.target_directory, f)
+            path = self.target_directory / Path(f"{uuid.uuid4().hex}.pkl")
             pickle.dump(self.queue, open(path, 'wb'), protocol=4)
             self.counter = 0
             self.queue = []
@@ -140,11 +139,9 @@ class Executor:
 
         jobs = list(product(k_grid, w_grid))
         jobs = self.rank_tool.chunk_jobs(jobs)
-        return jobs[self.RANK]
+        self.jobs = jobs[self.RANK]
 
-    def __init__(
-        self, rank_tool, package_path, config_path, solver, dry_run, nbuff
-    ):
+    def __init__(self, rank_tool, pkg, cfg, solver, dry_run, nbuff):
         self.rank_tool = rank_tool
         self.logger = rank_tool.logger
         self.SIZE = rank_tool.SIZE
@@ -152,28 +149,19 @@ class Executor:
         self.dry_run = dry_run
         self.solver = solver
         self.nbuff = nbuff
-        base = os.path.splitext(os.path.basename(config_path))[0]
-        self.config_path = config_path
-        self.target_dir = os.path.join(package_path, "results", base)
-        self.state_dir = os.path.join(self.target_dir, "STATE")
-        self.done_file = os.path.join(self.target_dir, "DONE")
-
-    def check_done_file(self):
-        """Checks the calculation directory for a file DONE. If it exists,
-        it indicates that all computations have been saved to res.txt for this
-        config."""
-
-        if os.path.isfile(self.done_file):
-            return True
-        return False
+        self.pkg = pkg
+        self.cfg = cfg
+        self.trg = self.pkg / Path("results") / Path(self.cfg.stem)
+        self.state_dir = self.trg / "STATE"
+        self.done_file = self.trg / "DONE"
 
     def prime_system(self):
         """Prepares the system object by using the stored input parameters."""
 
         t0 = time.time()
-        nm = f"{self.inp.model_params.M}/{self.inp.model_params.N}"
-        mod = self.inp.model_params.model
         if self.RANK == 0:
+            nm = f"{self.inp.M}/{self.inp.N}"
+            mod = self.inp.models
             self.logger.info(f"Priming with M/N = {nm}, model={mod}")
         sy = system.System(self.inp)
         T = sy.initialize_generalized_equations()
@@ -202,7 +190,7 @@ class Executor:
         if self.RANK != 0:
             return
 
-        res_file = os.path.join(self.target_dir, "res.npy")
+        res_file = self.trg / Path("res.npy")
         with open(res_file, 'wb') as f:
             np.save(f, arr)
 
@@ -210,32 +198,30 @@ class Executor:
         """Removes all STATE files and saves the donefile."""
 
         for f in to_delete_on_rank:
-            os.remove(f)
+            Path(f).unlink()
 
         with open(self.done_file, 'a') as f:
             f.write(f"RANK {self.RANK:05} tagged\n")
 
-    def calculate(self):
+    def calculate(self, k_grid, w_grid):
         """If there are any to run, executes the calculations. Returns the
         total elapsed time of the computations."""
 
         # First, check if everything is done on this config.
-        if self.check_done_file():
-            self.logger.warning(f"DONE file exists {self.config_path}")
+        if self.done_file.exists():
+            self.logger.warning(f"DONE file exists {self.cfg}")
             return 0.0
 
         # Initialize the input parameters
-        self.inp = InputParameters(yaml.safe_load(open(self.config_path)))
+        self.inp = SystemParams(yaml.safe_load(open(self.cfg)))
         self.inp.prime()
 
         # 8 decimal precision
-        w_grid = np.round(self.inp.get_w_grid(), 8)
-        k_grid = np.round(self.inp.get_k_grid(), 8)  # In units of pi!
-        self.jobs = self.prep_jobs(k_grid, w_grid)
+        self.prep_jobs(k_grid, w_grid)
 
         # Check if there are remaining jobs on this rank
         if len(self.jobs) == 0:
-            self.logger.warning(f"No jobs to run {self.config_path}")
+            self.logger.warning(f"No jobs to run {self.cfg}")
             return 0.0
 
         # Load in all jobs which have been completed and get the remaining
@@ -251,8 +237,7 @@ class Executor:
             nbuff = self.nbuff
         else:
             nbuff = int(max(len(self.jobs) // 100, 1))
-        if self.RANK == 0:
-            self.logger.info(f"Buffer will flush every {nbuff} results")
+
         buffer = Buffer(nbuff, self.state_dir)
 
         # Prepare the system object. We disable the system logger unless on
@@ -324,7 +309,7 @@ if __name__ == '__main__':
     COMM = MPI.COMM_WORLD  # Default MPI communicator
 
     # The first argument passed is the base path for the calculation.
-    package_path = str(sys.argv[1])
+    package_path = Path(str(sys.argv[1]))
 
     # The second argument is if to run in debug mode or not
     debug = int(sys.argv[2])
@@ -343,44 +328,50 @@ if __name__ == '__main__':
     mpi_info = RankTools(COMM, _dlog, debug)
 
     if mpi_info.RANK == 0:
-        # Load in the data, which will be used to process into the jobs. The
-        # master list contains the list of all omega -> config key pairs (which
-        # correspond to the config mapping). The config_mapping maps a number
-        # to an actual python dictionary containing the configuration for that
-        # trial. The N_M_eta_permutations is a list of the (M, N, eta) to run,
-        # and the package_cache_path is the base cache path.
         COMM_timer = time.time()
-        _all_configs_paths = utils.listdir_fullpath(
-            os.path.join(package_path, "configs")
-        )
+        configs_path = package_path / Path("configs")
+        results_path = package_path / Path("results")
+        _all_configs_paths = [p for p in configs_path.iterdir()]
 
         # Remove any config with a donefile
-        # base = os.path.splitext(os.path.basename(config_path))[0]
-        # self.config_path = config_path
-        # self.target_dir = os.path.join(package_path, "results", base)
-        # self.state_dir = os.path.join(self.target_dir, "STATE")
-        # self.done_file = os.path.join(self.target_dir, "DONE")
         all_configs_paths = []
         for config in _all_configs_paths:
-            base = os.path.splitext(os.path.basename(config))[0]
-            target_dir = os.path.join(package_path, "results", base)
-            done_file = os.path.join(target_dir, "DONE")
-            if not os.path.isfile(done_file):
+            done_file = results_path / Path(config.stem) / Path("DONE")
+            if not done_file.exists():
                 all_configs_paths.append(config)
 
         all_configs_paths.sort()
+
         mpi_info.logger.info(f"Confirming COMM world size: {mpi_info.SIZE}")
         mpi_info.logger.info(f"Running {len(all_configs_paths)} config files")
         mpi_info.logger.info(f"Will use solver type {solver}")
-        mpi_info.logger.info(f"Dryrun is {dry_run}; debug is {debug}")
+        mpi_info.logger.info(
+            f"Dryrun is {dry_run}; debug is {debug}; buffer is {nbuff}"
+        )
+
+        grid_path = package_path / Path("grids.yaml")
+        gp = GridParams(yaml.safe_load(open(grid_path)))
+        w_grid = gp.get_grid('w')
+        k_grid = gp.get_grid('k')  # In units of pi!
+
     else:
         COMM_timer = None
         all_configs_paths = None
+        w_grid = None
+        k_grid = None
 
     rank_timer = time.time()
 
     # Iterate over the config files
     all_configs_paths = COMM.bcast(all_configs_paths, root=0)
+    w_grid = COMM.bcast(w_grid, root=0)
+    k_grid = COMM.bcast(k_grid, root=0)
+
+    if all_configs_paths == []:
+        if mpi_info.RANK == 0:
+            mpi_info.logger.warning("No configs to run: exiting")
+        COMM.Abort()
+
     for config_index, config_path in enumerate(all_configs_paths):
 
         # Startup the Executor, which is a helper class for running the
@@ -390,13 +381,14 @@ if __name__ == '__main__':
         )
         if mpi_info.RANK == 0:
             L = len(all_configs_paths)
-            mpi_info.logger.info(f"Starting config {config_index}/{L}")
+            cidx = f"{(config_index + 1):08}"
+            mpi_info.logger.info(f"CONFIG: {cidx} / {L:08}")
 
         # ---------------------------------------------------------------------
         # CALCULATE -----------------------------------------------------------
 
         # Run the calculation on this rank
-        elapsed = executor.calculate()
+        elapsed = executor.calculate(k_grid, w_grid)
 
         # Collect the runtimes for each of these processes. This also serves
         # as a barrier.
@@ -450,7 +442,7 @@ if __name__ == '__main__':
 
         # Last step is to delete STATE
         if mpi_info.RANK == 0:
-            os.rmdir(executor.state_dir)
+            Path(executor.state_dir).rmdir()
 
         if mpi_info.RANK == 0:
             tmp_t = (time.time() - tmp_t) / 60.0

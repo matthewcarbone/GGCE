@@ -210,7 +210,7 @@ class Term:
         self.constant_prefactor = 1.0
 
         # Determines the argument of f and prefactors
-        self.exp_shift = 0  # exp(i*k*a*exp_shift)
+        self.exp_shift = 0.0  # exp(i*k*a*exp_shift)
         self.f_arg = None  # Only None for the index term
         self.g_arg = None  # => g(...) = 1
 
@@ -223,19 +223,20 @@ class Term:
         return "{" + self.config.get_identifier() + "}"
 
     def _get_f_arg_identifier(self):
-        """Returns a string of the f_arg identifier."""
+        """Returns a string of the f_arg identifier. """
 
-        return "(%i)" % self.f_arg if self.f_arg is not None else "(!)"
+        return "(%.01f)" % self.f_arg if self.f_arg is not None else "(!)"
 
     def _get_g_arg_identifier(self):
         """Returns a string of the f_arg identifier."""
 
-        return "<%i>" % self.g_arg if self.g_arg is not None else "<!>"
+        return "<%.01f>" % self.g_arg if self.g_arg is not None else "<!>"
 
     def _get_c_exp_identifier(self):
         """Returns a string of the current value of the exponential shift."""
 
-        return "[%i]" % self.exp_shift if self.exp_shift is not None else "[!]"
+        return "[%.01f]" % self.exp_shift \
+            if self.exp_shift is not None else "[!]"
 
     def identifier(self, full=False):
         """Returns a string with which one can index the term. The string takes
@@ -288,9 +289,9 @@ class Term:
         equations are generated, it will think there are multiple Greens
         equations, of which of course there can be only one."""
 
-        if self._get_boson_config_identifier() == '{G}' and self.f_arg != 0:
+        if self._get_boson_config_identifier() == '{G}' and self.f_arg != 0.0:
             self.exp_shift += self.f_arg
-            self.f_arg = 0
+            self.f_arg = 0.0
 
 
 class IndexTerm(Term):
@@ -368,7 +369,7 @@ class NonIndexTerm(Term):
 
         self.g_arg += location
         self.f_arg -= location
-        self.modify_n_bosons(self.hterm.boson_type, location)
+        self.modify_n_bosons(self.hterm.bt, location)
 
     def coefficient(self, k, w):
 
