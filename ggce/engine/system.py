@@ -107,8 +107,9 @@ class ConfigurationSpaceGenerator:
             return False
 
         # Constraint that we have maximum N bosons per site.
-        if not np.all(config <= self.max_bosons_per_site):
-            return False
+        if self.max_bosons_per_site is not None:
+            if not np.all(config <= self.max_bosons_per_site):
+                return False
 
         return True
 

@@ -261,12 +261,14 @@ class SystemParams:
         self.max_bosons_per_site = d.get('max_bosons_per_site')
         if self.max_bosons_per_site is not None:
             assert self.max_bosons_per_site > 0
-
+            assert self.N is None
             if self.N is None:
                 self.N = [
                     self.max_bosons_per_site * self.n_boson_types * m
                     for m in self.M
                 ]
+        else:
+            assert self.N is not None
 
     def prime(self):
         """Initializes the terms object, which contains the critical
