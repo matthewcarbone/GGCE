@@ -72,7 +72,9 @@ class ModelParams:
             else:
                 raise RuntimeError(f"Unknown cycle: {data['cycle']}")
 
-        elif param_name in ['hopping', 'broadening', 'absolute_extent']:
+        elif param_name in [
+            'hopping', 'broadening', 'absolute_extent', 'max_bosons_per_site'
+        ]:
 
             if data['cycle'] == 'solo':
                 cond1 = isinstance(data['vals'], float)
@@ -238,7 +240,15 @@ class SystemParams:
             self.absolute_extent = self.M[0]
         else:
             assert absolute_extent is not None
+            assert absolute_extent > 0
             self.absolute_extent = absolute_extent
+
+        self.max_bosons_per_site = d.get('max_bosons_per_site')
+        if self.max_bosons_per_site is not None:
+            assert self.max_bosons_per_site > 0
+
+            # This constraint is required for consistency
+            assert self.N == self.max_bosons_per_site * self.n_boson_types
 
     def prime(self):
         """Initializes the terms object, which contains the critical
