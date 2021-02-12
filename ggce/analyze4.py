@@ -98,7 +98,10 @@ class Results:
             band.append(A)
         return self.w_grid, self.k_grid, np.array(band)
 
-    def ground_state(self, lorentzian_fit=False, offset=5, **kwargs):
+    def ground_state(
+        self, lorentzian_fit=False, offset=5, normalize=False, k_max=None,
+        **kwargs
+    ):
         """Returns the ground state dispersion computed as the lowest
         energy peak energy as a function of k.
 
@@ -110,14 +113,29 @@ class Results:
         offset : int
             The offset to the left and right of the minimum peak used when
             fitting a lorentzian.
+        normalize : bool
+            If normalize is True, then E(k=0) will be subtracted from the
+            energies.
         """
 
         queried_table = self._query(**kwargs)
 
         energies = []
+        k_grid = []
+
         for k in self.k_grid:
+
+            if k_max is not None:
+                if k > k_max:
+                    continue
+
             w, A = self.spectrum(k, **kwargs)
-            argmax = find_peaks(A)[0][0]
+
+            try:
+                argmax = find_peaks(A)[0][0]
+            except IndexError:
+                continue
+
             w_loc = w[argmax]
             if lorentzian_fit:
                 eta = float(queried_table['broadening'])
@@ -127,5 +145,11 @@ class Results:
                 )
                 w_loc = popt[0]
             energies.append(w_loc)
+            k_grid.append(k)
 
-        return self.k_grid, np.array(energies)
+        energies = np.array(energies)
+
+        if normalize:
+            energies = energies - energies[0]
+
+        return k_grid, energies

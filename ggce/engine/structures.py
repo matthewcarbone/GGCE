@@ -225,7 +225,7 @@ class SystemParams:
     def __init__(self, d):
 
         self.M = d['M_extent']
-        self.N = d['N_bosons']
+        self.N = d.get('N_bosons')
         self.t = d['hopping']
         self.eta = d['broadening']
         self.a = 1.0  # Hard code lattice constant
@@ -233,6 +233,10 @@ class SystemParams:
         self.lambdas = d['lam']
         self.models = d['model']
         self.n_boson_types = len(self.models)
+
+        assert self.n_boson_types == len(self.M)
+        if self.N is not None:
+            assert self.n_boson_types == len(self.N)
 
         absolute_extent = d.get('absolute_extent')
         if self.n_boson_types == 1:
@@ -247,8 +251,11 @@ class SystemParams:
         if self.max_bosons_per_site is not None:
             assert self.max_bosons_per_site > 0
 
-            # This constraint is required for consistency
-            assert self.N == self.max_bosons_per_site * self.n_boson_types
+            if self.N is None:
+                self.N = [
+                    self.max_bosons_per_site * self.n_boson_types * m
+                    for m in self.M
+                ]
 
     def prime(self):
         """Initializes the terms object, which contains the critical

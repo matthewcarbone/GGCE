@@ -163,6 +163,7 @@ class System:
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
         self.n_boson_types = self.system_params.n_boson_types
+        self.max_bosons_per_site = self.system_params.max_bosons_per_site
 
         self.master_f_arg_list = None
 
@@ -251,7 +252,7 @@ class System:
         dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
 
         # Need to generalize this
-        if self.n_boson_types == 1:
+        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
                 self.system_params.M, self.system_params.N, self.n_boson_types
@@ -600,37 +601,3 @@ class System:
             return self.one_shot_sparse_solve(k, w)
         else:
             raise RuntimeError(f"Unknown solver type {solver}")
-
-
-# def n_eq(M, N, model, ae=None, disable_logger=True):
-#     """Returns the number of equations in the closure."""
-
-#     assert len(M) == len(N) == len(model)
-
-#     d = {
-#         't': 1.0,
-#         'Omega': [1.0 for _ in range(len(M))],
-#         'lam': [1.0 for _ in range(len(M))],
-#         'M_extent': [M],
-#         'N_bosons': [N],
-#         'model': model,
-#         'eta': 0.1,
-#         'w_grid_info': [[-1.0, 1.0, 10]],
-#         'k_grid_info': [0.0],
-#         'linspacek': False
-#     }
-
-#     if ae is not None:
-#         d['absolute_extent'] = ae
-
-#     with DisableLogger(disable_logger):
-#         inp = InputParameters(d)
-#         assert inp.counter_max == 1
-#         for _inp in inp:
-#             _inp.prime()
-#             sy = System(_inp)
-#             T = sy.initialize_generalized_equations()
-#             L = sy.initialize_equations()
-#             sy.generate_unique_terms()  # Check to ensure no major errors
-
-#     return T, L
