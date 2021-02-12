@@ -66,7 +66,7 @@ class ModelParams:
                 assert all(len(xx) == model_len for xx in data['vals'])
 
             elif data['cycle'] == 'prod-linspace':
-                assert param_name in ['Omega', 'lam']
+                assert param_name in ['Omega', 'lam', 'g']
                 assert len(data['vals']) == model_len
                 assert all(len(xx) == 3 for xx in data['vals'])
                 assert all(
