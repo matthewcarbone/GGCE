@@ -5,7 +5,6 @@ __maintainer__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Prototype"
 
-import os
 from pathlib import Path
 
 import numpy as np
