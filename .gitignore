@@ -6,3 +6,4 @@ results2/
 slurm_config.yaml
 .LIFO_queue.yaml
 .ipynb_checkpoints/
+.coverage
