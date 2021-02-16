@@ -1,5 +1,7 @@
 
 # GGCE
+[![codecov](https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/x94carbone/GGCE)
+
 Generalized Green's function Cluster Expansion
 
 ## Necessary packages
