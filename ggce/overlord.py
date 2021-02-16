@@ -202,20 +202,20 @@ requeue_job()
         email = self.get_val("email")
         if email is not None:
             SBATCH_lines.append(f"#SBATCH --mail-user={email}")
-            SBATCH_lines.append(f"#SBATCH --mail-type=ALL")
+            SBATCH_lines.append("#SBATCH --mail-type=ALL")
 
         # Exclusive flag ------------------------------------------------------
         exclusive = self.get_val("exclusive")
         if exclusive is not None:
             if exclusive:
-                SBATCH_lines.append(f"#SBATCH --exclusive")
+                SBATCH_lines.append("#SBATCH --exclusive")
 
         # Job name ------------------------------------------------------------
         job_name = self.get_val("job_name")
         if job_name is not None:
             SBATCH_lines.append(f"#SBATCH -J {job_name}")
         else:
-            SBATCH_lines.append(f"#SBATCH -J GGCE")
+            SBATCH_lines.append("#SBATCH -J GGCE")
 
         # Out/err stream directories ------------------------------------------
         base_directory = utils.JOB_DATA_PATH
@@ -243,7 +243,7 @@ requeue_job()
             assert isinstance(N_nodes, int)
             SBATCH_lines.append(f"#SBATCH -N {N_nodes}")
         else:
-            SBATCH_lines.append(f"#SBATCH -N 1")
+            SBATCH_lines.append("#SBATCH -N 1")
 
         # Memory per node -----------------------------------------------------
         mem_per_node = self.get_val("mem_per_node")
@@ -300,9 +300,9 @@ requeue_job()
                 last_line = f'srun{bind_str} python3 ._submit.py "$@"'
         elif cluster == "rr" or cluster == 'habanero' or cluster == 'Habanero':
             if self.cl_args['requeue']:
-                last_line = f'mpiexec python3 ._submit.py "$@" &\nwait'
+                last_line = 'mpiexec python3 ._submit.py "$@" &\nwait'
             else:
-                last_line = f'mpiexec python3 ._submit.py "$@"'
+                last_line = 'mpiexec python3 ._submit.py "$@"'
         else:
             msg = f"Unknown cluster {cluster}"
             dlog.critical(msg)
