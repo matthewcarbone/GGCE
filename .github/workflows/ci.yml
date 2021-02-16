@@ -66,3 +66,4 @@ jobs:
         token: 06a43383-7621-4259-906c-75967a8be621
         # Specify whether or not CI build should fail if Codecov runs into an error during upload
         fail_ci_if_error: false
+        threshold: 0%

@@ -31,14 +31,30 @@ def efb_figure5_trials():
     return [xx for xx in mp][0]
 
 
-class TestLiterature:
+@pytest.fixture
+def efb_figure6_trials():
+
+    # Load in the parameters
+    d = yaml.safe_load(open("inp/benchmarks/EFB_Figure6.yaml", 'r'))
+    model = d['model']
+    info = d['info']
+    params = d['model_parameters']
+
+    # Create the ModelParams object
+    mp = structures.ModelParams(model, info, params)
+
+    # Get all of the sub-dictionaries containing the data- it's just one
+    # for this particular data
+    return [xx for xx in mp][0]
+
+
+class TestLiteratureEFB:
+    """Set the "ground truth" data, calculated using this code, compared to the
+    true answers in Berciu & Fehske, PRB 82, 085116 (2010) after normalizing to
+    height 1, and "randomly" selected."""
 
     def test_EFB_figure5_k0(self, efb_figure5_trials):
         trial = efb_figure5_trials
-
-        # Set the "ground truth" data, calculated using this code, compared
-        # to the true correct answer in Berciu & Fehske, PRB 82, 085116 (2010)
-        # after normalizing to height 1, and randomly selected.
 
         gt = np.array([
             [-5.50000000e+00,  1.43501419e-03],
@@ -92,8 +108,66 @@ class TestLiterature:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
+
+    def test_EFB_figure6_k0(self, efb_figure6_trials):
+        trial = efb_figure6_trials
+
+        gt = np.array([
+            [-7.91666666e+00,  3.96981633e-03],
+            [-7.83316633e+00,  6.25192528e-03],
+            [-7.74966599e+00,  1.18474177e-02],
+            [-7.66616566e+00,  3.38340922e-02],
+            [-7.58266532e+00,  5.13783654e-01],
+            [-7.49916499e+00,  1.27178629e-01],
+            [-7.41566466e+00,  2.54007223e-02],
+            [-7.33216432e+00,  1.73770867e-02],
+            [-7.24866399e+00,  2.77627942e-02],
+            [-7.16516366e+00,  1.60349562e-01],
+            [-7.08166332e+00,  3.61023120e-01],
+            [-6.99816299e+00,  3.44109821e-02],
+            [-6.91466265e+00,  1.82075772e-02],
+            [-6.83116232e+00,  3.34215377e-02],
+            [-6.74766199e+00,  1.73988473e-01],
+            [-6.66416165e+00,  6.86677493e-02],
+            [-6.58066132e+00,  1.61842703e+00],
+            [-6.49716098e+00,  3.84301974e-02],
+            [-6.41366065e+00,  2.36407511e-01],
+            [-6.33016032e+00,  3.28368812e-01],
+            [-6.24665998e+00,  3.48905558e-01],
+            [-6.16315965e+00,  2.82901774e-01],
+            [-6.07965931e+00,  5.00377475e-01],
+            [-5.99615898e+00,  4.72728395e-01],
+            [-5.91265865e+00,  8.19103149e-02]
+        ])
+
+        w_grid = gt[:, 0]
+        A_gt = gt[:, 1]
+
+        sp = structures.SystemParams(trial)
+        sp.prime()
+
+        with utils.DisableLogger():
+            sy = system.System(sp)
+            sy.initialize_generalized_equations()
+            sy.initialize_equations()
+            sy.generate_unique_terms()
+            sy.prime_solver()
+
+            sparse = []
+            dense = []
+            for w in w_grid:
+                G, meta = sy.one_shot_sparse_solve(0.0, w)
+                sparse.append(-G.imag / np.pi)
+                G, meta = sy.continued_fraction_dense_solve(0.0, w)
+                dense.append(-G.imag / np.pi)
+
+            sparse = np.array(sparse)
+            dense = np.array(dense)
+
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
 
     def test_EFB_figure5_k1(self, efb_figure5_trials):
         trial = efb_figure5_trials
@@ -150,8 +224,70 @@ class TestLiterature:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
+
+    def test_EFB_figure6_k1(self, efb_figure6_trials):
+        trial = efb_figure6_trials
+
+        gt = np.array([
+            [-7.91666666e+00,  2.32625925e-03],
+            [-7.83316633e+00,  3.32827825e-03],
+            [-7.74966599e+00,  5.38888772e-03],
+            [-7.66616566e+00,  1.10987315e-02],
+            [-7.58266532e+00,  4.27098467e-02],
+            [-7.49916499e+00,  5.11242824e+00],
+            [-7.41566466e+00,  3.58186694e-02],
+            [-7.33216432e+00,  1.42537547e-02],
+            [-7.24866399e+00,  1.48681498e-02],
+            [-7.16516366e+00,  3.49786993e-02],
+            [-7.08166332e+00,  6.92494221e-01],
+            [-6.99816299e+00,  9.47702144e-02],
+            [-6.91466265e+00,  2.31839083e-02],
+            [-6.83116232e+00,  2.76177695e-02],
+            [-6.74766199e+00,  1.28050998e-01],
+            [-6.66416165e+00,  4.65735123e-02],
+            [-6.58066132e+00,  2.54056049e-01],
+            [-6.49716098e+00,  1.54417793e-01],
+            [-6.41366065e+00,  2.14314658e-01],
+            [-6.33016032e+00,  1.01377365e+00],
+            [-6.24665998e+00,  3.29395107e-01],
+            [-6.16315965e+00,  1.82301008e-01],
+            [-6.07965931e+00,  3.77814154e-01],
+            [-5.99615898e+00,  1.21252615e+00],
+            [-5.91265865e+00,  2.16788154e-01]
+        ])
+
+        w_grid = gt[:, 0]
+        A_gt = gt[:, 1]
+
+        sp = structures.SystemParams(trial)
+        sp.prime()
+
+        with utils.DisableLogger():
+            sy = system.System(sp)
+            sy.initialize_generalized_equations()
+            sy.initialize_equations()
+            sy.generate_unique_terms()
+            sy.prime_solver()
+
+            sparse = []
+            dense = []
+            for w in w_grid:
+                G, meta = sy.one_shot_sparse_solve(
+                    0.08333333 * np.pi, w
+                )
+                sparse.append(-G.imag / np.pi)
+                G, meta = sy.continued_fraction_dense_solve(
+                    0.08333333 * np.pi, w
+                )
+                dense.append(-G.imag / np.pi)
+
+            sparse = np.array(sparse)
+            dense = np.array(dense)
+
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
 
     def test_EFB_figure5_k2(self, efb_figure5_trials):
         trial = efb_figure5_trials
@@ -208,5 +344,67 @@ class TestLiterature:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
+
+    def test_EFB_figure6_k2(self, efb_figure6_trials):
+        trial = efb_figure6_trials
+
+        gt = np.array([
+            [-7.91666666e+00,  8.08789021e-04],
+            [-7.83316633e+00,  1.01990773e-03],
+            [-7.74966599e+00,  1.37558681e-03],
+            [-7.66616566e+00,  2.08990473e-03],
+            [-7.58266532e+00,  4.05915173e-03],
+            [-7.49916499e+00,  1.55149926e-02],
+            [-7.41566466e+00,  6.93816212e-01],
+            [-7.33216432e+00,  1.09160246e-02],
+            [-7.24866399e+00,  5.05862053e-03],
+            [-7.16516366e+00,  5.41734419e-03],
+            [-7.08166332e+00,  1.07634751e-02],
+            [-6.99816299e+00,  7.71070336e-02],
+            [-6.91466265e+00,  8.73142489e-02],
+            [-6.83116232e+00,  2.18240309e-02],
+            [-6.74766199e+00,  2.54721787e-02],
+            [-6.66416165e+00,  1.07387097e-02],
+            [-6.58066132e+00,  9.78324311e-02],
+            [-6.49716098e+00,  4.31866001e-02],
+            [-6.41366065e+00,  1.50430316e+00],
+            [-6.33016032e+00,  5.20143638e-01],
+            [-6.24665998e+00,  1.86242364e-01],
+            [-6.16315965e+00,  9.04862044e-02],
+            [-6.07965931e+00,  2.73056119e-01],
+            [-5.99615898e+00,  2.11288425e-01],
+            [-5.91265865e+00,  1.79665744e-01]
+        ])
+
+        w_grid = gt[:, 0]
+        A_gt = gt[:, 1]
+
+        sp = structures.SystemParams(trial)
+        sp.prime()
+
+        with utils.DisableLogger():
+            sy = system.System(sp)
+            sy.initialize_generalized_equations()
+            sy.initialize_equations()
+            sy.generate_unique_terms()
+            sy.prime_solver()
+
+            sparse = []
+            dense = []
+            for w in w_grid:
+                G, meta = sy.one_shot_sparse_solve(
+                    0.16666667 * np.pi, w
+                )
+                sparse.append(-G.imag / np.pi)
+                G, meta = sy.continued_fraction_dense_solve(
+                    0.16666667 * np.pi, w
+                )
+                dense.append(-G.imag / np.pi)
+
+            sparse = np.array(sparse)
+            dense = np.array(dense)
+
+            assert np.allclose(sparse, dense, atol=1e-5)
+            assert np.allclose(dense, A_gt, atol=1e-5)
