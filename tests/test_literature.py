@@ -108,8 +108,8 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k0(self, efb_figure6_trials):
         trial = efb_figure6_trials
@@ -166,8 +166,8 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure5_k1(self, efb_figure5_trials):
         trial = efb_figure5_trials
@@ -224,8 +224,8 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k1(self, efb_figure6_trials):
         trial = efb_figure6_trials
@@ -286,8 +286,8 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure5_k2(self, efb_figure5_trials):
         trial = efb_figure5_trials
@@ -344,8 +344,8 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k2(self, efb_figure6_trials):
         trial = efb_figure6_trials
@@ -406,5 +406,5 @@ class TestLiteratureEFB:
             sparse = np.array(sparse)
             dense = np.array(dense)
 
-            assert np.allclose(sparse, dense, atol=1e-5)
-            assert np.allclose(dense, A_gt, atol=1e-5)
+            assert np.allclose(sparse, dense, atol=1e-4)
+            assert np.allclose(dense, A_gt, atol=1e-4)
