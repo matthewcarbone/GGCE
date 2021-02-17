@@ -12,6 +12,11 @@ def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
     """Free Green's function in position/frequency space. Note that the
     frequency is generally a complex variable, corresponding to w + i * eta."""
 
+    if tf == 0.0:
+        if delta != 0:
+            return 0.0
+        return 1.0 / (omega + eta * 1j)
+
     omega = omega + eta * 1j
     B = 2.0 * np.abs(tf)
     x = (omega - e0) / B
