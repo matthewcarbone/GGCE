@@ -18,6 +18,11 @@ from ggce.engine.structures import GridParams
 from ggce.utils import utils
 
 
+def estimate_energy(w, A, Aprime, eta, etaprime):
+    t1 = Aprime * (w - 1j * eta) - A * (w - 1j * etaprime)
+    return t1 / (Aprime - A)
+
+
 class Results:
     """Trials are single spectra A(w) for some fixed k, and all other
     parameters. This class is a helper for querying trials based on the
@@ -28,9 +33,8 @@ class Results:
         # Load in the initial data
         package_path = Path(package_path)
 
-        self.paths = {
+        paths = {
             'results': package_path / Path("results"),
-            'bash_script': package_path / Path("submit.sbatch"),
             'configs': package_path / Path("configs"),
             'grids': package_path / Path("grids.yaml")
         }
@@ -39,12 +43,12 @@ class Results:
         # and results
         self.master = pd.DataFrame({
             str(f.stem): yaml.safe_load(open(f, 'r'))
-            for f in self.paths['configs'].iterdir()
+            for f in paths['configs'].iterdir()
         }).T.astype(str)
         self.master.drop(columns=['info', 'model'], inplace=True)
 
         # Load in the grids
-        gp = GridParams(yaml.safe_load(open(self.paths['grids'], 'r')))
+        gp = GridParams(yaml.safe_load(open(paths['grids'], 'r')))
         self.w_grid = gp.get_grid('w')
         self.k_grid = gp.get_grid('k')
 
@@ -53,7 +57,7 @@ class Results:
 
         for idx in list(self.master.index):
             self.results[idx] = dict()
-            dat = np.load(open(self.paths['results'] / Path(idx) / res, 'rb'))
+            dat = np.load(open(paths['results'] / Path(idx) / res, 'rb'))
             for k_val in self.k_grid:
                 where = np.where(np.abs(dat[:, 0] - k_val) < 1e-7)[0]
                 loaded = dat[where, 1:]
@@ -120,6 +124,7 @@ class Results:
         queried_table = self._query(**kwargs)
 
         energies = []
+        heights = []
         k_grid = []
 
         for k in self.k_grid:
@@ -143,7 +148,9 @@ class Results:
                     A[argmax-offset:argmax+offset], p0=[w_loc, A[argmax], eta]
                 )
                 w_loc = popt[0]
+                A_val = popt[1]
             energies.append(w_loc)
+            heights.append(A_val)
             k_grid.append(k)
 
         energies = np.array(energies)
@@ -151,4 +158,4 @@ class Results:
         if normalize:
             energies = energies - energies[0]
 
-        return k_grid, energies
+        return k_grid, energies, heights
