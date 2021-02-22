@@ -6,8 +6,11 @@ __email__ = "x94carbone@gmail.com"
 
 import logging
 import os
+from pathlib import Path
+import pickle
 import shlex
 import subprocess
+import uuid
 import time
 
 
@@ -16,6 +19,69 @@ from ggce.utils.logger import default_logger as dlog
 
 LIFO_QUEUE_PATH = '.LIFO_queue.yaml'
 JOB_DATA_PATH = 'job_data'
+
+
+class LoggerOnRank:
+
+    def __init__(self, rank, logger, debug_flag=False):
+        self.rank = rank
+        self.logger = logger
+        self.debug_flag = debug_flag
+
+    def debug(self, msg):
+        if self.debug_flag:
+            self.logger.debug(f"({self.rank}) {msg}")
+
+    def info(self, msg):
+        self.logger.info(f"({self.rank}) {msg}")
+
+    def warning(self, msg):
+        self.logger.warning(f"({self.rank}) {msg}")
+
+    def error(self, msg):
+        self.logger.error(f"({self.rank}) {msg}")
+
+    def critical(self, msg):
+        self.logger.critical(f"({self.rank}) {msg}")
+
+
+class RankTools:
+    """A helper class containing information about the current MPI communicator
+    as well as the rank, and logger."""
+
+    def __init__(self, communicator, logger, debug):
+        self.SIZE = communicator.size
+        self.RANK = communicator.rank
+        self.logger = \
+            LoggerOnRank(rank=self.RANK, logger=logger, debug_flag=bool(debug))
+
+    def chunk_jobs(self, jobs):
+        """Returns self.SIZE chunks, each of which is a list which is a
+        reasonably equally distributed representation of jobs."""
+
+        return [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+
+
+class Buffer:
+
+    def __init__(self, nbuff, target_directory):
+        self.nbuff = nbuff
+        self.counter = 0
+        self.queue = []
+        self.target_directory = Path(target_directory)
+
+    def flush(self):
+        if self.counter > 0:
+            path = self.target_directory / Path(f"{uuid.uuid4().hex}.pkl")
+            pickle.dump(self.queue, open(path, 'wb'), protocol=4)
+            self.counter = 0
+            self.queue = []
+
+    def __call__(self, val):
+        self.queue.append(val)
+        self.counter += 1
+        if self.counter >= self.nbuff:
+            self.flush()
 
 
 def lorentzian(x, x0, a, gam):
@@ -83,19 +149,17 @@ def get_package_dir():
 
 
 def listdir_fullpath(d):
-    """https://stackoverflow.com/a/120948"""
-
-    return [os.path.join(d, f) for f in os.listdir(d)]
+    return [p for p in d.iterdir()]
 
 
 def listdir_files_fp(d):
-    x = [os.path.join(d, f) for f in os.listdir(d)]
-    return [xx for xx in x if not os.path.isdir(xx)]
+    x = listdir_fullpath(d)
+    return [xx for xx in x if not xx.is_dir()]
 
 
 def listdir_fullpath_dirs_only(d):
-    dirs = [os.path.join(d, f) for f in os.listdir(d)]
-    return [d for d in dirs if os.path.isdir(d)]
+    dirs = listdir_fullpath(d)
+    return [d for d in dirs if d.is_dir()]
 
 
 def time_func(arg1=None):

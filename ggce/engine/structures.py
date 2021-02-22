@@ -176,6 +176,14 @@ class GridParams:
     def __init__(self, grid_params):
         self.k_grid_info = grid_params['k']
         self.w_grid_info = grid_params['w']
+        self.method = grid_params.get('method')
+        if self.method is None:
+            self.method = 'standard'
+        else:
+            assert self.method in ['standard', 'gs']
+        if self.method == 'gs':
+            wgrid = self.get_grid('w')
+            assert len(wgrid) >= 20
 
     def get_grid(self, grid_type, round_values=8):
         """"""
@@ -194,6 +202,7 @@ class GridParams:
         if linspace:
             assert all([isinstance(xx, list) for xx in vals])
             assert all([len(xx) == 3 for xx in vals])
+            assert all(xx[0] < xx[1] for xx in vals)
 
             return np.round(np.sort(np.concatenate([
                 np.linspace(*c, endpoint=True) for c in vals
@@ -208,7 +217,8 @@ class GridParams:
 
         d = {
             "k": self.k_grid_info,
-            "w": self.w_grid_info
+            "w": self.w_grid_info,
+            "method": self.method
         }
 
         with open(path, 'w') as f:

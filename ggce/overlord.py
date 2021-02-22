@@ -102,11 +102,11 @@ requeue_job()
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-        if cluster == "Cori" or cluster == "cori":
+        if cluster.lower() == "cori":
             return self._get_requeue_Cori()
 
         # Using rr to test the requeue script
-        elif cluster == "Habanero" or cluster == "habanero" or cluster == "rr":
+        elif cluster.lower() == "habanero" or cluster == "rr":
             return self._get_requeue_Habanero()
         else:
             msg = f"Unsupported cluster {cluster} for requeue"
@@ -499,6 +499,8 @@ class Submitter(BaseOverlord):
         solver = int(self.cl_args.solver)
         nbuff = int(self.cl_args.nbuff)
 
+        script = "ggce/entrypoints/submit_standard.py"
+
         # If bash is true, then we save a local run script, which the
         # user can run separately using bash.
         if self.cl_args.bash:
@@ -513,7 +515,7 @@ class Submitter(BaseOverlord):
 
             local_threads = 1
 
-            exe = f"mpiexec -np {local_procs} python3 ._submit.py " \
+            exe = f"mpiexec -np {local_procs} python3 {script} " \
                 f"{package} {debug} {dryrun} {solver} {nbuff}"
             fname = f"submit_{basename}.sh"
             with open(fname, 'w') as f:

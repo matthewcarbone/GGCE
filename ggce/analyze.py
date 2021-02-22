@@ -149,6 +149,11 @@ class Results:
                 )
                 w_loc = popt[0]
                 A_val = popt[1]
+
+            else:
+                w_loc = w[argmax]
+                A_val = A[argmax]
+
             energies.append(w_loc)
             heights.append(A_val)
             k_grid.append(k)
