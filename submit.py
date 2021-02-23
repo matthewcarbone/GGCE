@@ -12,6 +12,7 @@ mpiexec -np 4 python3 ._submit.py /Users/mc/Data/scratch/GGCE/000_TEST2 1
 
 """
 
+import copy
 import numpy as np
 from pathlib import Path
 import sys
@@ -107,7 +108,13 @@ if __name__ == '__main__':
         elif method == 1:
             mpi_info.logger.info("*** Lowest energy band calculation")
 
+    original_k_grid = k_grid
+    original_w_grid = w_grid
+
     for config_index, config_path in enumerate(all_configs_paths):
+
+        k_grid = copy.deepcopy(original_k_grid)
+        w_grid = copy.deepcopy(original_w_grid)
 
         if mpi_info.RANK == 0:
             L = len(all_configs_paths)
