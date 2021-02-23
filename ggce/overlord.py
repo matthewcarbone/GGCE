@@ -292,7 +292,7 @@ requeue_job()
         cluster = self.slurm_config.get("cluster")
 
         # The last line is always the same unless requeue
-        script = "ggce/entrypoints/submit_standard.py"
+        script = "submit.py"
         if cluster == "Cori":
             bind_str = " --cpu-bind=cores" if bind_cores else ""
             if self.cl_args['requeue']:
@@ -500,7 +500,7 @@ class Submitter(BaseOverlord):
         solver = int(self.cl_args.solver)
         nbuff = int(self.cl_args.nbuff)
 
-        script = "ggce/entrypoints/submit_standard.py"
+        script = "submit.py"
 
         # If bash is true, then we save a local run script, which the
         # user can run separately using bash.
