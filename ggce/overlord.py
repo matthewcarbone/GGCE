@@ -292,17 +292,18 @@ requeue_job()
         cluster = self.slurm_config.get("cluster")
 
         # The last line is always the same unless requeue
+        script = "ggce/entrypoints/submit_standard.py"
         if cluster == "Cori":
             bind_str = " --cpu-bind=cores" if bind_cores else ""
             if self.cl_args['requeue']:
-                last_line = f'srun{bind_str} python3 ._submit.py "$@" &\nwait'
+                last_line = f'srun{bind_str} python3 {script} "$@" &\nwait'
             else:
-                last_line = f'srun{bind_str} python3 ._submit.py "$@"'
+                last_line = f'srun{bind_str} python3 {script} "$@"'
         elif cluster == "rr" or cluster == 'habanero' or cluster == 'Habanero':
             if self.cl_args['requeue']:
-                last_line = 'mpiexec python3 ._submit.py "$@" &\nwait'
+                last_line = f'mpiexec python3 {script} "$@" &\nwait'
             else:
-                last_line = 'mpiexec python3 ._submit.py "$@"'
+                last_line = f'mpiexec python3 {script} "$@"'
         else:
             msg = f"Unknown cluster {cluster}"
             dlog.critical(msg)
