@@ -356,6 +356,9 @@ class LowestBandExecutor(BaseExecutor):
         them into numpy arrays. Those numpy arrays will then be passed to
         the 0th rank, concatenated one more time, and saved to disk."""
 
+        if len(to_concat_on_rank) == 0:
+            return None
+
         final = []
         for f in to_concat_on_rank:
             loaded = pickle.load(open(f, 'rb'))

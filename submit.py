@@ -249,8 +249,8 @@ if __name__ == '__main__':
             tmp_t = (time.time() - tmp_t) / 60.0
             mpi_info.logger.info(f"FINALIZE done in {tmp_t:.02f} m")
 
-        # Concatenate the results on rank 0 and save to disk
-        if mpi_info.RANK == 0:
+            # Concatenate the results on rank 0 and save to disk
+            res = [r for r in res if r is not None]
             res = np.concatenate(res, axis=0)
             executor.save_final(res)
         COMM.Barrier()
