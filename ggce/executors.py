@@ -282,12 +282,17 @@ class LowestBandExecutor(BaseExecutor):
             peak = np.argmax(tmp_A)
 
         # Fit the ground state peak to a Lorentzian
-        popt, _ = curve_fit(
-            utils.lorentzian,
-            tmp_w[peak-5:peak+5],
-            tmp_A[peak-5:peak+5],
-            p0=[tmp_w[peak], tmp_A[peak], self.inp.eta]
-        )
+        try:
+            popt, _ = curve_fit(
+                utils.lorentzian,
+                tmp_w[peak-5:peak+5],
+                tmp_A[peak-5:peak+5],
+                p0=[tmp_w[peak], tmp_A[peak], self.inp.eta]
+            )
+
+        # Least squares minimization failed
+        except RuntimeError:
+            return None
 
         # The new w_grid should be around the computed maximum
         mu = popt[0]

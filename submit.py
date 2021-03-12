@@ -221,6 +221,11 @@ if __name__ == '__main__':
 
                     # Get the new w_grid estimate
                     w_grid = executor.gs_peak(result)
+                    if w_grid is None:
+                        mpi_info.logger.critical(
+                            f"Least squares minimization failed at k={k_val}"
+                        )
+                        COMM.Abort()
 
                 else:
                     w_grid = None
