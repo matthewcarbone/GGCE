@@ -253,6 +253,13 @@ class SystemParams:
         self.M_tfd = d.get('M_tfd')
         self.N_tfd = d.get('N_tfd')
 
+        if self.temperature is not None:
+            if self.temperature > 0.0:
+                if self.M_tfd is None:
+                    self.M_tfd = self.M
+                if self.N_tfd is None:
+                    self.N_tfd = self.N
+
         self.use_g = False
         if self.lambdas is None:
             self.lambdas = d['g']
