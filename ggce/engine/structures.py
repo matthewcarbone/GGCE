@@ -55,7 +55,9 @@ class ModelParams:
 
         # These parameters require a list of lists (for prod or zip), or
         # simply a list (for solo)
-        if param_name in ['M_extent', 'N_bosons', 'Omega', 'lam', 'g']:
+        if param_name in [
+            'M_extent', 'N_bosons', 'Omega', 'lam', 'g', 'M_tfd', 'N_tfd'
+        ]:
             assert isinstance(data['vals'], list)
 
             if data['cycle'] == 'solo':
@@ -248,6 +250,8 @@ class SystemParams:
         self.Omega = d['Omega']
         self.lambdas = d.get('lam')
         self.temperature = d.get('temperature')
+        self.M_tfd = d.get('M_tfd')
+        self.N_tfd = d.get('N_tfd')
 
         self.use_g = False
         if self.lambdas is None:
@@ -266,14 +270,17 @@ class SystemParams:
         if self.N is not None:
             assert self.n_boson_types == len(self.N)
 
-        absolute_extent = d.get('absolute_extent')
+        self.absolute_extent = d.get('absolute_extent')
         if self.n_boson_types == 1:
-            assert absolute_extent is None
-            self.absolute_extent = self.M[0]
+
+            if self.absolute_extent is None:
+                if self.temperature == 0.0:
+                    self.absolute_extent = self.M[0]
+                else:
+                    self.absolute_extent = self.M_tfd[0]
         else:
-            assert absolute_extent is not None
-            assert absolute_extent > 0
-            self.absolute_extent = absolute_extent
+            assert self.absolute_extent is not None
+            assert self.absolute_extent > 0
 
         self.max_bosons_per_site = d.get('max_bosons_per_site')
         if self.max_bosons_per_site is not None:
@@ -376,9 +383,18 @@ class SystemParams:
             new_models = []
 
             for ii in range(len(self.models)):
-                new_M.extend([self.M[ii], self.M[ii]])
-                new_N.extend([self.N[ii], self.N[ii]])
-                new_Omega.extend([self.Omega[ii], self.Omega[ii]])
+                new_M.extend([
+                    self.M[ii], self.M[ii]
+                    if self.M_tfd is None else self.M_tfd[ii]
+                ])
+                new_N.extend([
+                    self.N[ii], self.N[ii]
+                    if self.N_tfd is None else self.N_tfd[ii]
+                ])
+
+                # Need the negative Omega here to account for the TFD truly.
+                # the term's value for Omega is never actually called.
+                new_Omega.extend([self.Omega[ii], -self.Omega[ii]])
                 new_lambdas.extend([self.lambdas[ii], self.lambdas[ii]])
                 new_models.extend([self.models[ii], self.models[ii]])
 
