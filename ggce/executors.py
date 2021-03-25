@@ -58,9 +58,19 @@ class BaseExecutor:
 
         t0 = time.time()
         if self.RANK == 0:
-            nm = f"{self.inp.M}/{self.inp.N}"
-            mod = self.inp.models
-            self.logger.info(f"Priming with M/N = {nm}, model={mod}")
+
+            # Log all of the information about the run!
+            # nm = f"{self.inp.M}/{self.inp.N}"
+            mod = ", ".join(self.inp.models_vis)
+            self.logger.info(f"MODELS: [{mod}]")
+            _Omega = ", ".join([f"{o:.02f}" for o in self.inp.Omega])
+            self.logger.info(f"O = [{_Omega}]")
+            _lambdas = ", ".join([f"{o:.02f}" for o in self.inp.lambdas])
+            self.logger.info(f"L = [{_lambdas}]")
+            self.logger.info(f"T = {self.inp.temperature:.02f}")
+            self.logger.info(f"M = {self.inp.M}")
+            self.logger.info(f"N = {self.inp.N}")
+
         sy = system.System(self.inp)
         T = sy.initialize_generalized_equations()
         L = sy.initialize_equations()
