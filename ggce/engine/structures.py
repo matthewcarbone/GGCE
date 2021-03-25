@@ -12,10 +12,11 @@ import math
 
 import yaml
 
+from ggce.utils.logger import default_logger as dlog
 
 # Define a namedtuple which contains the shift indexes, x and y, the dagger
 # status, d, the coupling term, g, and the boson frequency and type (index)
-SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bv", "bt"])
+SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 
 
 def model_coupling_map(coupling_type, t, Omega, lam, ignore):
@@ -36,7 +37,7 @@ def model_coupling_map(coupling_type, t, Omega, lam, ignore):
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
 
 
-class ModelParams:
+class LoadedParams:
     """Parameter permutations are dictionaries containing two values: val,
     which is the list of values, and cycle, which determines how the
     permutations of this parameter interact with the others.
@@ -104,7 +105,7 @@ class ModelParams:
         zip_lens = []
 
         for param_name, data in params.items():
-            ModelParams._assert_parameter(param_name, data, len(self.model))
+            LoadedParams._assert_parameter(param_name, data, len(self.model))
 
             if data['cycle'] == 'solo':
                 self.solo[param_name] = data['vals']
@@ -229,13 +230,13 @@ class GridParams:
 
 
 def parse_inp(inp_path):
-    """Parses the user-generated input yaml file and returns the ModelParams
+    """Parses the user-generated input yaml file and returns the LoadedParams
     and GridParams classes."""
 
     p = yaml.safe_load(open(inp_path, 'r'))
-    mp = ModelParams(p['model'], p['info'], p['model_parameters'])
+    lp = LoadedParams(p['model'], p['info'], p['model_parameters'])
     gp = GridParams(p['grid_parameters'])
-    return mp, gp
+    return lp, gp
 
 
 class SystemParams:
@@ -279,12 +280,8 @@ class SystemParams:
 
         self.absolute_extent = d.get('absolute_extent')
         if self.n_boson_types == 1:
-
             if self.absolute_extent is None:
-                if self.temperature == 0.0:
-                    self.absolute_extent = self.M[0]
-                else:
-                    self.absolute_extent = self.M_tfd[0]
+                self.absolute_extent = self.M[0]
         else:
             assert self.absolute_extent is not None
             assert self.absolute_extent > 0
@@ -301,36 +298,36 @@ class SystemParams:
         else:
             assert self.N is not None
 
-    def _extend_terms(self, m, g, o, bt):
+    def _extend_terms(self, m, g, bt):
         if m == 'H':
             self.terms.extend([
-                SingleTerm(x=0, y=0, d='+', g=-g, bv=o, bt=bt),
-                SingleTerm(x=0, y=0, d='-', g=-g, bv=o, bt=bt)
+                SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
+                SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
             ])
         elif m == 'EFB':
             self.terms.extend([
-                SingleTerm(x=1, y=1, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=-1, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=1, y=0, d='-', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=0, d='-', g=g, bv=o, bt=bt)
+                SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
             ])
         elif m == 'bondSSH':
             self.terms.extend([
-                SingleTerm(x=1, y=0.5, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=1, y=0.5, d='-', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=-0.5, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=-0.5, d='-', g=g, bv=o, bt=bt)
+                SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
             ])
         elif m == 'SSH':
             self.terms.extend([
-                SingleTerm(x=1, y=0, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=1, y=0, d='-', g=g, bv=o, bt=bt),
-                SingleTerm(x=1, y=1, d='+', g=-g, bv=o, bt=bt),
-                SingleTerm(x=1, y=1, d='-', g=-g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=-1, d='+', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=-1, d='-', g=g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=0, d='+', g=-g, bv=o, bt=bt),
-                SingleTerm(x=-1, y=0, d='-', g=-g, bv=o, bt=bt)
+                SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+                SingleTerm(x=1, y=1, d='+', g=-g, bt=bt),
+                SingleTerm(x=1, y=1, d='-', g=-g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=0, d='+', g=-g, bt=bt),
+                SingleTerm(x=-1, y=0, d='-', g=-g, bt=bt)
             ])
         else:
             raise RuntimeError("Unknown model type when setting terms")
@@ -364,14 +361,13 @@ class SystemParams:
                 V_tilde_prefactor = np.sinh(theta_beta)
             # -----------------------------------------------------------------
 
-            self._extend_terms(m, g*V_prefactor, o, bt)
+            self._extend_terms(m, g*V_prefactor, bt)
             bt += 1
 
-            # Now we implement the thermo field double if necessary. Note that
-            # the coupling is multiplied by a different prefactor, and that the
-            # boson frequency is NEGATIVE, indicative of the fictitious space.
+            # Now we implement the thermo field double changes to the
+            # coupling prefactor, if necessary.
             if self.temperature != 0.0:
-                self._extend_terms(m, g*V_tilde_prefactor, -o, bt)
+                self._extend_terms(m, g*V_tilde_prefactor, bt)
                 bt += 1
 
         # Adjust the number of boson types according to thermofield
@@ -400,7 +396,9 @@ class SystemParams:
                 ])
 
                 # Need the negative Omega here to account for the TFD truly.
-                # the term's value for Omega is never actually called.
+                # the term's value for Omega is never actually called. Here, we
+                # note that the boson frequency is NEGATIVE, indicative of the
+                # fictitious space!
                 new_Omega.extend([self.Omega[ii], -self.Omega[ii]])
                 new_lambdas.extend([self.lambdas[ii], self.lambdas[ii]])
                 new_models.extend([self.models[ii], self.models[ii]])
@@ -408,5 +406,17 @@ class SystemParams:
             self.M = new_M
             self.N = new_N
             self.Omega = new_Omega
+
+            # Some of these parameters aren't used but we'll redfine them
+            # anyway for consistency. Some of this is actually used in logging
+            # so it's still useful.
             self.lambdas = new_lambdas
             self.models = new_models
+            self.models_vis = []
+            for ii, m in enumerate(self.models):
+                if ii % 2 == 0:  # Even
+                    self.models_vis.append(m)
+                else:
+                    self.models_vis.append(f"fict({m})")
+        else:
+            self.models_vis = self.models
