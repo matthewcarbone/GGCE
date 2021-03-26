@@ -57,7 +57,10 @@ class Results:
 
         for idx in list(self.master.index):
             self.results[idx] = dict()
-            dat = np.load(open(paths['results'] / Path(idx) / res, 'rb'))
+            try:
+                dat = np.load(open(paths['results'] / Path(idx) / res, 'rb'))
+            except FileNotFoundError:
+                continue
             for k_val in self.k_grid:
                 where = np.where(np.abs(dat[:, 0] - k_val) < 1e-7)[0]
                 loaded = dat[where, 1:]
