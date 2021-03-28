@@ -28,6 +28,10 @@ class Results:
     parameters. This class is a helper for querying trials based on the
     parameters specified, and returning spectral functions A(w)."""
 
+    def __add__(self, r2):
+        assert isinstance(r2, Results)
+        # if 
+
     def __init__(self, package_path, res=Path("res.npy")):
 
         # Load in the initial data
@@ -62,8 +66,8 @@ class Results:
             self.results[idx] = dict()
             try:
                 dat = np.load(open(paths['results'] / Path(idx) / res, 'rb'))
-                to_drop.append(idx)
             except FileNotFoundError:
+                to_drop.append(idx)
                 continue
             for k_val in self.k_grid:
                 where = np.where(np.abs(dat[:, 0] - k_val) < 1e-7)[0]
@@ -71,7 +75,7 @@ class Results:
                 sorted_indices = np.argsort(loaded[:, 0])
                 self.results[idx][k_val] = loaded[sorted_indices, :]
 
-        self.results = self.results.T.drop(columns=to_drop).T
+        self.master = self.master.T.drop(columns=to_drop).T
 
         # Set the default key values for convenience
         self.defaults = dict()
