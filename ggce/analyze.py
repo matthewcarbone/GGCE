@@ -55,10 +55,14 @@ class Results:
         # Load in the results
         self.results = dict()
 
+        # A list of indexes to drop; these contain no data
+        to_drop = []
+
         for idx in list(self.master.index):
             self.results[idx] = dict()
             try:
                 dat = np.load(open(paths['results'] / Path(idx) / res, 'rb'))
+                to_drop.append(idx)
             except FileNotFoundError:
                 continue
             for k_val in self.k_grid:
@@ -66,6 +70,8 @@ class Results:
                 loaded = dat[where, 1:]
                 sorted_indices = np.argsort(loaded[:, 0])
                 self.results[idx][k_val] = loaded[sorted_indices, :]
+
+        self.results = self.results.T.drop(columns=to_drop).T
 
         # Set the default key values for convenience
         self.defaults = dict()
