@@ -28,10 +28,6 @@ class Results:
     parameters. This class is a helper for querying trials based on the
     parameters specified, and returning spectral functions A(w)."""
 
-    def __add__(self, r2):
-        assert isinstance(r2, Results)
-        # if 
-
     def __init__(self, package_path, res=Path("res.npy")):
 
         # Load in the initial data
