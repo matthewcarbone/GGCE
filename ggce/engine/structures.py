@@ -12,10 +12,11 @@ import math
 
 import yaml
 
+from ggce.utils.logger import default_logger as dlog
 
 # Define a namedtuple which contains the shift indexes, x and y, the dagger
 # status, d, the coupling term, g, and the boson frequency and type (index)
-SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bv", "bt"])
+SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 
 
 def model_coupling_map(coupling_type, t, Omega, lam, ignore):
@@ -36,7 +37,7 @@ def model_coupling_map(coupling_type, t, Omega, lam, ignore):
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
 
 
-class ModelParams:
+class LoadedParams:
     """Parameter permutations are dictionaries containing two values: val,
     which is the list of values, and cycle, which determines how the
     permutations of this parameter interact with the others.
@@ -55,7 +56,9 @@ class ModelParams:
 
         # These parameters require a list of lists (for prod or zip), or
         # simply a list (for solo)
-        if param_name in ['M_extent', 'N_bosons', 'Omega', 'lam', 'g']:
+        if param_name in [
+            'M_extent', 'N_bosons', 'Omega', 'lam', 'g', 'M_tfd', 'N_tfd'
+        ]:
             assert isinstance(data['vals'], list)
 
             if data['cycle'] == 'solo':
@@ -78,7 +81,8 @@ class ModelParams:
                 raise RuntimeError(f"Unknown cycle: {data['cycle']}")
 
         elif param_name in [
-            'hopping', 'broadening', 'absolute_extent', 'max_bosons_per_site'
+            'hopping', 'broadening', 'absolute_extent', 'max_bosons_per_site',
+            'temperature'
         ]:
 
             if data['cycle'] == 'solo':
@@ -101,7 +105,7 @@ class ModelParams:
         zip_lens = []
 
         for param_name, data in params.items():
-            ModelParams._assert_parameter(param_name, data, len(self.model))
+            LoadedParams._assert_parameter(param_name, data, len(self.model))
 
             if data['cycle'] == 'solo':
                 self.solo[param_name] = data['vals']
@@ -226,13 +230,13 @@ class GridParams:
 
 
 def parse_inp(inp_path):
-    """Parses the user-generated input yaml file and returns the ModelParams
+    """Parses the user-generated input yaml file and returns the LoadedParams
     and GridParams classes."""
 
     p = yaml.safe_load(open(inp_path, 'r'))
-    mp = ModelParams(p['model'], p['info'], p['model_parameters'])
+    lp = LoadedParams(p['model'], p['info'], p['model_parameters'])
     gp = GridParams(p['grid_parameters'])
-    return mp, gp
+    return lp, gp
 
 
 class SystemParams:
@@ -246,11 +250,26 @@ class SystemParams:
         self.a = 1.0  # Hard code lattice constant
         self.Omega = d['Omega']
         self.lambdas = d.get('lam')
+        self.temperature = d.get('temperature')
+        self.M_tfd = d.get('M_tfd')
+        self.N_tfd = d.get('N_tfd')
+
+        if self.temperature is not None:
+            if self.temperature > 0.0:
+                if self.M_tfd is None:
+                    self.M_tfd = self.M
+                if self.N_tfd is None:
+                    self.N_tfd = self.N
 
         self.use_g = False
         if self.lambdas is None:
             self.lambdas = d['g']
             self.use_g = True
+
+        if self.temperature is None:
+            self.temperature = 0.0
+        else:
+            assert self.temperature >= 0.0
 
         self.models = d['model']
         self.n_boson_types = len(self.models)
@@ -259,14 +278,13 @@ class SystemParams:
         if self.N is not None:
             assert self.n_boson_types == len(self.N)
 
-        absolute_extent = d.get('absolute_extent')
+        self.absolute_extent = d.get('absolute_extent')
         if self.n_boson_types == 1:
-            assert absolute_extent is None
-            self.absolute_extent = self.M[0]
+            if self.absolute_extent is None:
+                self.absolute_extent = self.M[0]
         else:
-            assert absolute_extent is not None
-            assert absolute_extent > 0
-            self.absolute_extent = absolute_extent
+            assert self.absolute_extent is not None
+            assert self.absolute_extent > 0
 
         self.max_bosons_per_site = d.get('max_bosons_per_site')
         if self.max_bosons_per_site is not None:
@@ -280,6 +298,40 @@ class SystemParams:
         else:
             assert self.N is not None
 
+    def _extend_terms(self, m, g, bt):
+        if m == 'H':
+            self.terms.extend([
+                SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
+                SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
+            ])
+        elif m == 'EFB':
+            self.terms.extend([
+                SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
+            ])
+        elif m == 'bondSSH':
+            self.terms.extend([
+                SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
+            ])
+        elif m == 'SSH':
+            self.terms.extend([
+                SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
+                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+                SingleTerm(x=1, y=1, d='+', g=-g, bt=bt),
+                SingleTerm(x=1, y=1, d='-', g=-g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+                SingleTerm(x=-1, y=-1, d='-', g=g, bt=bt),
+                SingleTerm(x=-1, y=0, d='+', g=-g, bt=bt),
+                SingleTerm(x=-1, y=0, d='-', g=-g, bt=bt)
+            ])
+        else:
+            raise RuntimeError("Unknown model type when setting terms")
+
     def prime(self):
         """Initializes the terms object, which contains the critical
         information about the Hamiltonian necessary for running the
@@ -291,39 +343,80 @@ class SystemParams:
         self.terms = []
 
         bt = 0
+
         for (m, o, lam) in zip(self.models, self.Omega, self.lambdas):
             g = model_coupling_map(m, self.t, o, lam, self.use_g)
 
-            if m == 'H':
-                self.terms.extend([
-                    SingleTerm(x=0, y=0, d='+', g=-g, bv=o, bt=bt),
-                    SingleTerm(x=0, y=0, d='-', g=-g, bv=o, bt=bt)
-                ])
-            elif m == 'EFB':
-                self.terms.extend([
-                    SingleTerm(x=1, y=1, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=-1, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=1, y=0, d='-', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=0, d='-', g=g, bv=o, bt=bt)
-                ])
-            elif m == 'bondSSH':
-                self.terms.extend([
-                    SingleTerm(x=1, y=0.5, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=1, y=0.5, d='-', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=-0.5, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=-0.5, d='-', g=g, bv=o, bt=bt)
-                ])
-            elif m == 'SSH':
-                self.terms.extend([
-                    SingleTerm(x=1, y=0, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=1, y=0, d='-', g=g, bv=o, bt=bt),
-                    SingleTerm(x=1, y=1, d='+', g=-g, bv=o, bt=bt),
-                    SingleTerm(x=1, y=1, d='-', g=-g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=-1, d='+', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=-1, d='-', g=g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=0, d='+', g=-g, bv=o, bt=bt),
-                    SingleTerm(x=-1, y=0, d='-', g=-g, bv=o, bt=bt)
-                ])
+            # Thermo field doubling -------------------------------------------
+            # We multiply g times the thermofield factor no matter what since
+            # cleanly cosh(0) = 1.
+            if self.temperature == 0.0:
+                V_prefactor = 1.0
+                V_tilde_prefactor = 0.0
             else:
-                raise RuntimeError("Unknown model type when setting terms")
+                assert self.temperature > 0.0
+                beta = 1.0 / self.temperature
+                theta_beta = np.arctanh(np.exp(-beta * o / 2.0))
+                V_prefactor = np.cosh(theta_beta)
+                V_tilde_prefactor = np.sinh(theta_beta)
+            # -----------------------------------------------------------------
+
+            self._extend_terms(m, g*V_prefactor, bt)
             bt += 1
+
+            # Now we implement the thermo field double changes to the
+            # coupling prefactor, if necessary.
+            if self.temperature != 0.0:
+                self._extend_terms(m, g*V_tilde_prefactor, bt)
+                bt += 1
+
+        # Adjust the number of boson types according to thermofield
+        if self.temperature > 0.0:
+            self.n_boson_types *= 2  # Thermo field "double"
+            assert isinstance(self.M, list)
+            assert isinstance(self.N, list)
+            assert isinstance(self.Omega, list)
+            assert isinstance(self.lambdas, list)
+            assert isinstance(self.models, list)
+
+            new_M = []
+            new_N = []
+            new_Omega = []
+            new_lambdas = []
+            new_models = []
+
+            for ii in range(len(self.models)):
+                new_M.extend([
+                    self.M[ii], self.M[ii]
+                    if self.M_tfd is None else self.M_tfd[ii]
+                ])
+                new_N.extend([
+                    self.N[ii], self.N[ii]
+                    if self.N_tfd is None else self.N_tfd[ii]
+                ])
+
+                # Need the negative Omega here to account for the TFD truly.
+                # the term's value for Omega is never actually called. Here, we
+                # note that the boson frequency is NEGATIVE, indicative of the
+                # fictitious space!
+                new_Omega.extend([self.Omega[ii], -self.Omega[ii]])
+                new_lambdas.extend([self.lambdas[ii], self.lambdas[ii]])
+                new_models.extend([self.models[ii], self.models[ii]])
+
+            self.M = new_M
+            self.N = new_N
+            self.Omega = new_Omega
+
+            # Some of these parameters aren't used but we'll redfine them
+            # anyway for consistency. Some of this is actually used in logging
+            # so it's still useful.
+            self.lambdas = new_lambdas
+            self.models = new_models
+            self.models_vis = []
+            for ii, m in enumerate(self.models):
+                if ii % 2 == 0:  # Even
+                    self.models_vis.append(m)
+                else:
+                    self.models_vis.append(f"fict({m})")
+        else:
+            self.models_vis = self.models

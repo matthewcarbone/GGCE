@@ -35,9 +35,7 @@ def config_space_gen(length, total_sum):
         yield (total_sum,)
     else:
         for value in range(total_sum + 1):
-            for permutation in config_space_gen(
-                length - 1, total_sum - value
-            ):
+            for permutation in config_space_gen(length - 1, total_sum - value):
                 r = (value,) + permutation
                 yield r
 
