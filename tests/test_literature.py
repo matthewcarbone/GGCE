@@ -23,8 +23,8 @@ def efb_figure5_trials():
     info = d['info']
     params = d['model_parameters']
 
-    # Create the ModelParams object
-    mp = structures.ModelParams(model, info, params)
+    # Create the LoadedParams object
+    mp = structures.LoadedParams(model, info, params)
 
     # Get all of the sub-dictionaries containing the data- it's just one
     # for this particular data
@@ -40,8 +40,8 @@ def efb_figure6_trials():
     info = d['info']
     params = d['model_parameters']
 
-    # Create the ModelParams object
-    mp = structures.ModelParams(model, info, params)
+    # Create the LoadedParams object
+    mp = structures.LoadedParams(model, info, params)
 
     # Get all of the sub-dictionaries containing the data- it's just one
     # for this particular data
