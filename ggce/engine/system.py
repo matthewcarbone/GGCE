@@ -157,7 +157,7 @@ class System:
             Container for the full set of parameters.
         """
 
-        self.system_params = system_params
+        self.system_params = copy.deepcopy(system_params)
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
@@ -399,7 +399,7 @@ class System:
         dt = time.time() - t0
         dlog.info(f"({dt:.02f}s) Solvers primed")
 
-    def one_shot_sparse_solve(self, k, w):
+    def one_shot_sparse_solve(self, k, w, eta=None):
         """Executes a oneshot sparse solver. Each row/column corresponds to a
         different f_n(delta) function."""
 
@@ -425,9 +425,9 @@ class System:
                 for term in eq.terms_list + [eq.index_term]:
                     jj = self.basis[term.identifier()]
                     try:
-                        row_dict[jj] += term.coefficient(k, w)
+                        row_dict[jj] += term.coefficient(k, w, eta)
                     except KeyError:
-                        row_dict[jj] = term.coefficient(k, w)
+                        row_dict[jj] = term.coefficient(k, w, eta)
 
                 row_ind.extend([ii_basis for _ in range(len(row_dict))])
                 col_ind.extend([key for key, _ in row_dict.items()])
@@ -447,8 +447,10 @@ class System:
         row_ind = np.array([self.basis['{G}(0.0)']])
         col_ind = np.array([0])
         v = coo_matrix((
-            np.array([self.equations[0][0].bias(k, w)], dtype=np.complex64),
-            (row_ind, col_ind)
+            np.array(
+                [self.equations[0][0].bias(k, w, eta)],
+                dtype=np.complex64
+            ), (row_ind, col_ind)
         )).tocsr()
 
         res = spsolve(X, v)
@@ -467,7 +469,7 @@ class System:
 
         return G, meta
 
-    def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat):
+    def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat, eta=None):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
         (n_shift = 1). Modifies the matrix mat in place. Note that mat should
         be a complex matrix of zeros before being passed to this method."""
@@ -484,13 +486,13 @@ class System:
                     continue
                 t_id = term.identifier()
                 jj_basis = self.recursion_solver_basis[n_bosons_shift][t_id]
-                mat[ii_basis, jj_basis] += term.coefficient(k, w)
+                mat[ii_basis, jj_basis] += term.coefficient(k, w, eta)
 
-    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A):
+    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A, eta=None):
 
         # Fill beta
         t0 = time.time()
-        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n)
+        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n, eta)
         dt = time.time() - t0
         dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
 
@@ -508,7 +510,7 @@ class System:
         d['terms'] = len(d['terms'])
         dlog.debug(f"Solving recursively: {d}")
 
-    def continued_fraction_dense_solve(self, k, w):
+    def continued_fraction_dense_solve(self, k, w, eta=None):
         """Executes the solution for some given k, w. Also returns the shapes
         of all computed matrices."""
 
@@ -533,7 +535,7 @@ class System:
 
             if n_bosons == total_bosons:
                 A = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
-                self._compute_alpha_beta_(n_bosons, -1, k, w, A)
+                self._compute_alpha_beta_(n_bosons, -1, k, w, A, eta)
                 continue
 
             d_n_p_1 = len(self.recursion_solver_basis[n_bosons + 1])
@@ -543,11 +545,11 @@ class System:
             beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
             meta['betas'].append((d_n, d_n_p_1))
             to_inv, initial_A_shape = \
-                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A)
+                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A, eta)
 
             # Fill alpha
             t0 = time.time()
-            self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n)
+            self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n, eta)
             dt = time.time() - t0
             dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
@@ -571,14 +573,14 @@ class System:
         A = np.atleast_1d(A.squeeze())
         for term in self.equations[0][0].terms_list:
             basis_idx = self.recursion_solver_basis[1][term.identifier()]
-            self_energy_times_G0 += A[basis_idx] * term.coefficient(k, w)
+            self_energy_times_G0 += A[basis_idx] * term.coefficient(k, w, eta)
 
         # The Green's function is of course given by Dyson's equation.
         eom = self.equations[0]
         if len(eom) != 1:
             dlog.critical("More than one EOM!")
             raise RuntimeError("More than one EOM!")
-        G0 = eom[0].bias(k, w)  # Convenient way to access G0...
+        G0 = eom[0].bias(k, w, eta)  # Convenient way to access G0...
         G = G0 / (1.0 - self_energy_times_G0)
 
         if -G.imag / np.pi < 0.0:
@@ -593,10 +595,13 @@ class System:
 
         return G, meta
 
-    def solve(self, k, w, solver):
+    def solve(self, k, w, solver, eta=None):
+        """Can override the specified eta in the input file by making eta in
+        the arguments not None."""
+
         if solver == 0:
-            return self.continued_fraction_dense_solve(k, w)
+            return self.continued_fraction_dense_solve(k, w, eta)
         elif solver == 1:
-            return self.one_shot_sparse_solve(k, w)
+            return self.one_shot_sparse_solve(k, w, eta)
         else:
             raise RuntimeError(f"Unknown solver type {solver}")

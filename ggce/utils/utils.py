@@ -50,16 +50,16 @@ class RankTools:
     as well as the rank, and logger."""
 
     def __init__(self, communicator, logger, debug):
-        self.SIZE = communicator.size
-        self.RANK = communicator.rank
+        self.size = communicator.size
+        self.rank = communicator.rank
         self.logger = \
-            LoggerOnRank(rank=self.RANK, logger=logger, debug_flag=bool(debug))
+            LoggerOnRank(rank=self.rank, logger=logger, debug_flag=bool(debug))
 
     def chunk_jobs(self, jobs):
         """Returns self.SIZE chunks, each of which is a list which is a
         reasonably equally distributed representation of jobs."""
 
-        return [jobs[ii::self.SIZE] for ii in range(self.SIZE)]
+        return [jobs[ii::self.rank] for ii in range(self.rank)]
 
 
 class Buffer:

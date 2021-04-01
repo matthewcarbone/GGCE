@@ -271,7 +271,7 @@ class Term:
 
         return
 
-    def coefficient(self, k, w):
+    def coefficient(self, k, w, eta=None):
         raise NotImplementedError
 
     def increment_g_arg(self, delta):
@@ -315,7 +315,7 @@ class IndexTerm(Term):
     def increment_g_arg(self, delta):
         raise NotImplementedError
 
-    def coefficient(self, k, w):
+    def coefficient(self, k, w, eta=None):
         return 1.0
 
 
@@ -330,7 +330,7 @@ class EOMTerm(Term):
         self.f_arg = self.hterm.y
         self.constant_prefactor = self.hterm.g
 
-    def coefficient(self, k, w):
+    def coefficient(self, k, w, eta=None):
         """This will set the prefactor to G0, since we assume
         that as a base class it originates from the g0 terms in the main
         EOM. Note that an index term does not have this method defined, since
@@ -338,9 +338,11 @@ class EOMTerm(Term):
         constant prefactor), and this method will be overridden by
         AnnihilationTerm and CreationTerm classes."""
 
+        if eta is None:
+            eta = self.system_params.eta
+
         return self.constant_prefactor * physics.G0_k_omega(
-            k, w, self.system_params.a, self.system_params.eta,
-            self.system_params.t
+            k, w, self.system_params.a, eta, self.system_params.t
         ) * cmath.exp(1j * k * self.system_params.a * self.exp_shift)
 
     def increment_g_arg(self, delta):
@@ -371,7 +373,7 @@ class NonIndexTerm(Term):
         self.f_arg -= location
         self.modify_n_bosons(self.hterm.bt, location)
 
-    def coefficient(self, k, w):
+    def coefficient(self, k, w, eta=None):
 
         exp_term = cmath.exp(
             1j * k * self.system_params.a * self.exp_shift
@@ -379,9 +381,12 @@ class NonIndexTerm(Term):
 
         w_freq_shift = w - self.freq_shift
 
+        if eta is None:
+            eta = self.system_params.eta
+
         g_contrib = physics.g0_delta_omega(
             self.g_arg, w_freq_shift, self.system_params.a,
-            self.system_params.eta, self.system_params.t
+            eta, self.system_params.t
         )
 
         return self.constant_prefactor * exp_term * g_contrib

@@ -178,19 +178,23 @@ class GridParams:
     combination."""
 
     def __init__(self, grid_params):
-        self.k_grid_info = grid_params['k']
-        self.w_grid_info = grid_params['w']
+
         self.method = grid_params.get('method')
         if self.method is None:
             self.method = 'standard'
         else:
             assert self.method in ['standard', 'gs']
-        if self.method == 'gs':
-            wgrid = self.get_grid('w')
-            assert len(wgrid) >= 20
+
+        self.k_grid_info = grid_params['k']
+        self.w_grid_info = grid_params['w']
 
     def get_grid(self, grid_type, round_values=8):
-        """"""
+        """Returns the desired grid dependening on the selected type and
+        selected method. For example, if standard, returns the linspace grid,
+        but if gs, will return the linspace grid for the k-points but only
+        the initial start and end omega grid points. The step in omega will
+        be equal to some constant times eta for the gs (ground state)
+        method."""
 
         assert grid_type in ['k', 'w']
 
@@ -198,6 +202,13 @@ class GridParams:
             vals = self.k_grid_info['vals']
             linspace = self.k_grid_info['linspace']
         elif grid_type == 'w':
+            if self.method == 'gs':
+                return (
+                    self.w_grid_info['w0'], self.w_grid_info['wf'],
+                    self.w_grid_info['w_N_max'], self.w_grid_info['eta_div'],
+                    self.w_grid_info['eta_step_div'],
+                    self.w_grid_info['next_k_offset_factor']
+                )
             vals = self.w_grid_info['vals']
             linspace = self.w_grid_info['linspace']
 

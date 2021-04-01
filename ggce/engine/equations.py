@@ -56,7 +56,7 @@ class Equation:
         self.f_arg_terms = None
         self.system_params = system_params
 
-    def bias(self, k, w):
+    def bias(self, k, w, eta=None):
         """The default value for the bias is 0, except in the case of the
         Green's function."""
 
@@ -181,12 +181,14 @@ class GreenEquation(Equation):
         config = np.zeros((system_params.n_boson_types, 1))
         super().__init__(config_index=config, system_params=system_params)
 
-    def bias(self, k, w):
+    def bias(self, k, w, eta=None):
         """Initializes the bias for the Green's function."""
 
+        if eta is None:
+            eta = self.system_params.eta
+
         return physics.G0_k_omega(
-            k, w, self.system_params.a, self.system_params.eta,
-            self.system_params.t
+            k, w, self.system_params.a, eta, self.system_params.t
         )
 
     def initialize_terms(self):
