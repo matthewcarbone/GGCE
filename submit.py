@@ -208,6 +208,7 @@ if __name__ == '__main__':
                 while True:
 
                     if current_n_w > w_N_max:
+                        executor.finalize()
                         mpi_info.logger.critical(
                             "Exceeded maximum omega points. Aborting."
                         )
