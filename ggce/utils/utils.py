@@ -59,7 +59,7 @@ class RankTools:
         """Returns self.SIZE chunks, each of which is a list which is a
         reasonably equally distributed representation of jobs."""
 
-        return [jobs[ii::self.rank] for ii in range(self.rank)]
+        return [jobs[ii::self.size] for ii in range(self.size)]
 
 
 class Buffer:
