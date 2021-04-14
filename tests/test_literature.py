@@ -5,47 +5,56 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 
+import argparse
 import numpy as np
+from pathlib import Path
 import pytest
+import shutil
 import yaml
 
 
-from ggce.engine import structures, system
+from ggce.overlord import Prime
+from ggce.engine.structures import SystemParams
+from ggce.engine import system
 from ggce.utils import utils
+
+
+DUMMY_CACHE = "DUMMY_CACHE"
+DUMMY_LIFO = "DUMMY_LIFO"
 
 
 @pytest.fixture
 def efb_figure5_trials():
-
-    # Load in the parameters
-    d = yaml.safe_load(open("inp/benchmarks/EFB_Figure5.yaml", 'r'))
-    model = d['model']
-    info = d['info']
-    params = d['model_parameters']
-
-    # Create the LoadedParams object
-    mp = structures.LoadedParams(model, info, params)
-
-    # Get all of the sub-dictionaries containing the data- it's just one
-    # for this particular data
-    return [xx for xx in mp][0]
+    args = argparse.ArgumentParser()
+    args.add_argument('-i', '--input', dest='inp')
+    a = args.parse_args(['-i', 'inp/benchmarks/EFB_Figure5.yaml'])
+    primer = Prime(a)
+    primer.cache_dir = Path(DUMMY_CACHE)
+    primer.queue_path = Path(DUMMY_LIFO)
+    run_name = primer.scaffold()
+    config_path = Path(DUMMY_CACHE) / Path(run_name) / "configs/00000000.yaml"
+    sy = SystemParams(yaml.safe_load(open(config_path)))
+    sy.prime()
+    shutil.rmtree(DUMMY_CACHE)
+    Path.unlink(Path(DUMMY_LIFO))
+    return sy
 
 
 @pytest.fixture
 def efb_figure6_trials():
-
-    # Load in the parameters
-    d = yaml.safe_load(open("inp/benchmarks/EFB_Figure6.yaml", 'r'))
-    model = d['model']
-    info = d['info']
-    params = d['model_parameters']
-
-    # Create the LoadedParams object
-    mp = structures.LoadedParams(model, info, params)
-
-    # Get all of the sub-dictionaries containing the data- it's just one
-    # for this particular data
-    return [xx for xx in mp][0]
+    args = argparse.ArgumentParser()
+    args.add_argument('-i', '--input', dest='inp')
+    a = args.parse_args(['-i', 'inp/benchmarks/EFB_Figure6.yaml'])
+    primer = Prime(a)
+    primer.cache_dir = Path(DUMMY_CACHE)
+    primer.queue_path = Path(DUMMY_LIFO)
+    run_name = primer.scaffold()
+    config_path = Path(DUMMY_CACHE) / Path(run_name) / "configs/00000000.yaml"
+    sy = SystemParams(yaml.safe_load(open(config_path)))
+    sy.prime()
+    shutil.rmtree(DUMMY_CACHE)
+    Path.unlink(Path(DUMMY_LIFO))
+    return sy
 
 
 class TestLiteratureEFB:
@@ -54,7 +63,7 @@ class TestLiteratureEFB:
     height 1, and "randomly" selected."""
 
     def test_EFB_figure5_k0(self, efb_figure5_trials):
-        trial = efb_figure5_trials
+        sp = efb_figure5_trials
 
         gt = np.array([
             [-5.50000000e+00,  1.43501419e-03],
@@ -87,9 +96,6 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        sp = structures.SystemParams(trial)
-        sp.prime()
-
         with utils.DisableLogger():
             sy = system.System(sp)
             sy.initialize_generalized_equations()
@@ -112,7 +118,7 @@ class TestLiteratureEFB:
             assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k0(self, efb_figure6_trials):
-        trial = efb_figure6_trials
+        sp = efb_figure6_trials
 
         gt = np.array([
             [-7.91666666e+00,  3.96981633e-03],
@@ -145,9 +151,6 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        sp = structures.SystemParams(trial)
-        sp.prime()
-
         with utils.DisableLogger():
             sy = system.System(sp)
             sy.initialize_generalized_equations()
@@ -170,7 +173,7 @@ class TestLiteratureEFB:
             assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure5_k1(self, efb_figure5_trials):
-        trial = efb_figure5_trials
+        sp = efb_figure5_trials
 
         gt = np.array([
              [-5.50000000e+00,  5.70009767e-04],
@@ -203,9 +206,6 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        sp = structures.SystemParams(trial)
-        sp.prime()
-
         with utils.DisableLogger():
             sy = system.System(sp)
             sy.initialize_generalized_equations()
@@ -228,7 +228,7 @@ class TestLiteratureEFB:
             assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k1(self, efb_figure6_trials):
-        trial = efb_figure6_trials
+        sp = efb_figure6_trials
 
         gt = np.array([
             [-7.91666666e+00,  2.32625925e-03],
@@ -261,9 +261,6 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        sp = structures.SystemParams(trial)
-        sp.prime()
-
         with utils.DisableLogger():
             sy = system.System(sp)
             sy.initialize_generalized_equations()
@@ -290,7 +287,7 @@ class TestLiteratureEFB:
             assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure5_k2(self, efb_figure5_trials):
-        trial = efb_figure5_trials
+        sp = efb_figure5_trials
 
         gt = np.array([
              [-5.50000000e+00,  6.56198651e-04],
@@ -323,9 +320,6 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        sp = structures.SystemParams(trial)
-        sp.prime()
-
         with utils.DisableLogger():
             sy = system.System(sp)
             sy.initialize_generalized_equations()
@@ -348,7 +342,7 @@ class TestLiteratureEFB:
             assert np.allclose(dense, A_gt, atol=1e-4)
 
     def test_EFB_figure6_k2(self, efb_figure6_trials):
-        trial = efb_figure6_trials
+        sp = efb_figure6_trials
 
         gt = np.array([
             [-7.91666666e+00,  8.08789021e-04],
@@ -380,9 +374,6 @@ class TestLiteratureEFB:
 
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
-
-        sp = structures.SystemParams(trial)
-        sp.prime()
 
         with utils.DisableLogger():
             sy = system.System(sp)

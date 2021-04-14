@@ -34,21 +34,21 @@ class BosonConfig:
         self.max_modifications = max_modifications
         self.assert_valid()
 
-    def is_green(self):
+    def is_zero(self):
         if self.cloud_length == 1:
             if np.sum(self.config) == 0:
                 return True
         return False
 
-    def get_identifier(self):
-        if self.is_green():
+    def identifier(self):
+        if self.is_zero():
             return "G"
         return str([list(s) for s in self.config])
 
     def is_legal(self):
         """Checks if the cloud is a legal configuration."""
 
-        if self.is_green():
+        if self.is_zero():
             return True
 
         # Get the edges of the cloud
@@ -84,7 +84,7 @@ class BosonConfig:
 
         shift = 0
 
-        if not self.is_green():
+        if not self.is_zero():
 
             at_least_one_boson_present = list(np.where(
                 np.sum(self.config, axis=0) > 0
@@ -220,7 +220,7 @@ class Term:
     def _get_boson_config_identifier(self):
         """Returns a string of the boson_config identifier."""
 
-        return "{" + self.config.get_identifier() + "}"
+        return "{" + self.config.identifier() + "}"
 
     def _get_f_arg_identifier(self):
         """Returns a string of the f_arg identifier. """
