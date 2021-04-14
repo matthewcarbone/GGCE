@@ -1,0 +1,47 @@
+model: ['H']
+
+info: "TESTING-ZT-GS"
+
+protocol: "zero temperature ground state"
+
+model_parameters:
+
+    M_extent:
+        vals: [3]
+        cycle: 'solo'
+    N_bosons:
+        vals: [9]
+        cycle: 'solo'
+    Omega:
+        vals: [0.1]
+        cycle: 'solo'
+    lam:
+        vals: [1.0]
+        cycle: 'solo'
+    hopping:
+        vals: 1.0
+        cycle: 'solo'
+    broadening:
+        vals: 0.005
+        cycle: 'solo'
+
+grid_parameters:
+    k:
+        vals: [[0.0, 0.1, 10]]
+        linspace: true
+    w:    
+        # The starting value for the first calculation
+        w0: -2.1
+
+        # The maximum number of omega iterations before critical termination
+        w_N_max: 50
+
+        # The second spectral function will be computed with eta = eta / eta_div
+        eta_div: 3.0
+
+        # The divisor for eta in determining the step in w at each new w point
+        eta_step_div: 10.0
+
+        # After peak is found, the next k point will start from the peak location
+        # minus next_k_offset_factor * eta to the left of it.
+        next_k_offset_factor: 1.5
