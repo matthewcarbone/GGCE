@@ -2,6 +2,8 @@ model: ['EFB']
 
 info: null
 
+protocol: "zero temperature"
+
 model_parameters:
 
     # Always doubly nested lists, where the interior lists must have lenght

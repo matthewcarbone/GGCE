@@ -150,7 +150,7 @@ class Equation:
                     )
                     t.step(loc)
                     t.check_if_green_and_simplify()
-                    if t.config.is_green():
+                    if t.config.is_zero():
                         self.terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
                         self.terms_list.append(t)
@@ -168,7 +168,7 @@ class Equation:
                     t.step(loc)
                     t.check_if_green_and_simplify()
 
-                    if t.config.is_green():
+                    if t.config.is_zero():
                         self.terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
                         self.terms_list.append(t)

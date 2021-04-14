@@ -364,14 +364,15 @@ class Prime(BaseOverlord):
             dlog.critical(msg)
             raise RuntimeError(msg)
 
-        self.mp, self.gp = parse_inp(yaml_path)
+        self.protocol = parse_inp(yaml_path)
         self.run_name = yaml_path.stem + "_" + self.dt_string
 
     def _setup_cache_target(self):
         """Creates the necessary directories in the cache."""
 
-        if self.mp.info is not None:
-            self.run_name = f"{self.run_name}_{self.mp.info}"
+        if self.protocol.input_params['info'] is not None:
+            self.run_name = \
+                f"{self.run_name}_{self.protocol.input_params['info']}"
         pack_name = Path(self.cache_dir) / Path(self.run_name)
 
         # Create the target directory in the cache
@@ -387,7 +388,7 @@ class Prime(BaseOverlord):
 
         # Save the grid information
         grid_path = package_cache_path / Path("grids.yaml")
-        self.gp.save(grid_path)
+        self.protocol.save_grid(grid_path)
 
         # Create a configs directory
         config_path = package_cache_path / Path("configs")
@@ -397,7 +398,7 @@ class Prime(BaseOverlord):
         results_path = package_cache_path / Path("results")
         results_path.mkdir()
 
-        for ii, d in enumerate(self.mp):
+        for ii, d in enumerate(self.protocol):
             ii_p = Path(f"{ii:08}.yaml")
 
             # The dictionary `d` should contain all information about that
@@ -438,11 +439,18 @@ class Prime(BaseOverlord):
         """Primes the computation by constructing all permutations of jobs
         necessary to be run, and saving this as a single pickle file to disk.
         This file is then read by the RANK=0 MPI process and distributed to
-        the workers during execution."""
+        the workers during execution.
+
+        Returns
+        -------
+        str
+            The name of the package to run.
+        """
 
         package_cache_path = self._setup_cache_target()
         self._ready_package(package_cache_path)
         self._append_queue()
+        return self.run_name
 
 
 class Submitter(BaseOverlord):
