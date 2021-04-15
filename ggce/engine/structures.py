@@ -58,6 +58,106 @@ def model_coupling_map(coupling_type, t, Omega, lam, ignore):
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
 
 
+class GridParams:
+
+    def __init__(self, path):
+        self.grid_info = yaml.safe_load(open(path, 'rb'))
+
+    @staticmethod
+    def _get_grid_helper(linspace, vals, round_values):
+        """TODO
+
+        [description]
+
+        Parameters
+        ----------
+        linspace : {[type]}
+            [description]
+        vals : {[type]}
+            [description]
+        round_values : {[type]}
+            [description]
+
+        Returns
+        -------
+        np.array
+            The grid.
+        """
+
+        if linspace:
+            assert all([isinstance(xx, list) for xx in vals])
+            assert all([len(xx) == 3 for xx in vals])
+            assert all(xx[0] < xx[1] for xx in vals)
+
+            return np.round(np.sort(np.concatenate([
+                np.linspace(*c, endpoint=True) for c in vals
+            ])), round_values)
+
+        else:
+            assert isinstance(vals, list)
+            return np.round(vals, round_values)
+
+    def _get_grid_zero_temperature_ground_state(
+        self, grid_type, round_values=8
+    ):
+        """Returns the desired grid, modified for the ground state calculation.
+
+        Parameters
+        ----------
+        grid_type : {'k', 'w'}
+        round_values : int, optional
+            Number of values to round in the final grids. (The default is 8).
+
+        Returns
+        -------
+        array_like
+            The numpy array grid, or a tuple containing the ground state
+            calculation values.
+        """
+
+        if grid_type == 'k':
+            vals = self.grid_info[grid_type]['vals']
+            linspace = self.grid_info[grid_type]['linspace']
+            assert isinstance(linspace, bool)
+            return GridParams._get_grid_helper(linspace, vals, round_values)
+        return (
+            self.grid_info['w']['w0'],
+            self.grid_info['w']['w_N_max'],
+            self.grid_info['w']['eta_div'],
+            self.grid_info['w']['eta_step_div'],
+            self.grid_info['w']['next_k_offset_factor']
+        )
+
+    def get_grid(self, grid_type, round_values=8):
+        """Returns the desired grid.
+
+        Parameters
+        ----------
+        grid_type : {'k', 'w'}
+        round_values : int, optional
+            Number of values to round in the final grids. (The default is 8).
+
+        Returns
+        -------
+        np.array
+            The grid.
+        """
+
+        assert grid_type in ['k', 'w']
+
+        if self.grid_info["protocol"] == "zero temperature ground state":
+            return self._get_grid_zero_temperature_ground_state(
+                grid_type, round_values=round_values
+            )
+
+        vals = self.grid_info[grid_type]['vals']
+        linspace = self.grid_info[grid_type]['linspace']
+
+        assert isinstance(linspace, bool)
+
+        return GridParams._get_grid_helper(linspace, vals, round_values)
+
+
 class _ProtocolBase:
 
     @staticmethod
@@ -180,66 +280,9 @@ class _ProtocolBase:
         self._counter = 0
         self._counter_max = len(self.master)
 
-    @staticmethod
-    def _get_grid_helper(linspace, vals, round_values):
-        """TODO
-
-        [description]
-
-        Parameters
-        ----------
-        linspace : {[type]}
-            [description]
-        vals : {[type]}
-            [description]
-        round_values : {[type]}
-            [description]
-
-        Returns
-        -------
-        np.array
-            The grid.
-        """
-
-        if linspace:
-            assert all([isinstance(xx, list) for xx in vals])
-            assert all([len(xx) == 3 for xx in vals])
-            assert all(xx[0] < xx[1] for xx in vals)
-
-            return np.round(np.sort(np.concatenate([
-                np.linspace(*c, endpoint=True) for c in vals
-            ])), round_values)
-
-        else:
-            assert isinstance(vals, list)
-            return np.round(vals, round_values)
-
-    def get_grid(self, grid_type, round_values=8):
-        """Returns the desired grid.
-
-        Parameters
-        ----------
-        grid_type : {'k', 'w'}
-        round_values : int, optional
-            Number of values to round in the final grids. (The default is 8).
-
-        Returns
-        -------
-        np.array
-            The grid.
-        """
-
-        assert grid_type in ['k', 'w']
-
-        vals = self.input_params['grid_parameters'][grid_type]['vals']
-        linspace = self.input_params['grid_parameters'][grid_type]['linspace']
-
-        assert isinstance(linspace, bool)
-
-        return _ProtocolBase._get_grid_helper(linspace, vals, round_values)
-
     def save_grid(self, path):
-        """Saves the grid information to disk as path.
+        """Saves the grid information to disk as path. Also saves the desired
+        protocol, which will be used for parsing the grid information later.
 
         Parameters
         ----------
@@ -250,7 +293,8 @@ class _ProtocolBase:
 
         d = {
             "k": self.input_params['grid_parameters']['k'],
-            "w": self.input_params['grid_parameters']['w']
+            "w": self.input_params['grid_parameters']['w'],
+            "protocol": self.input_params["protocol"]
         }
 
         with open(path, 'w') as f:
@@ -427,38 +471,6 @@ class ProtocolZeroTemperature(_ProtocolBase):
 
 
 class ProtocolZeroTemperatureGroundState(_ProtocolBase):
-
-    def get_grid(self, grid_type, round_values=8):
-        """Returns the desired grid, modified for the ground state calculation.
-
-        Parameters
-        ----------
-        grid_type : {'k', 'w'}
-        round_values : int, optional
-            Number of values to round in the final grids. (The default is 8).
-
-        Returns
-        -------
-        array_like
-            The numpy array grid, or a tuple containing the ground state
-            calculation values.
-        """
-
-        assert grid_type in ['k', 'w']
-
-        if grid_type == 'k':
-            vals = self.input_params['grid_parameters'][grid_type]['vals']
-            linspace = \
-                self.input_params['grid_parameters'][grid_type]['linspace']
-            assert isinstance(linspace, bool)
-            return _ProtocolBase._get_grid_helper(linspace, vals, round_values)
-        return (
-            self.input_params['grid_parameters']['w']['w0'],
-            self.input_params['grid_parameters']['w']['w_N_max'],
-            self.input_params['grid_parameters']['w']['eta_div'],
-            self.input_params['grid_parameters']['w']['eta_step_div'],
-            self.input_params['grid_parameters']['w']['next_k_offset_factor']
-        )
 
     def __init__(self, input_params):
         _assert_common(input_params)
