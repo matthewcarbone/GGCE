@@ -13,6 +13,7 @@ import pickle
 import yaml
 
 from ggce.engine.structures import GridParams
+from ggce.executors import finalize_lowest_band_executor
 
 
 class BaseResults:
@@ -81,13 +82,21 @@ class LowestEnergyBandResults(BaseResults):
 
         self.results = dict()
         for idx in list(self.master.index):
-            try:
-                self.results[idx] = pickle.load(
-                    open(self.paths['results'] / Path(idx) / res, 'rb')
-                )
-            except FileNotFoundError:
+            trg = self.paths['results'] / Path(idx)
+            fname = trg / res
+            if fname.exists():
+                self.results[idx] = pickle.load(open(fname, 'rb'))
+                continue
+
+            # Try to finalize from state
+            done_file = self.paths['results'] / Path(idx) / Path("DONE")
+            state_dir = self.paths['results'] / Path(idx) / Path("STATE")
+            if len(list(state_dir.iterdir())) == 0:
                 to_drop.append(idx)
                 continue
+
+            r = finalize_lowest_band_executor(state_dir, trg, done_file)
+            self.results[idx] = r
 
         self.master = self.master.T.drop(columns=to_drop).T
 
@@ -99,7 +108,11 @@ class LowestEnergyBandResults(BaseResults):
         weight."""
 
         result = self.__call__(**kwargs)
-        return self.k_grid, np.array(result[2]), np.array(result[3])
+        w_gs = np.array(result[2])
+        weight = np.array(result[3])
+        k = self.k_grid[:len(weight)]
+        assert len(weight) == len(w_gs)
+        return k, w_gs, weight
 
 
 class Results(BaseResults):

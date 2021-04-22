@@ -28,6 +28,66 @@ def dryrun_random_result():
     return (G, 0.0, 0)
 
 
+def finalize_lowest_band_executor(state_dir, trg, done_file, rank=0):
+    """Finishes the LowestBandExecutor calculation by saving the resulting
+    pickle file.
+
+    Parameters
+    ----------
+    state_dir : str
+        The location of the STATE directory.
+    trg : str
+        The location of the results directory
+    done_file : str
+        The location of the DONE file.
+    rank : int, optional
+        MPI rank (the default is 0).
+
+    Returns
+    -------
+    list
+        The results (all spectra, last data points, peak locations and qp
+        weights).
+    """
+
+    checkpoints = utils.listdir_fullpath(state_dir)
+    checkpoints.sort()
+    all_spectra = []
+    all_last_datapoints = []
+    all_peak_locations = []
+    all_qp_weights = []
+    for f in checkpoints:
+        loaded = pickle.load(open(f, 'rb'))
+        k = list(loaded.keys())[0]
+
+        try:
+            all_spectra.extend(loaded[k][0])
+            all_last_datapoints.append(loaded[k][1][0])
+            all_peak_locations.append(loaded[k][1][1])
+            all_qp_weights.append(loaded[k][1][2])
+
+        # TypeError: 'NoneType' object is not subscriptable
+        except TypeError:
+            break
+
+    all_spectra = np.array(all_spectra)
+
+    res_file = trg / Path("res_gs.pkl")
+    r = [
+        all_spectra, all_last_datapoints, all_peak_locations,
+        all_qp_weights
+    ]
+    pickle.dump(r, open(res_file, 'wb'), protocol=4)
+
+    for f in checkpoints:
+        Path(f).unlink()
+
+    with open(done_file, 'a') as f:
+        f.write(f"RANK {rank:05} tagged\n")
+
+    return r
+
+
 class BaseExecutor:
 
     def __init__(self, rank_tool, pkg, cfg, solver, dry_run, nbuff):
@@ -279,32 +339,9 @@ class LowestBandExecutor(BaseExecutor):
     def finalize(self):
         """Loads in everything and re-saves as res_gs.pkl"""
 
-        checkpoints = utils.listdir_fullpath(self.state_dir)
-        checkpoints.sort()
-        all_spectra = []
-        all_last_datapoints = []
-        all_peak_locations = []
-        all_qp_weights = []
-        for f in checkpoints:
-            loaded = pickle.load(open(f, 'rb'))
-            k = list(loaded.keys())[0]
-            all_spectra.extend(loaded[k][0])
-            all_last_datapoints.append(loaded[k][1][0])
-            all_peak_locations.append(loaded[k][1][1])
-            all_qp_weights.append(loaded[k][1][2])
-        all_spectra = np.array(all_spectra)
-
-        res_file = self.trg / Path("res_gs.pkl")
-        pickle.dump([
-            all_spectra, all_last_datapoints, all_peak_locations,
-            all_qp_weights
-        ], open(res_file, 'wb'), protocol=4)
-
-        for f in checkpoints:
-            Path(f).unlink()
-
-        with open(self.done_file, 'a') as f:
-            f.write(f"RANK {self.RANK:05} tagged\n")
+        finalize_lowest_band_executor(
+            self.state_dir, self.trg, self.done_file, rank=self.RANK
+        )
 
     def recalculate_grids(self, w0):
         """The LowestBandExecutor distributes jobs only in the w grid. The
