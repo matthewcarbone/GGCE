@@ -145,7 +145,7 @@ class Equation:
 
                     t = terms_module.AnnihilationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params,
+                        system_params=self.system_params.get_fFunctionInfo(),
                         constant_prefactor=hterm.g * nval
                     )
                     t.step(loc)
@@ -162,7 +162,7 @@ class Equation:
 
                     t = terms_module.CreationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params,
+                        system_params=self.system_params.get_fFunctionInfo(),
                         constant_prefactor=hterm.g
                     )
                     t.step(loc)
@@ -207,6 +207,6 @@ class GreenEquation(Equation):
                 n[hterm.bt, :] = 1
                 t = terms_module.EOMTerm(
                     boson_config=n, hterm=hterm,
-                    system_params=self.system_params
+                    system_params=self.system_params.get_fFunctionInfo()
                 )
                 self.terms_list.append(t)

@@ -553,7 +553,7 @@ SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 
 # Define another namedtuple which contains only the terms that the f-functions
 # need to calculate their prefactors, thus saving space.
-fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega"])
+fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega", "eta"])
 
 
 class SystemParams:
@@ -722,7 +722,9 @@ class SystemParams:
         self._set_max_bosons_per_site(d)
 
     def get_fFunctionInfo(self):
-        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
+        return fFunctionInfo(
+            a=self.a, t=self.t, Omega=self.Omega, eta=self.eta
+        )
 
     def _extend_terms(self, m, g, bt):
         """Helper method to extent the self.terms list.
