@@ -5,23 +5,16 @@ __maintainer__ = "Matthew Carbone"
 __email__ = "x94carbone@gmail.com"
 __status__ = "Prototype"
 
-"""
-Run with, e.g.,
----------------
-mpiexec -np 4 python3 ._submit.py /Users/mc/Data/scratch/GGCE/000_TEST2 1
-
-"""
 
 import copy
 import numpy as np
 from pathlib import Path
 import sys
 import time
-import yaml
 
 from mpi4py import MPI
 
-from ggce.engine.structures import GridParams
+from ggce.engine.structures import GridParams, protocol_mapping
 from ggce.executors import Executor, LowestBandExecutor
 from ggce.utils.logger import default_logger as _dlog
 from ggce.utils import utils
@@ -73,10 +66,10 @@ if __name__ == '__main__':
         )
 
         grid_path = package_path / Path("grids.yaml")
-        gp = GridParams(yaml.safe_load(open(grid_path)))
+        gp = GridParams(grid_path)
         w_grid = gp.get_grid('w')
         k_grid = gp.get_grid('k')  # In units of pi!
-        method = gp.method
+        method = gp.grid_info["protocol"]
 
     else:
         COMM_timer = None
@@ -98,7 +91,7 @@ if __name__ == '__main__':
             mpi_info.logger.warning("No configs to run: exiting")
         COMM.Abort()
 
-    if method not in ['standard', 'gs']:
+    if method not in list(protocol_mapping.keys()):
         COMM.Abort()
 
     # Print some information about the method being run
@@ -126,7 +119,7 @@ if __name__ == '__main__':
 
         # Standard calculation, runs all k points and w points on a grid
         # Is Theta(Nk * Nw) in computational complexity
-        if method == 'standard':
+        if method == "zero temperature":
 
             # Startup the Executor, which is a helper class for running the
             # calculation using an MPI implementation
@@ -156,12 +149,11 @@ if __name__ == '__main__':
         # the initial peak is found. Once the first peak is found, the next
         # k point starts at eta * 1.5 before the peak, and the process
         # continues.
-        elif method == 'gs':
+        elif method == "zero temperature ground state":
 
             # The w-grid contains special information in the ground state
             # calculation case.
-            (w0, wf, w_N_max, eta_div, eta_step_div, next_k_offset_factor) \
-                = w_grid
+            (w0, w_N_max, eta_div, eta_step_div, next_k_offset_factor) = w_grid
 
             # We do this method only in serial and for now only on one rank.
             if mpi_info.rank != 0:
@@ -272,10 +264,10 @@ if __name__ == '__main__':
 
                 k_ii += 1
 
-        if method == 'gs':
+        if method == "zero temperature ground state":
             executor.finalize()
 
-        elif method == 'standard':
+        elif method == "zero temperature":
 
             # -----------------------------------------------------------------
             # FINALIZE --------------------------------------------------------
