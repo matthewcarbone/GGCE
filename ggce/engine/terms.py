@@ -11,7 +11,7 @@ from ggce.engine import physics
 
 
 class BosonConfig:
-    """A class for holding bosons occupations and defining operations on the
+    """A class for holding boson occupations and defining operations on the
     boson cloud.
 
     Attributes
