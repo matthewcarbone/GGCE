@@ -8,6 +8,8 @@ from collections import namedtuple
 import numpy as np
 import math
 
+from ggce.utils.logger import default_logger as dlog
+
 
 def model_coupling_map(coupling_type, t, Omega, lam, ignore):
     """Returns the value for g, the scalar that multiplies the coupling in the
@@ -228,6 +230,8 @@ class SystemParams:
         # Handle the hard boson constraints
         self._set_max_bosons_per_site(d)
 
+        dlog.info("SystemParams object initialized successfully")
+
     def get_fFunctionInfo(self):
         return fFunctionInfo(
             a=self.a, t=self.t, Omega=self.Omega, eta=self.eta
@@ -369,7 +373,7 @@ class SystemParams:
                 if ii % 2 == 0:  # Even
                     self.models_vis.append(m)
                 else:
-                    self.models_vis.append(f"fict({m})")
+                    self.models_vis.append(f"~{m}")
         else:
             self.models_vis = self.models
 
@@ -402,3 +406,5 @@ class SystemParams:
                 bt += 1
 
         self._adjust_bosons_if_necessary()
+
+        dlog.info("SystemParams object primed; ready for compute")
