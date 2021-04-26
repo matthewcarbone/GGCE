@@ -8,7 +8,7 @@ from collections import namedtuple
 import numpy as np
 import math
 
-from ggce.utils.logger import default_logger as dlog
+from ggce.utils.logger import Logger
 
 
 def model_coupling_map(coupling_type, t, Omega, lam, ignore):
@@ -65,12 +65,13 @@ SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega", "eta"])
 
 
-class SystemParams:
+class ParameterObject:
 
     def _set_coupling(self, d):
-        """Handle the coupling, which can be defined as either lambda or g
-        itself. In the latter case, use_g will be set to True so as to ignore
-        any dimensionless coupling conversion.
+        """Handle the coupling, which can be defined as either lambda (the
+        dimensionless coupling) or the coupling itself (g). In the latter case,
+        use_g will be set to True so as to ignore any dimensionless coupling
+        conversion.
 
         Parameters
         ----------
@@ -78,10 +79,10 @@ class SystemParams:
             Input dictionary.
         """
 
-        self.lambdas = d.get('lam')
+        self.lambdas = d.get('dimensionless_coupling')
         self.use_g = False
         if self.lambdas is None:
-            self.lambdas = d['g']  # If not defined, will throw a KeyError
+            self.lambdas = d['coupling']
             self.use_g = True
 
     def _set_temperature(self, d):
@@ -199,14 +200,16 @@ class SystemParams:
             elif self.protocol == "trace":
                 assert self.N_trace is not None
 
-    def __init__(self, d):
+    def __init__(self, d, logger=Logger(dummy=True)):
+
+        self.logger = logger
 
         # Start with parameters that are required for all trials
         self.M = d['M_extent']
         self.N = d.get('N_bosons')
         self.t = d['hopping']
         self.eta = d['broadening']
-        self.a = 1.0  # Hard code lattice constant
+        self.a = d.get("lattice_constant", 1.0)
         self.Omega = d['Omega']
         self.protocol = d['protocol']
 
@@ -230,7 +233,7 @@ class SystemParams:
         # Handle the hard boson constraints
         self._set_max_bosons_per_site(d)
 
-        dlog.info("SystemParams object initialized successfully")
+        self.logger.info("Parameters object initialized successfully")
 
     def get_fFunctionInfo(self):
         return fFunctionInfo(
@@ -381,7 +384,7 @@ class SystemParams:
         """Initializes the terms object, which contains the critical
         information about the Hamiltonian necessary for running the
         computation. Note that the sign is *relative*, so as long as
-        every term in V is multipled by an overall factor, and each term has
+        every term in V is multiplied by an overall factor, and each term has
         the correct sign relative to the others, the result will be the
         same."""
 
@@ -407,4 +410,4 @@ class SystemParams:
 
         self._adjust_bosons_if_necessary()
 
-        dlog.info("SystemParams object primed; ready for compute")
+        self.logger.info("Parameters object primed; ready for compute")

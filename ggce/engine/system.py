@@ -13,9 +13,9 @@ from scipy.sparse.linalg import spsolve
 
 import time
 
-from ggce.utils.logger import default_logger as dlog
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.engine.physics import total_generalized_equations
+from ggce.utils.logger import Logger
 
 BYTES_TO_MB = 1048576
 
@@ -148,7 +148,7 @@ class System:
         delta values.
     """
 
-    def __init__(self, system_params):
+    def __init__(self, system_params, logger=Logger(dummy=True)):
         """Initializer.
 
         Parameters
@@ -156,6 +156,8 @@ class System:
         system_params : SystemParameters
             Container for the full set of parameters.
         """
+
+        self.logger = logger
 
         self.system_params = copy.deepcopy(system_params)
 
@@ -170,13 +172,6 @@ class System:
         # in their configuration space.
         self.generalized_equations = dict()
         self.equations = dict()
-        self.recursion_solver_basis = dict()
-        self.basis = dict()
-        self.unique_short_identifiers = set()
-
-        # Total number of bosons allowed is the sum of the number of bosons
-        # allowed for each boson type
-        self.N_total_max = sum(self.system_params.N)
 
         # Config space generator
         self.csg = ConfigurationSpaceGenerator(self.system_params)
@@ -248,7 +243,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.generalized_equations.values()])
-        dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
+        self.logger.info(f"({dt:.02f} s) Generated {L} generalized equations")
 
         # Need to generalize this
         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
@@ -256,12 +251,14 @@ class System:
             T = 1 + total_generalized_equations(
                 self.system_params.M, self.system_params.N, self.n_boson_types
             )
-            dlog.debug(f"Predicted {T} equations from combinatorics equations")
+            self.logger.debug(
+                f"Predicted {T} equations from combinatorics equations"
+            )
 
             assert T == L, f"{T}, {L}"
 
         totals = self._get_total_terms()
-        dlog.debug(f"Predicting {totals} total terms")
+        self.logger.debug(f"Predicting {totals} total terms")
 
         # Initialize the self.equations attribute's lists here since we know
         # all the keys:
@@ -319,7 +316,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.equations.values()])
-        dlog.info(f"({dt:.02f}s) Generated {L} equations")
+        self.logger.info(f"({dt:.02f} s) Generated {L} equations")
 
         return L
 
@@ -359,115 +356,78 @@ class System:
         """
 
         t0 = time.time()
+        unique_short_identifiers = set()
         all_terms_rhs = set()
         for n_bosons, equations in self.equations.items():
             for eq in equations:
-                self.unique_short_identifiers.add(eq.index_term.identifier())
+                unique_short_identifiers.add(eq.index_term.identifier())
                 for term in eq.terms_list:
                     all_terms_rhs.add(term.identifier())
         dt = time.time() - t0
 
-        if self.unique_short_identifiers == all_terms_rhs:
-            dlog.info(f"({dt:.02f}s) Closure is valid")
+        if unique_short_identifiers == all_terms_rhs:
+            self.logger.info(f"({dt:.02f} s) Closure is valid")
         else:
-            dlog.critical("Invalid closure!")
-            print(self.unique_short_identifiers - all_terms_rhs)
-            print(all_terms_rhs - self.unique_short_identifiers)
-            raise RuntimeError("Invalid closure!")
+            self.logger.error("Invalid closure!")
+            print(unique_short_identifiers - all_terms_rhs)
+            print(all_terms_rhs - unique_short_identifiers)
+            self.logger.critical("Critical error due to invalid closure.")
 
-    def prime_solver(self):
+    def get_basis(self, full_basis=False):
         """Prepares the solver-specific information.
 
-        Recursive method:
-            We need a mapping, for a given n_bosons, the identifier and the
-        basis index. Note that the basis index resets every time we move to
-        a new number of total bosons. This is why organizing the equations
-        hierarchically by total bosons was a sensible earlier choice.
+        Returns the non-zero elements of the matrix in the following format.
+        The returned quantity is a dictionary indexed by the order of the
+        hierarchy (in this case, the number of phonons contained). Each
+        element of this dictionary is another dictionary, with the keys being
+        the index term identifier (basically indexing the row of the matrix),
+        and the values a list of tuples, where the first element of each tuple
+        is the identifier (a string) and the second is a callable function of
+        k and omega, representing the coefficient at that point.
+
+        Parameters
+        ----------
+        full_basis : {bool}, optional
+            If True, returns the full basis mapping. If False, returns the
+            local basis mapping, which is used in the continued fraction
+            solver. (The default is False).
+
+        Returns
+        -------
+        dict
+            The dictionary objects containing the basis.
         """
 
         t0 = time.time()
-        for n_bosons, equations in self.equations.items():
-            self.recursion_solver_basis[n_bosons] = {
-                eq.index_term.identifier(): ii
-                for ii, eq in enumerate(equations)
-            }
-        cc = 0
-        for _, equations in self.equations.items():
-            for eq in equations:
-                self.basis[eq.index_term.identifier()] = cc
-                cc += 1
+
+        # The basis object maps each unique identifier to a unique number.
+        # The local_basis object maps each unique identifier to a unique
+        # number within the manifold of some number of phonons.
+        basis = dict()
+
+        if full_basis:
+
+            # Set the overall basis. Each unique identifier gets its own index.
+            cc = 0
+            for _, equations in self.equations.items():
+                for eq in equations:
+                    basis[eq.index_term.identifier()] = cc
+                    cc += 1
+
+        else:
+
+            # Set the local basis, in which each identifier gets its own index
+            # relative to the n-phonon manifold.
+            for n_phonons, list_of_equations in self.equations.items():
+                basis[n_phonons] = {
+                    eq.index_term.identifier(): ii
+                    for ii, eq in enumerate(list_of_equations)
+                }
+
         dt = time.time() - t0
-        dlog.info(f"({dt:.02f}s) Solvers primed")
+        self.logger.info(f"({dt:.02f} s) Basis has been constructed")
 
-    def one_shot_sparse_solve(self, k, w, eta=None):
-        """Executes a oneshot sparse solver. Each row/column corresponds to a
-        different f_n(delta) function."""
-
-        meta = {
-            'alphas': [],
-            'betas': [],
-            'inv': [],
-            'time': []
-        }
-
-        t0_all = time.time()
-
-        # Initialize the sparse matrix to solve
-        row_ind = []
-        col_ind = []
-        dat = []
-        total_bosons = np.sum(self.system_params.N)
-        for n_bosons in range(total_bosons + 1):
-            for eq in self.equations[n_bosons]:
-                row_dict = dict()
-                index_term_id = eq.index_term.identifier()
-                ii_basis = self.basis[index_term_id]
-                for term in eq.terms_list + [eq.index_term]:
-                    jj = self.basis[term.identifier()]
-                    try:
-                        row_dict[jj] += term.coefficient(k, w, eta)
-                    except KeyError:
-                        row_dict[jj] = term.coefficient(k, w, eta)
-
-                row_ind.extend([ii_basis for _ in range(len(row_dict))])
-                col_ind.extend([key for key, _ in row_dict.items()])
-                dat.extend([value for _, value in row_dict.items()])
-
-        X = coo_matrix((
-            np.array(dat, dtype=np.complex64),
-            (np.array(row_ind), np.array(col_ind))
-        )).tocsr()
-
-        size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
-
-        dlog.debug(f"\tMemory usage of sparse X is {size:.02f} MB")
-
-        # Initialize the corresponding sparse vector
-        # {G}(0)
-        row_ind = np.array([self.basis['{G}(0.0)']])
-        col_ind = np.array([0])
-        v = coo_matrix((
-            np.array(
-                [self.equations[0][0].bias(k, w, eta)],
-                dtype=np.complex64
-            ), (row_ind, col_ind)
-        )).tocsr()
-
-        res = spsolve(X, v)
-        G = res[self.basis['{G}(0.0)']]
-
-        if -G.imag / np.pi < 0.0:
-            dlog.error(
-                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
-            )
-
-        dt = time.time() - t0_all
-        dlog.debug(f"Sparse matrices solved in {dt:.02f} s")
-
-        meta['time'] = [dt]
-        meta['inv'] = [len(self.basis)]
-
-        return G, meta
+        return basis
 
     def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat, eta=None):
         """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
@@ -494,7 +454,7 @@ class System:
         t0 = time.time()
         self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n, eta)
         dt = time.time() - t0
-        dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
+        self.logger.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
 
         identity = np.eye(beta_n.shape[0], A.shape[1])
 
@@ -508,7 +468,7 @@ class System:
 
         d = copy.deepcopy(vars(self.system_params))
         d['terms'] = len(d['terms'])
-        dlog.debug(f"Solving recursively: {d}")
+        self.logger.debug(f"Solving recursively: {d}")
 
     def continued_fraction_dense_solve(self, k, w, eta=None):
         """Executes the solution for some given k, w. Also returns the shapes
@@ -551,7 +511,7 @@ class System:
             t0 = time.time()
             self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n, eta)
             dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
+            self.logger.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
 
             # This is the rate-limiting step ##################################
             t0 = time.time()
@@ -559,7 +519,7 @@ class System:
             dt = time.time() - t0
             ###################################################################
 
-            dlog.debug(
+            self.logger.debug(
                 f"({dt:.02f}s inv) A2 {initial_A_shape} -> A1 {A.shape}"
             )
             meta['inv'].append(to_inv.shape[0])
@@ -578,20 +538,20 @@ class System:
         # The Green's function is of course given by Dyson's equation.
         eom = self.equations[0]
         if len(eom) != 1:
-            dlog.critical("More than one EOM!")
+            self.logger.critical("More than one EOM!")
             raise RuntimeError("More than one EOM!")
         G0 = eom[0].bias(k, w, eta)  # Convenient way to access G0...
         G = G0 / (1.0 - self_energy_times_G0)
 
         if -G.imag / np.pi < 0.0:
-            dlog.error(
+            self.logger.error(
                 f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
             )
 
         dt_all = time.time() - t0_all
         meta['time'].append(dt_all)  # Last entry is the total
 
-        dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
+        self.logger.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
 
         return G, meta
 
