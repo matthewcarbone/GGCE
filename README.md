@@ -4,7 +4,13 @@
 
 Generalized Green's function Cluster Expansion
 
-## Necessary packages
+## Necessary Packages (standard installation)
+`GGCE` requires `numpy` and `scipy`.
+
+### Development
+For development, we also require a few other packages, including `mypy` and `pytest`. See `requirements_dev.txt`.
+
+## Necessary packages (MPI installation)
 We use `conda` for all package management except for `mpi4py`. The following process should generally explain how to install the `GGCE` repository and its dependencies in a way that should work on most clusters.
 
 1. [Create a fresh `conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) using `python=3.7`.

@@ -12,6 +12,8 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import spsolve
 import time
 
+from typing import Any, Optional, Dict, Union
+
 from ggce.engine.system import System
 from ggce.engine.structures import ParameterObject
 from ggce.utils.logger import Logger
@@ -22,27 +24,27 @@ BYTES_TO_MB = 1048576
 
 
 class BaseExecutor:
+    """Base executor class.
+
+    Parameters
+    ----------
+    parameter_dict
+        Dictionary of the parameters used to initialize the
+        ParameterObject.
+    default_console_logging_level
+        The default level for initializing the logger. (The default is
+        'INFO', which will log everything at info or above).
+    log_file
+        Location of the log file. (The default is None, which defaults to
+        no log file being produced).
+    """
 
     def __init__(
-        self, parameter_dict, default_console_logging_level='INFO',
-        log_file=None
-    ):
-        """Initializes the BaseExecutor.
-
-        Parameters
-        ----------
-        parameter_dict : {dict}
-            Dictionary of the parameters used to initialize the
-            ParameterObject.
-        default_console_logging_level : {'DEBUG', 'INFO', 'WARNING', 'ERROR'},
-        optional
-            The default level for initializing the logger. (The default is
-            'INFO', which will log everything at info or above).
-        log_file : {str}, optional
-            Location of the log file. (The default is None, which defaults to
-            no log file being produced).
-        """
-
+        self,
+        parameter_dict: Dict[str, Any],
+        default_console_logging_level: str = 'INFO',
+        log_file: Optional[str] = None
+    ) -> None:
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
         self._logger = Logger(log_file)
@@ -52,20 +54,18 @@ class BaseExecutor:
         self._system = None
         self._basis = None
 
-    def get_parameters(self, return_dict=False):
+    def get_parameters(
+        self, return_dict: bool = False
+    ) -> Union[Dict[str, Any], ParameterObject, None]:
         """Returns the parameter information.
 
         Parameters
         ----------
-        return_dict : {bool}, optional
+        return_dict
             If True, returns the dictionary used to initialize the
             ParameterObject, else returns the ParameterObject instance itself,
             which will be None if _prime_parameters() was not called. (The
             default is False).
-
-        Returns
-        -------
-        dict, ggce.engine.structures.ParameterObject
         """
 
         if return_dict:
