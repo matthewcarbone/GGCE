@@ -127,7 +127,7 @@ def setup_console_logger(log_file=None, name="ggce-console-logger"):
 
 class Logger:
 
-    def __init__(self, log_file=None, dummy=False):
+    def __init__(self, log_file=None, dummy=False, mpi_comm=None):
         """Initializes the Logger object, which is a lightweight wrapper for
         the python logging library.
 
@@ -136,15 +136,24 @@ class Logger:
 
         Parameters
         ----------
-        log_file : {str}, optional
+        log_file : str, optional
             The location and extension of the logging file output (the default
             is None, which means no log file will be produced).
-        dummy : {bool}, optional
+        dummy : bool, optional
             If True, simply does nothing whenenver the logging commands
-            are called. Used primarily for debugging.
+            are called. Used primarily for debugging (the default is False).
+        mpi_comm: mpi4py.MPI.Intracomm, optional
+            The MPI communicator accessed via MPI.COMM_WORLD. (The default is
+            None, which is taken to imply a single MPI process).
         """
 
         self.dummy = dummy
+        if mpi_comm is None:
+            self.mpi_comm = None
+            self.mpi_rank = 0
+        else:
+            self.mpi_comm = mpi_comm
+            self.mpi_rank = self.mpi_comm.Get_rank()
 
         if not self.dummy:
 
@@ -190,6 +199,8 @@ class Logger:
     def debug(self, msg, elapsed=None):
         if self.dummy:
             return
+        if self.mpi_rank > 0:
+            return
         msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.debug(msg)
@@ -198,6 +209,8 @@ class Logger:
 
     def info(self, msg, elapsed=None):
         if self.dummy:
+            return
+        if self.mpi_rank > 0:
             return
         msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
@@ -208,6 +221,8 @@ class Logger:
     def warning(self, msg, elapsed=None):
         if self.dummy:
             return
+        if self.mpi_rank > 0:
+            return
         msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.warning(msg)
@@ -216,6 +231,8 @@ class Logger:
 
     def error(self, msg, elapsed=None):
         if self.dummy:
+            return
+        if self.mpi_rank > 0:
             return
         msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
@@ -226,6 +243,11 @@ class Logger:
     def critical(self, msg, error_type=RuntimeError):
         if self.dummy:
             return
+
+        if self.mpi_rank > 0 and self.mpi_comm is not None:
+            self.mpi_comm.Abort()
+            return
+
         if self._file_logger is not None:
             self._file_logger.critical(msg)
 
