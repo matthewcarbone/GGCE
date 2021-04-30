@@ -1,0 +1,48 @@
+## run with mpirun -n ## python 001_Tutorial.py to start in parallel
+
+import numpy as np
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+import petsc4py
+from petsc4py import PETSc
+
+import sys
+
+try:
+    import ggce
+except ModuleNotFoundError:
+    sys.path.append("..")
+    import ggce
+
+from ggce.executors.parallel_petsc import ParallelSparseExecutor
+
+literature_data = np.loadtxt("000_example_A.txt")
+
+system_params = {
+    "model": ["EFB"],
+    "M_extent": [5], # 5
+    "N_bosons": [10], #10
+    "Omega": [1.25],
+    "dimensionless_coupling": [2.5],
+    "hopping": 0.1,
+    "broadening": 0.005,
+    "protocol": "zero temperature"
+}
+
+comm = PETSc.COMM_WORLD
+
+executor = ParallelSparseExecutor(system_params, "DEBUG")
+executor.prime(comm)
+
+wgrid = np.linspace(-5.5, -2.5, 500)
+spectrum = [executor.solve(0.5 * np.pi, w) for w in wgrid]
+spectrum = np.array([-s[0].imag / np.pi for s in spectrum])
+
+fig, ax = plt.subplots(1, 1, figsize=(3, 2))
+ax.plot(wgrid, spectrum / spectrum.max(), 'k')
+ax.plot(literature_data[:, 0], literature_data[:, 1], 'r--', linewidth=0.5)
+ax.set_ylabel("$A(\pi/2, \omega) / \max A(\pi/2, \omega)$")
+ax.set_xlabel("$\omega$")
+plt.savefig('test.png', format='png')
