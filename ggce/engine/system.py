@@ -240,7 +240,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.generalized_equations.values()])
-        self.logger.info(f"({dt:.02f} s) Generated {L} generalized equations")
+        self.logger.info(f"Generated {L} generalized equations", elapsed=dt)
 
         # Need to generalize this
         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
@@ -313,7 +313,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.equations.values()])
-        self.logger.info(f"({dt:.02f} s) Generated {L} equations")
+        self.logger.info(f"Generated {L} equations", elapsed=dt)
 
         return L
 
@@ -363,7 +363,7 @@ class System:
         dt = time.time() - t0
 
         if unique_short_identifiers == all_terms_rhs:
-            self.logger.info(f"({dt:.02f} s) Closure is valid")
+            self.logger.info("Closure checked and valid", elapsed=dt)
         else:
             self.logger.error("Invalid closure!")
             print(unique_short_identifiers - all_terms_rhs)
@@ -422,6 +422,6 @@ class System:
                 }
 
         dt = time.time() - t0
-        self.logger.info(f"({dt:.02f} s) Basis has been constructed")
+        self.logger.info("Basis has been constructed", elapsed=dt)
 
         return basis

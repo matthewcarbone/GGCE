@@ -7,6 +7,7 @@ __email__ = "x94carbone@gmail.com"
 from collections import namedtuple
 import numpy as np
 import math
+import time
 
 from ggce.utils.logger import Logger
 
@@ -202,6 +203,8 @@ class ParameterObject:
 
     def __init__(self, d, logger=Logger(dummy=True)):
 
+        t0 = time.time()
+
         self.logger = logger
 
         # Start with parameters that are required for all trials
@@ -233,7 +236,10 @@ class ParameterObject:
         # Handle the hard boson constraints
         self._set_max_bosons_per_site(d)
 
-        self.logger.info("Parameters object initialized successfully")
+        dt = time.time() - t0
+        self.logger.info(
+            "Parameters object initialized successfully", elapsed=dt
+        )
 
     def get_fFunctionInfo(self):
         return fFunctionInfo(
@@ -388,6 +394,8 @@ class ParameterObject:
         the correct sign relative to the others, the result will be the
         same."""
 
+        t0 = time.time()
+
         self.terms = []
 
         bt = 0
@@ -410,4 +418,7 @@ class ParameterObject:
 
         self._adjust_bosons_if_necessary()
 
-        self.logger.info("Parameters object primed; ready for compute")
+        dt = time.time() - t0
+        self.logger.info(
+            "Parameters object primed; ready for compute", elapsed=dt
+        )

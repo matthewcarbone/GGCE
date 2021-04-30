@@ -4,6 +4,7 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
+import mpi4py
 import numpy as np
 from scipy import linalg
 from scipy.sparse import coo_matrix
@@ -14,7 +15,6 @@ from ggce.engine.system import System
 from ggce.engine.structures import ParameterObject
 from ggce.engine.physics import G0_k_omega
 from ggce.utils.logger import Logger
-from ggce.utils.utils import elapsed_time_str
 
 
 BYTES_TO_MB = 1048576
@@ -92,14 +92,47 @@ class BaseExecutor:
         self._system.initialize_equations()
         self._system.generate_unique_terms()
 
-    def prime():
+    def _log_spectral_error(self, k, w):
+        self._logger.error(
+            f"Negative spectral weight at k, w = ({k:.02f}, {w:.02f}"
+        )
+
+    def _scaffold():
         raise NotImplementedError
 
-    def scaffold():
+    def prime():
         raise NotImplementedError
 
     def solve():
         raise NotImplementedError
+
+    def spectrum(self, k, w, eta=None):
+        """Solves for the spectrum in serial.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float, optional
+            The artificial broadening parameter of the calculation (the default
+            is None, which uses the value provided in parameter_dict at
+            instantiation).
+
+        Returns
+        -------
+        np.ndarray
+            The resultant spectrum.
+        """
+
+        if isinstance(k, float):
+            k = [k]
+        if isinstance(w, float):
+            w = [w]
+
+        s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
+        return np.array(s)
 
 
 class SerialSparseExecutor(BaseExecutor):
@@ -110,7 +143,7 @@ class SerialSparseExecutor(BaseExecutor):
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=True)
 
-    def scaffold(self, k, w, eta=None):
+    def _scaffold(self, k, w, eta=None):
         """Prepare the X, v sparse representation of the matrix to solve.
 
         Parameters
@@ -176,8 +209,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         dt = time.time() - t0
 
-        _dt, _fmt = elapsed_time_str(dt)
-        self._logger.debug(f"Scaffold complete in {_dt:.01f} {_fmt}")
+        self._logger.debug("Scaffold complete", elapsed=dt)
 
         return X, v
 
@@ -202,21 +234,18 @@ class SerialSparseExecutor(BaseExecutor):
             the time elapsed to solve for this (k, w) point.
         """
 
-        X, v = self.scaffold(k, w, eta)
+        X, v = self._scaffold(k, w, eta)
 
         # Bottleneck: solve the matrix
         t0 = time.time()
         res = spsolve(X, v)
         dt = time.time() - t0
-        _dt, _fmt = elapsed_time_str(dt)
-        self._logger.debug(f"Sparse matrices solved in {_dt:.01f} {_fmt}")
+        self._logger.debug("Sparse matrices solved", elapsed=dt)
 
         G = res[self._basis['{G}(0.0)']]
 
-        if -G.imag / np.pi < 0.0:
-            self._logger.error(
-                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
-            )
+        if -G.imag < 0.0:
+            self._log_spectral_error(k, w)
 
         return np.array(G), {'time': [dt]}
 
@@ -270,8 +299,7 @@ class SerialDenseExecutor(BaseExecutor):
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, -1, eta)
         dt = time.time() - t0
-        _dt, _fmt = elapsed_time_str(dt)
-        self._logger.debug(f"Filled alpha in {_dt:.01f} {_fmt}")
+        self._logger.debug("Filled alpha", elapsed=dt)
         return A
 
     def _get_beta(self, k, w, n_phonons, eta=None):
@@ -279,8 +307,7 @@ class SerialDenseExecutor(BaseExecutor):
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, 1, eta)
         dt = time.time() - t0
-        _dt, _fmt = elapsed_time_str(dt)
-        self._logger.debug(f"Filled beta in {_dt:.01f} {_fmt}")
+        self._logger.debug("Filled beta in", elapsed=dt)
         return A
 
     def solve(self, k, w, eta=None):
@@ -335,9 +362,8 @@ class SerialDenseExecutor(BaseExecutor):
             t0 = time.time()
             R = linalg.solve(X, alpha)
             dt = time.time() - t0
-            _dt, _fmt = elapsed_time_str(dt)
             self._logger.debug(
-                f"Inverted [{X.shape}, {alpha.shape}] in {_dt:.01f} {_fmt}"
+                f"Inverted [{X.shape}, {alpha.shape}]", elapsed=dt
             )
             meta["time"].append(dt)
 
@@ -347,9 +373,10 @@ class SerialDenseExecutor(BaseExecutor):
         beta0 = self._get_beta(k, w, 0, eta=eta)
         result = (G0 / (1.0 - beta0 @ R)).squeeze()
 
-        dt = time.time() - t0_all
-        _dt, _fmt = elapsed_time_str(dt)
+        dt_all = time.time() - t0_all
+        self._logger.debug("Solve complete", elapsed=dt_all)
 
-        self._logger.debug(f"Solve complete in {_dt:.01f} {_fmt}")
+        if -result.imag < 0.0:
+            self._log_spectral_error(k, w)
 
         return np.array(result, dtype=np.complex64), meta

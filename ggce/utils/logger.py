@@ -9,6 +9,8 @@ __email__ = "x94carbone@gmail.com"
 import logging
 import sys
 
+from ggce.utils.utils import adjust_log_msg_for_time
+
 # logger_string_format = \
 #     '%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
 logger_string_format = \
@@ -185,33 +187,37 @@ class Logger:
         elif level == 'error':
             self._current_logging_level = 3
 
-    def debug(self, msg):
+    def debug(self, msg, elapsed=None):
         if self.dummy:
             return
+        msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.debug(msg)
         if self._current_logging_level <= 0:
             self._console_logger.debug(msg)
 
-    def info(self, msg):
+    def info(self, msg, elapsed=None):
         if self.dummy:
             return
+        msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.info(msg)
         if self._current_logging_level <= 1:
             self._console_logger.info(msg)
 
-    def warning(self, msg):
+    def warning(self, msg, elapsed=None):
         if self.dummy:
             return
+        msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.warning(msg)
         if self._current_logging_level <= 2:
             self._console_logger.warning(msg)
 
-    def error(self, msg):
+    def error(self, msg, elapsed=None):
         if self.dummy:
             return
+        msg = adjust_log_msg_for_time(msg, elapsed)
         if self._file_logger is not None:
             self._file_logger.error(msg)
         if self._current_logging_level <= 3:
