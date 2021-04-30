@@ -7,9 +7,6 @@ __email__ = "x94carbone@gmail.com"
 from collections import OrderedDict
 import copy
 import numpy as np
-from scipy import linalg
-from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
 
 import time
 
@@ -387,7 +384,7 @@ class System:
 
         Parameters
         ----------
-        full_basis : {bool}, optional
+        full_basis : bool, optional
             If True, returns the full basis mapping. If False, returns the
             local basis mapping, which is used in the continued fraction
             solver. (The default is False).
@@ -428,140 +425,3 @@ class System:
         self.logger.info(f"({dt:.02f} s) Basis has been constructed")
 
         return basis
-
-    def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat, eta=None):
-        """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
-        (n_shift = 1). Modifies the matrix mat in place. Note that mat should
-        be a complex matrix of zeros before being passed to this method."""
-
-        n_bosons_shift = n_bosons + n_shift
-
-        equations_n = self.equations[n_bosons]
-        for ii, eq in enumerate(equations_n):
-            index_term_id = eq.index_term.identifier()
-            ii_basis = self.recursion_solver_basis[n_bosons][index_term_id]
-
-            for term in eq.terms_list:
-                if term.get_total_bosons() != n_bosons_shift:
-                    continue
-                t_id = term.identifier()
-                jj_basis = self.recursion_solver_basis[n_bosons_shift][t_id]
-                mat[ii_basis, jj_basis] += term.coefficient(k, w, eta)
-
-    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A, eta=None):
-
-        # Fill beta
-        t0 = time.time()
-        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n, eta)
-        dt = time.time() - t0
-        self.logger.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
-
-        identity = np.eye(beta_n.shape[0], A.shape[1])
-
-        t0 = time.time()
-        initial_A_shape = A.shape
-
-        return identity - beta_n @ A, initial_A_shape
-
-    def _log_solve_info(self):
-        """Pipes some of the current solving information to the outstream."""
-
-        d = copy.deepcopy(vars(self.system_params))
-        d['terms'] = len(d['terms'])
-        self.logger.debug(f"Solving recursively: {d}")
-
-    def continued_fraction_dense_solve(self, k, w, eta=None):
-        """Executes the solution for some given k, w. Also returns the shapes
-        of all computed matrices."""
-
-        t0_all = time.time()
-
-        self._log_solve_info()
-
-        meta = {
-            'alphas': [],
-            'betas': [],
-            'inv': [],
-            'time': []
-        }
-
-        total_bosons = np.sum(self.system_params.N)
-
-        for n_bosons in range(total_bosons, 0, -1):
-
-            t0 = time.time()
-            d_n = len(self.recursion_solver_basis[n_bosons])
-            d_n_m_1 = len(self.recursion_solver_basis[n_bosons - 1])
-
-            if n_bosons == total_bosons:
-                A = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
-                self._compute_alpha_beta_(n_bosons, -1, k, w, A, eta)
-                continue
-
-            d_n_p_1 = len(self.recursion_solver_basis[n_bosons + 1])
-            alpha_n = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
-            meta['alphas'].append((d_n, d_n_m_1))
-
-            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
-            meta['betas'].append((d_n, d_n_p_1))
-            to_inv, initial_A_shape = \
-                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A, eta)
-
-            # Fill alpha
-            t0 = time.time()
-            self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n, eta)
-            dt = time.time() - t0
-            self.logger.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
-
-            # This is the rate-limiting step ##################################
-            t0 = time.time()
-            A = linalg.solve(to_inv, alpha_n)
-            dt = time.time() - t0
-            ###################################################################
-
-            self.logger.debug(
-                f"({dt:.02f}s inv) A2 {initial_A_shape} -> A1 {A.shape}"
-            )
-            meta['inv'].append(to_inv.shape[0])
-            meta['time'].append(dt)
-
-        # The final answer is actually A_1. It is related to G via the vector
-        # equation V_1 = A_1 G, where G is a scalar. It turns out that the
-        # sum over the terms in this final A are actually -Sigma, where
-        # Sigma is the self-energy!
-        self_energy_times_G0 = 0.0
-        A = np.atleast_1d(A.squeeze())
-        for term in self.equations[0][0].terms_list:
-            basis_idx = self.recursion_solver_basis[1][term.identifier()]
-            self_energy_times_G0 += A[basis_idx] * term.coefficient(k, w, eta)
-
-        # The Green's function is of course given by Dyson's equation.
-        eom = self.equations[0]
-        if len(eom) != 1:
-            self.logger.critical("More than one EOM!")
-            raise RuntimeError("More than one EOM!")
-        G0 = eom[0].bias(k, w, eta)  # Convenient way to access G0...
-        G = G0 / (1.0 - self_energy_times_G0)
-
-        if -G.imag / np.pi < 0.0:
-            self.logger.error(
-                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
-            )
-
-        dt_all = time.time() - t0_all
-        meta['time'].append(dt_all)  # Last entry is the total
-
-        self.logger.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
-
-        return G, meta
-
-    def solve(self, k, w, solver, eta=None):
-        """Can override the specified eta in the input file by making eta in
-        the arguments not None."""
-
-        if solver == 0:
-            return self.continued_fraction_dense_solve(k, w, eta)
-        elif solver == 1:
-            return self.one_shot_sparse_solve(k, w, eta)
-        else:
-            raise RuntimeError(f"Unknown solver type {solver}")
