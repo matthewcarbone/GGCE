@@ -147,6 +147,13 @@ def elapsed_time_str(dt):
         return dt / 86400.0, "d"
 
 
+def adjust_log_msg_for_time(msg, _elapsed):
+    if _elapsed is None:
+        return msg
+    (elapsed, units) = elapsed_time_str(_elapsed)
+    return f"({elapsed:.02f} {units}) {msg}"
+
+
 def time_func(arg1=None):
     """source: http://scottlobdell.me/2015/04/decorators-arguments-python/"""
 
