@@ -18,3 +18,12 @@ SerialSparseExecutor
     :undoc-members:
     :member-order: bysource
     :show-inheritance:
+
+SerialDenseExecutor
+-------------------
+.. autoclass:: ggce.executors.SerialDenseExecutor
+    :members:
+    :inherited-members:
+    :undoc-members:
+    :member-order: bysource
+    :show-inheritance:
