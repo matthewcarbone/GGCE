@@ -5,29 +5,22 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 import numpy as np
-from scipy import linalg
-from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
 import time
 
 from ggce.executors.base import BaseExecutor
-from ggce.executors.serial import SerialSparseExecutor
-from ggce.engine.physics import G0_k_omega
 
-import petsc4py
 from petsc4py import PETSc
 
 BYTES_TO_MB = 1048576
 
 
 class ParallelSparseExecutor(BaseExecutor):
-    ''' A class to connect to PETSc powerful parallel sparse solver
-        tools, to calculate G(k,w) in parallel.'''
+    """A class to connect to PETSc powerful parallel sparse solver tools, to
+    calculate G(k,w) in parallel."""
 
     def _init_petsc(self, comm):
-
-        ''' Quick helper function inserts the MPI communicator
-            into the class scope and calculates the given process's rank.'''
+        """Quick helper function inserts the MPI communicator into the class
+        scope and calculates the given process's rank."""
 
         self.comm = comm
         self.rank = comm.getRank()
