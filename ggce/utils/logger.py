@@ -127,7 +127,7 @@ def setup_console_logger(log_file=None, name="ggce-console-logger"):
 
 class Logger:
 
-    def __init__(self, log_file=None, dummy=False, mpi_comm=None):
+    def __init__(self, log_file=None, dummy=False, mpi_rank=0):
         """Initializes the Logger object, which is a lightweight wrapper for
         the python logging library.
 
@@ -142,18 +142,13 @@ class Logger:
         dummy : bool, optional
             If True, simply does nothing whenenver the logging commands
             are called. Used primarily for debugging (the default is False).
-        mpi_comm: mpi4py.MPI.Intracomm, optional
-            The MPI communicator accessed via MPI.COMM_WORLD. (The default is
-            None, which is taken to imply a single MPI process).
+        mpi_rank : int
+            The mpi_rank of the MPI process. Default is 0. Note logging other
+            than debug is only output for mpi_rank 0.
         """
 
         self.dummy = dummy
-        if mpi_comm is None:
-            self.mpi_comm = None
-            self.mpi_rank = 0
-        else:
-            self.mpi_comm = mpi_comm
-            self.mpi_rank = self.mpi_comm.Get_rank()
+        self.mpi_rank = mpi_rank
 
         if not self.dummy:
 
@@ -199,9 +194,8 @@ class Logger:
     def debug(self, msg, elapsed=None):
         if self.dummy:
             return
-        if self.mpi_rank > 0:
-            return
         msg = adjust_log_msg_for_time(msg, elapsed)
+        msg = f"[RANK {self.mpi_rank:03}] {msg}"
         if self._file_logger is not None:
             self._file_logger.debug(msg)
         if self._current_logging_level <= 0:
@@ -240,12 +234,14 @@ class Logger:
         if self._current_logging_level <= 3:
             self._console_logger.error(msg)
 
-    def critical(self, msg, error_type=RuntimeError):
+    def critical(
+        self, msg, error_type=RuntimeError, mpi_abort=False, mpi_comm=None
+    ):
         if self.dummy:
             return
 
-        if self.mpi_rank > 0 and self.mpi_comm is not None:
-            self.mpi_comm.Abort()
+        if mpi_abort:
+            mpi_comm.Abort()
             return
 
         if self._file_logger is not None:

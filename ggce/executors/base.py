@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 import numpy as np
 
 from ggce.engine.system import System
@@ -32,11 +28,16 @@ class BaseExecutor:
 
     def __init__(
         self, parameter_dict, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None
+        log_file=None, mpi_comm=None,
     ):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
-        self._logger = Logger(log_file, mpi_comm=mpi_comm)
+        self.comm = None
+        self.rank = 0
+        if mpi_comm is not None:
+            self.comm = mpi_comm
+            self.rank = mpi_comm.getRank()
+        self._logger = Logger(log_file, mpi_rank=self.rank)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameter_dict = parameter_dict
         self._parameters = None
