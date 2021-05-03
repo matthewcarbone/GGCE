@@ -145,12 +145,12 @@ class Equation:
 
                     t = terms_module.AnnihilationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params,
+                        system_params=self.system_params.get_fFunctionInfo(),
                         constant_prefactor=hterm.g * nval
                     )
                     t.step(loc)
                     t.check_if_green_and_simplify()
-                    if t.config.is_green():
+                    if t.config.is_zero():
                         self.terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
                         self.terms_list.append(t)
@@ -162,13 +162,13 @@ class Equation:
 
                     t = terms_module.CreationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params,
+                        system_params=self.system_params.get_fFunctionInfo(),
                         constant_prefactor=hterm.g
                     )
                     t.step(loc)
                     t.check_if_green_and_simplify()
 
-                    if t.config.is_green():
+                    if t.config.is_zero():
                         self.terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
                         self.terms_list.append(t)
@@ -207,6 +207,6 @@ class GreenEquation(Equation):
                 n[hterm.bt, :] = 1
                 t = terms_module.EOMTerm(
                     boson_config=n, hterm=hterm,
-                    system_params=self.system_params
+                    system_params=self.system_params.get_fFunctionInfo()
                 )
                 self.terms_list.append(t)

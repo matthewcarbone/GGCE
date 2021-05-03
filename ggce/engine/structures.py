@@ -5,23 +5,43 @@ __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
 from collections import namedtuple
-import copy
-import itertools
 import numpy as np
 import math
+import time
 
-import yaml
-
-from ggce.utils.logger import default_logger as dlog
-
-# Define a namedtuple which contains the shift indexes, x and y, the dagger
-# status, d, the coupling term, g, and the boson frequency and type (index)
-SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
+from ggce.utils.logger import Logger
 
 
 def model_coupling_map(coupling_type, t, Omega, lam, ignore):
+    """Returns the value for g, the scalar that multiplies the coupling in the
+    Hamiltonian. Converts the user-input lambda value to this g.
 
-    # If ignore, this simply returns the provided value for lam
+    Parameters
+    ----------
+    coupling_type : {'H', 'SSH', 'bondSSH', 'EFB'}
+        The desired coupling type. Can be Holstein, SSH (Peierls), bond SSH
+        or Edwards Fermion Boson (EFB).
+    t : float
+        The hopping strength.
+    Omega : float
+        The (Einsten) boson frequency.
+    lam : float
+        The dimensionless coupling.
+    ignore : bool
+        If True, simply returns the value for lambda as g. Useful in some
+        situations where the user wants to tune g directly.
+
+    Returns
+    -------
+    float
+        The value for the coupling (g).
+
+    Raises
+    ------
+    RuntimeError
+        If an unknown coupling type is provided.
+    """
+
     if ignore:
         return lam
 
@@ -37,279 +57,218 @@ def model_coupling_map(coupling_type, t, Omega, lam, ignore):
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
 
 
-class LoadedParams:
-    """Parameter permutations are dictionaries containing two values: val,
-    which is the list of values, and cycle, which determines how the
-    permutations of this parameter interact with the others.
-        Specifically, cycle can be one of three values:
-    * 'solo': a single value (not a list) which is applied to all
-        calculations
-    * 'zip': all permutations with this flag will be iterated over using the
-        zip iterator, so all with this flag must have the same length
-    * 'prod': all product-wise combinations of these flags will be run
-        and therefore they do not require the same length.
-    """
+# Define a namedtuple which contains the shift indexes, x and y, the dagger
+# status, d, the coupling term, g, and the boson frequency and type (index)
+SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 
-    @staticmethod
-    def _assert_parameter(param_name, data, model_len):
-        """Sanity checks the input parameters for any issues."""
-
-        # These parameters require a list of lists (for prod or zip), or
-        # simply a list (for solo)
-        if param_name in [
-            'M_extent', 'N_bosons', 'Omega', 'lam', 'g', 'M_tfd', 'N_tfd'
-        ]:
-            assert isinstance(data['vals'], list)
-
-            if data['cycle'] == 'solo':
-                assert len(data['vals']) == model_len
-
-            elif data['cycle'] in ['zip', 'prod']:
-                assert all(isinstance(xx, list) for xx in data['vals'])
-                assert all(len(xx) == model_len for xx in data['vals'])
-
-            elif data['cycle'] == 'prod-linspace':
-                assert param_name in ['Omega', 'lam', 'g']
-                assert len(data['vals']) == model_len
-                assert all(len(xx) == 3 for xx in data['vals'])
-                assert all(
-                    data['vals'][ii][2] == data['vals'][ii + 1][2]
-                    for ii in range(model_len - 1)
-                )
-
-            else:
-                raise RuntimeError(f"Unknown cycle: {data['cycle']}")
-
-        elif param_name in [
-            'hopping', 'broadening', 'absolute_extent', 'max_bosons_per_site',
-            'temperature'
-        ]:
-
-            if data['cycle'] == 'solo':
-                cond1 = isinstance(data['vals'], float)
-                cond2 = isinstance(data['vals'], int)
-                assert cond1 or cond2
-
-            elif data['cycle'] in ['zip', 'prod']:
-                assert isinstance(data['vals'], list)
-
-            else:
-                raise RuntimeError(f"Unknown cycle: {data['cycle']}")
-
-    def __init__(self, model, info, params):
-        self.model = model
-        self.info = info
-        self.solo = dict()
-        self.prod = dict()
-        self.zip = dict()
-        zip_lens = []
-
-        for param_name, data in params.items():
-            LoadedParams._assert_parameter(param_name, data, len(self.model))
-
-            if data['cycle'] == 'solo':
-                self.solo[param_name] = data['vals']
-            elif data['cycle'] == 'zip':
-                zip_lens.append(len(data['vals']))
-                self.zip[param_name] = data['vals']
-            elif data['cycle'] == 'prod':
-                self.prod[param_name] = data['vals']
-            elif data['cycle'] == 'prod-linspace':
-                dat = np.array([np.linspace(*xx) for xx in data['vals']]).T
-                dat = np.round(dat, 3)
-                self.prod[param_name] = [
-                    [float(yy) for yy in xx] for xx in dat
-                ]
-            else:
-                raise RuntimeError(f"Unknown cycle {data['cycle']}")
-
-        # Assert that all lists in zip have the same length
-        assert all([
-            zip_lens[ii] == zip_lens[ii + 1]
-            for ii in range(len(zip_lens) - 1)
-        ])
-
-        try:
-            zip_indexes = [ii for ii in range(zip_lens[0])]
-        except IndexError:
-            zip_indexes = [None]
-
-        # Define a product over the zip_indexes product and single terms
-        self.master = list(itertools.product(
-            zip_indexes, *list(self.prod.values())
-        ))
-        self._counter = 0
-        self._counter_max = len(self.master)
-
-    def __iter__(self):
-        self._counter = 0
-        return self
-
-    def __next__(self):
-        if self._counter >= self._counter_max:
-            raise StopIteration
-
-        current_parameters = self.master[self._counter]
-
-        # Deal with the solo parameters
-        d = copy.deepcopy(self.solo)
-        d['model'] = self.model
-        d['info'] = self.info
-
-        # The zipped parameters
-        for key, value in self.zip.items():
-            if current_parameters[0] is not None:
-                d[key] = value[current_parameters[0]]
-
-        # And the product parameters
-        ii = 1
-        for key in list(self.prod.keys()):
-            d[key] = current_parameters[ii]
-            ii += 1
-
-        self._counter += 1
-        return d
+# Define another namedtuple which contains only the terms that the f-functions
+# need to calculate their prefactors, thus saving space.
+fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega", "eta"])
 
 
-class GridParams:
-    """Contains the grid information for running the loops outside of the
-    System class. I.e., for every set of ModelParameters, the System is
-    initialized only once, and the solver is utilized for each w-k point
-    combination."""
+class ParameterObject:
 
-    def __init__(self, grid_params):
+    def _set_coupling(self, d):
+        """Handle the coupling, which can be defined as either lambda (the
+        dimensionless coupling) or the coupling itself (g). In the latter case,
+        use_g will be set to True so as to ignore any dimensionless coupling
+        conversion.
 
-        self.method = grid_params.get('method')
-        if self.method is None:
-            self.method = 'standard'
-        else:
-            assert self.method in ['standard', 'gs']
+        Parameters
+        ----------
+        d : dict
+            Input dictionary.
+        """
 
-        self.k_grid_info = grid_params['k']
-        self.w_grid_info = grid_params['w']
-
-    def get_grid(self, grid_type, round_values=8):
-        """Returns the desired grid dependening on the selected type and
-        selected method. For example, if standard, returns the linspace grid,
-        but if gs, will return the linspace grid for the k-points but only
-        the initial start and end omega grid points. The step in omega will
-        be equal to some constant times eta for the gs (ground state)
-        method."""
-
-        assert grid_type in ['k', 'w']
-
-        if grid_type == 'k':
-            vals = self.k_grid_info['vals']
-            linspace = self.k_grid_info['linspace']
-        elif grid_type == 'w':
-            if self.method == 'gs':
-                return (
-                    self.w_grid_info['w0'], self.w_grid_info['wf'],
-                    self.w_grid_info['w_N_max'], self.w_grid_info['eta_div'],
-                    self.w_grid_info['eta_step_div'],
-                    self.w_grid_info['next_k_offset_factor']
-                )
-            vals = self.w_grid_info['vals']
-            linspace = self.w_grid_info['linspace']
-
-        assert isinstance(linspace, bool)
-
-        if linspace:
-            assert all([isinstance(xx, list) for xx in vals])
-            assert all([len(xx) == 3 for xx in vals])
-            assert all(xx[0] < xx[1] for xx in vals)
-
-            return np.round(np.sort(np.concatenate([
-                np.linspace(*c, endpoint=True) for c in vals
-            ])), round_values)
-
-        else:
-            assert isinstance(vals, list)
-            return np.round(vals, round_values)
-
-    def save(self, path):
-        """Writes the dictionary to disk."""
-
-        d = {
-            "k": self.k_grid_info,
-            "w": self.w_grid_info,
-            "method": self.method
-        }
-
-        with open(path, 'w') as f:
-            yaml.dump(d, f, default_flow_style=False)
-
-
-def parse_inp(inp_path):
-    """Parses the user-generated input yaml file and returns the LoadedParams
-    and GridParams classes."""
-
-    p = yaml.safe_load(open(inp_path, 'r'))
-    lp = LoadedParams(p['model'], p['info'], p['model_parameters'])
-    gp = GridParams(p['grid_parameters'])
-    return lp, gp
-
-
-class SystemParams:
-
-    def __init__(self, d):
-
-        self.M = d['M_extent']
-        self.N = d.get('N_bosons')
-        self.t = d['hopping']
-        self.eta = d['broadening']
-        self.a = 1.0  # Hard code lattice constant
-        self.Omega = d['Omega']
-        self.lambdas = d.get('lam')
-        self.temperature = d.get('temperature')
-        self.M_tfd = d.get('M_tfd')
-        self.N_tfd = d.get('N_tfd')
-
-        if self.temperature is not None:
-            if self.temperature > 0.0:
-                if self.M_tfd is None:
-                    self.M_tfd = self.M
-                if self.N_tfd is None:
-                    self.N_tfd = self.N
-
+        self.lambdas = d.get('dimensionless_coupling')
         self.use_g = False
         if self.lambdas is None:
-            self.lambdas = d['g']
+            self.lambdas = d['coupling']
             self.use_g = True
 
-        if self.temperature is None:
-            self.temperature = 0.0
+    def _set_temperature(self, d):
+        """Handle setting the temperature. The temperature in the original
+        input file must not be defined for zero-temperature calculations, and
+        must be a float > 0.0 for the finite-temperature calculations.
+
+        Parameters
+        ----------
+        d : dict
+            Input dictionary.
+        """
+
+        if self.protocol in ["tfd", "trace"]:
+            self.temperature = d['temperature']
+            assert self.temperature is not None
+            assert self.temperature > 0.0
         else:
-            assert self.temperature >= 0.0
+            assert d.get("temperature") is None
+            self.temperature = 0.0
 
-        self.models = d['model']
-        self.n_boson_types = len(self.models)
+    def _set_extra_boson_clouds(self, d):
+        """Handles setting extra boson cloud information depending on the
+        protocol.
 
-        assert self.n_boson_types == len(self.M)
-        if self.N is not None:
-            assert self.n_boson_types == len(self.N)
+        Notes
+        -----
+        The number of bosons is actually an optional quantity in the parameter
+        file due to the option of setting a hard boson constraint
+        (max_bosons_per_site). These possibilities are handled in a later
+        assertion.
 
-        self.absolute_extent = d.get('absolute_extent')
-        if self.n_boson_types == 1:
-            if self.absolute_extent is None:
+        Parameters
+        ----------
+        d : dict
+            Input dictionary.
+        """
+
+        if self.protocol not in ["tfd", "trace"]:
+            assert d.get("M_tfd") is None
+            assert d.get("N_tfd") is None
+            assert d.get("M_trace") is None
+            assert d.get("N_trace") is None
+        elif self.protocol == "tfd":
+            self.M_tfd = d["M_tfd"]
+            self.N_tfd = d.get("N_tfd")
+            assert d.get("M_trace") is None
+            assert d.get("N_trace") is None
+        elif self.protocol == "trace":
+            assert d.get("M_tfd") is None
+            assert d.get("N_tfd") is None
+            self.M_trace = d["M_trace"]
+            self.N_trace = d.get("N_trace")
+
+    def _set_absolute_extent_information(self, d):
+        """Sets the absolute extent and runs assertions on it.
+
+        Parameters
+        ----------
+        d : dict
+            Input dictionary.
+        """
+
+        if self.protocol not in ["tfd", "trace"]:
+            if self.n_boson_types > 1:
+                self.absolute_extent = d["absolute_extent"]
+                assert self.absolute_extent >= np.max(self.M)
+            else:
+                assert d.get("absolute_extent") is None
                 self.absolute_extent = self.M[0]
         else:
-            assert self.absolute_extent is not None
-            assert self.absolute_extent > 0
+            self.absolute_extent = d["absolute_extent"]
+            assert self.absolute_extent >= np.max(self.M)
+            if self.protocol == "tfd":
+                assert self.absolute_extent >= np.max(self.M_tfd)
+            elif self.protocol == "trace":
+                assert self.absolute_extent >= np.max(self.M_trace)
+        assert self.absolute_extent > 0
+
+    def _set_max_bosons_per_site(self, d):
+        """Handles the maximum bosons per site assertions (hard bosons).
+
+        Parameters
+        ----------
+        d : dict
+            Input dictionary.
+        """
 
         self.max_bosons_per_site = d.get('max_bosons_per_site')
         if self.max_bosons_per_site is not None:
             assert self.max_bosons_per_site > 0
+            assert isinstance(self.max_bosons_per_site, int)
             assert self.N is None
-            if self.N is None:
-                self.N = [
+            self.N = [
+                self.max_bosons_per_site * self.n_boson_types * m
+                for m in self.M
+            ]
+
+            if self.protocol == "tfd":
+                assert self.N_tfd is None
+                self.N_tfd = [
                     self.max_bosons_per_site * self.n_boson_types * m
-                    for m in self.M
+                    for m in self.M_tfd
+                ]
+            elif self.protocol == "trace":
+                assert self.N_trace is None
+                self.N_trace = [
+                    self.max_bosons_per_site * self.n_boson_types * m
+                    for m in self.M_trace
                 ]
         else:
             assert self.N is not None
+            if self.protocol == "tfd":
+                assert self.N_tfd is not None
+            elif self.protocol == "trace":
+                assert self.N_trace is not None
+
+    def __init__(self, d, logger=Logger(dummy=True)):
+
+        t0 = time.time()
+
+        self.logger = logger
+
+        # Start with parameters that are required for all trials
+        self.M = d['M_extent']
+        self.N = d.get('N_bosons')
+        self.t = d['hopping']
+        self.eta = d['broadening']
+        self.a = d.get("lattice_constant", 1.0)
+        self.Omega = d['Omega']
+        self.protocol = d['protocol']
+
+        # Handle the coupling
+        self._set_coupling(d)
+
+        # Handle temperature
+        self._set_temperature(d)
+
+        # Handle extra boson clouds due to TFD or other finite-T methods
+        self._set_extra_boson_clouds(d)
+
+        # Set the model
+        self.models = d['model']
+        self.n_boson_types = len(self.models)
+        assert self.n_boson_types == len(self.M)
+
+        # Handle the absolute extent information
+        self._set_absolute_extent_information(d)
+
+        # Handle the hard boson constraints
+        self._set_max_bosons_per_site(d)
+
+        dt = time.time() - t0
+        self.logger.info(
+            "Parameters object initialized successfully", elapsed=dt
+        )
+
+    def get_fFunctionInfo(self):
+        return fFunctionInfo(
+            a=self.a, t=self.t, Omega=self.Omega, eta=self.eta
+        )
 
     def _extend_terms(self, m, g, bt):
+        """Helper method to extent the self.terms list.
+
+        This method contains the 'programmed' notation of the coupling terms.
+        Every model must have a corresponding string matching the cases below.
+
+        Parameters
+        ----------
+        m : {'H', 'EFB', 'bondSSH', 'SSH'}
+            The model type.
+        g : float
+            The coupling term (multiplying V in the Hamiltonian).
+        bt : int
+            The boson type index. Indexes the place in the model list. For
+            example, if the current boson type is 1 and the model is
+            ['H', 'SSH'], then the boson corresponds to an SSH phonon.
+
+        Raises
+        ------
+        RuntimeError
+            If the model type is unknown.
+        """
+
         if m == 'H':
             self.terms.extend([
                 SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
@@ -343,46 +302,41 @@ class SystemParams:
         else:
             raise RuntimeError("Unknown model type when setting terms")
 
-    def prime(self):
-        """Initializes the terms object, which contains the critical
-        information about the Hamiltonian necessary for running the
-        computation. Note that the sign is *relative*, so as long as
-        every term in V is multipled by an overall factor, and each term has
-        the correct sign relative to the others, the result will be the
-        same."""
+    def _get_coupling_prefactors(self, Omega):
+        """Get's the TFD coupling prefactors.
 
-        self.terms = []
+        The TFD prefactors are defined clearly in e.g. JCP 145, 224101 (2016).
 
-        bt = 0
+        Parameters
+        ----------
+        Omega : float
+            The (Einstein) phonon frequency.
 
-        for (m, o, lam) in zip(self.models, self.Omega, self.lambdas):
-            g = model_coupling_map(m, self.t, o, lam, self.use_g)
+        Returns
+        -------
+        float, float
+            The modifying prefactor to the real and fictitious couplings.
+        """
 
-            # Thermo field doubling -------------------------------------------
-            # We multiply g times the thermofield factor no matter what since
-            # cleanly cosh(0) = 1.
-            if self.temperature == 0.0:
-                V_prefactor = 1.0
-                V_tilde_prefactor = 0.0
-            else:
-                assert self.temperature > 0.0
-                beta = 1.0 / self.temperature
-                theta_beta = np.arctanh(np.exp(-beta * o / 2.0))
-                V_prefactor = np.cosh(theta_beta)
-                V_tilde_prefactor = np.sinh(theta_beta)
-            # -----------------------------------------------------------------
+        if self.protocol == "tfd":
+            assert self.temperature > 0.0
+            beta = 1.0 / self.temperature
+            theta_beta = np.arctanh(np.exp(-beta * Omega / 2.0))
+            V_prefactor = np.cosh(theta_beta)
+            V_tilde_prefactor = np.sinh(theta_beta)
+            return V_prefactor, V_tilde_prefactor
+        else:
+            return 1.0, None
 
-            self._extend_terms(m, g*V_prefactor, bt)
-            bt += 1
+    def _adjust_bosons_if_necessary(self):
+        """Adjusts all attributes according to e.g. TFD.
 
-            # Now we implement the thermo field double changes to the
-            # coupling prefactor, if necessary.
-            if self.temperature != 0.0:
-                self._extend_terms(m, g*V_tilde_prefactor, bt)
-                bt += 1
+        Note that this method essentially does nothing if the protocol is not
+        TFD.
+        """
 
         # Adjust the number of boson types according to thermofield
-        if self.temperature > 0.0:
+        if self.protocol == "tfd":
             self.n_boson_types *= 2  # Thermo field "double"
             assert isinstance(self.M, list)
             assert isinstance(self.N, list)
@@ -428,6 +382,43 @@ class SystemParams:
                 if ii % 2 == 0:  # Even
                     self.models_vis.append(m)
                 else:
-                    self.models_vis.append(f"fict({m})")
+                    self.models_vis.append(f"~{m}")
         else:
             self.models_vis = self.models
+
+    def prime(self):
+        """Initializes the terms object, which contains the critical
+        information about the Hamiltonian necessary for running the
+        computation. Note that the sign is *relative*, so as long as
+        every term in V is multiplied by an overall factor, and each term has
+        the correct sign relative to the others, the result will be the
+        same."""
+
+        t0 = time.time()
+
+        self.terms = []
+
+        bt = 0
+
+        for (m, bigOmega, lam) in zip(self.models, self.Omega, self.lambdas):
+            g = model_coupling_map(m, self.t, bigOmega, lam, self.use_g)
+
+            # Handle the TFD stuff if necessary
+            V_prefactor, V_tilde_prefactor = \
+                self._get_coupling_prefactors(bigOmega)
+
+            self._extend_terms(m, g*V_prefactor, bt)
+            bt += 1
+
+            # Now we implement the thermo field double changes to the
+            # coupling prefactor, if necessary.
+            if self.protocol == "tfd":
+                self._extend_terms(m, g*V_tilde_prefactor, bt)
+                bt += 1
+
+        self._adjust_bosons_if_necessary()
+
+        dt = time.time() - t0
+        self.logger.info(
+            "Parameters object primed; ready for compute", elapsed=dt
+        )

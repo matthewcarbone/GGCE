@@ -4,17 +4,12 @@ __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
 
-import logging
-import os
 from pathlib import Path
 import pickle
 import shlex
 import subprocess
 import uuid
 import time
-
-
-from ggce.utils.logger import default_logger as dlog
 
 
 LIFO_QUEUE_PATH = '.LIFO_queue.yaml'
@@ -92,20 +87,6 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-class DisableLogger:
-
-    def __init__(self, disable=True):
-        self.disable = disable
-
-    def __enter__(self):
-        if self.disable:
-            logging.disable(logging.CRITICAL)
-
-    def __exit__(self, exit_type, exit_value, exit_traceback):
-        if self.disable:
-            logging.disable(logging.NOTSET)
-
-
 # https://stackoverflow.com/questions/8924173/how-do-i-print-bold-text-in-python
 class Color:
     PURPLE = '\033[95m'
@@ -126,28 +107,6 @@ def bold(s):
     return Color.BOLD + s + Color.END
 
 
-def get_cache_dir():
-    cache = os.environ.get('GGCE_CACHE_DIR')
-    if cache is None:
-        dlog.warning(
-            "Environment variable GGCE_CACHE_DIR not found. "
-            "Cache directory set to 'results'"
-        )
-        cache = 'results'
-    # os.makedirs(cache, exist_ok=True)
-    dlog.debug(f"Cache directory set to {cache}")
-    return cache
-
-
-def get_package_dir():
-    cache = os.environ.get('GGCE_PACKAGES_DIR')
-    if cache is None:
-        cache = 'packages'
-    # os.makedirs(cache, exist_ok=True)
-    dlog.debug(f"Package directory set to {cache}")
-    return cache
-
-
 def listdir_fullpath(d):
     return [p for p in d.iterdir()]
 
@@ -160,6 +119,39 @@ def listdir_files_fp(d):
 def listdir_fullpath_dirs_only(d):
     dirs = listdir_fullpath(d)
     return [d for d in dirs if d.is_dir()]
+
+
+def elapsed_time_str(dt):
+    """Returns the elapsed time in variable format depending on how long
+    the calculation took.
+
+    Parameters
+    ----------
+    dt : {float}
+        The elapsed time in seconds.
+
+    Returns
+    -------
+    float, str
+        The elapsed time in the format given by the second returned value.
+        Either seconds, minutes, hours or days.
+    """
+
+    if dt < 10.0:
+        return dt, "s"
+    elif 10.0 <= dt < 600.0:  # 10 s <= dt < 10 m
+        return dt / 60.0, "m"
+    elif 600.0 <= dt < 36000.0:  # 10 m <= dt < 10 h
+        return dt / 3600.0, "h"
+    else:
+        return dt / 86400.0, "d"
+
+
+def adjust_log_msg_for_time(msg, _elapsed):
+    if _elapsed is None:
+        return msg
+    (elapsed, units) = elapsed_time_str(_elapsed)
+    return f"({elapsed:.02f} {units}) {msg}"
 
 
 def time_func(arg1=None):
@@ -206,7 +198,7 @@ def run_command(command, silent=True):
         if output == b'' and process.poll() is not None:
             break
         if output and not silent:
-            dlog.debug(output.strip().decode())
+            print(output.strip().decode())
 
     rc = process.poll()
     return rc
