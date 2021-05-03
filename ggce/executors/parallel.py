@@ -188,8 +188,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
 
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry
-        if self.rank == 0:
-            G = self._vector_x.getValue(self._linsys_size-1)
+        if self.rank == self.comm.getSize() - 1:
+            G = self._vector_x.getValue(self._linsys_size - 1)
             return np.array(G), {'time': [dt]}
 
         # TODO: figure out how to gather the vector into serial form using

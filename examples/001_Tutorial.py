@@ -41,7 +41,7 @@ executor.prime()
 wgrid = np.linspace(-5.5, -2.5, 100)
 spectrum = [executor.solve(0.5 * np.pi, w) for w in wgrid]
 
-if COMM.rank == 0:
+if COMM.getRank() == COMM.getSize() - 1:
     spectrum = np.array([-s[0].imag / np.pi for s in spectrum])
     xx = np.array([wgrid.squeeze(), spectrum.squeeze()]).T
     np.savetxt("parallel_results.txt", xx)
