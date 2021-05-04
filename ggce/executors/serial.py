@@ -182,10 +182,13 @@ class SerialDenseExecutor(BaseExecutor):
     .. math:: f_n = R_n f_{n-1}
     """
 
-    def prime(self):
+    def _dense_prime_helper(self):
         self._prime_parameters()
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=False)
+
+    def prime(self):
+        self._dense_prime_helper()
 
     def _fill_matrix(self, k, w, n_phonons, shift, eta):
 
