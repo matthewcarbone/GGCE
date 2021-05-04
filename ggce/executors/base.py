@@ -153,26 +153,3 @@ class BaseExecutor:
 
         s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
         return np.array(s)
-
-    def parallel_solve(self, k, w, eta=None):
-        """Solves for the spectrum in parallel. Requires an initialized MPI
-        communicator to be passed at instantiation.
-
-        Parameters
-        ----------
-        k : float
-            The momentum quantum number point of the calculation.
-        w : float
-            The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
-
-        Returns
-        -------
-        np.ndarray
-            The resultant spectrum.
-        """
-
-        raise NotImplementedError
