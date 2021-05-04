@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from itertools import islice
 import numpy as np
 
 from ggce.engine.system import System
@@ -32,17 +33,41 @@ class BaseExecutor:
     ):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
-        self.comm = None
-        self.rank = 0
+        self.mpi_comm = None
+        self.mpi_rank = 0
+        self.mpi_world_size = 1
         if mpi_comm is not None:
-            self.comm = mpi_comm
-            self.rank = mpi_comm.getRank()
-        self._logger = Logger(log_file, mpi_rank=self.rank)
+            self.mpi_comm = mpi_comm
+            self.mpi_rank = mpi_comm.getRank()
+            self.mpi_world_size = mpi_comm.getSize()
+        self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameter_dict = parameter_dict
         self._parameters = None
         self._system = None
         self._basis = None
+
+    def get_jobs_on_this_rank(self, jobs):
+        """Get's the jobs assigned to this rank. Note this method silently
+        behaves as it should when the world size is 1, and will log a warning
+        if it is called but the communicator is not initialized.
+
+        Parameters
+        ----------
+        jobs : list
+            The jobs to chunk
+
+        Returns
+        -------
+        list
+            The jobs assigned to this rank.
+        """
+
+        if self.mpi_comm is None:
+            self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
+
+        it = iter(jobs)
+        return list(iter(lambda: tuple(islice(it, self.size)), ()))[self.rank]
 
     def get_parameters(self, return_dict=False):
         """Returns the parameter information.
@@ -128,3 +153,26 @@ class BaseExecutor:
 
         s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
         return np.array(s)
+
+    def parallel_solve(self, k, w, eta=None):
+        """Solves for the spectrum in parallel. Requires an initialized MPI
+        communicator to be passed at instantiation.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float, optional
+            The artificial broadening parameter of the calculation (the default
+            is None, which uses the value provided in parameter_dict at
+            instantiation).
+
+        Returns
+        -------
+        np.ndarray
+            The resultant spectrum.
+        """
+
+        raise NotImplementedError
