@@ -1,11 +1,8 @@
 # Run with e.g.
-# mpirun -n `n_processes` python 001_Tutorial.py
+# mpiexec -np `n_processes` python 001_Tutorial.py
 # to start in parallel
 
 import numpy as np
-
-# import matplotlib as mpl
-# import matplotlib.pyplot as plt
 
 from petsc4py import PETSc
 
@@ -15,17 +12,16 @@ try:
     import ggce
 except ModuleNotFoundError:
     sys.path.append("..")
-    import ggce
+    import ggce  # noqa: F401
 
-from ggce.executors.parallel import ParallelSparseExecutor
-# from ggce.executors.parallel import SerialSparseExecutor
+from ggce.executors.petsc4py.parallel import ParallelSparseExecutor
 
 literature_data = np.loadtxt("000_example_A.txt")
 
 system_params = {
     "model": ["EFB"],
-    "M_extent": [3], # 5
-    "N_bosons": [9], #10
+    "M_extent": [3],
+    "N_bosons": [9],
     "Omega": [1.25],
     "dimensionless_coupling": [2.5],
     "hopping": 0.1,
@@ -35,10 +31,10 @@ system_params = {
 
 COMM = PETSc.COMM_WORLD
 
-executor = ParallelSparseExecutor(system_params, "DEBUG", mpi_comm=COMM)
+executor = ParallelSparseExecutor(system_params, "info", mpi_comm=COMM)
 executor.prime()
 
-wgrid = np.linspace(-5.5, -2.5, 100)
+wgrid = np.linspace(-5.5, -2.5, 500)
 spectrum = [executor.solve(0.5 * np.pi, w) for w in wgrid]
 
 if COMM.getRank() == COMM.getSize() - 1:
@@ -46,7 +42,8 @@ if COMM.getRank() == COMM.getSize() - 1:
     xx = np.array([wgrid.squeeze(), spectrum.squeeze()]).T
     np.savetxt("parallel_results.txt", xx)
 
-
+# Compare with "ground truth" (see https://journals.aps.org/prb/
+# abstract/10.1103/PhysRevB.82.085116, figure 5 center) via:
 # fig, ax = plt.subplots(1, 1, figsize=(3, 2))
 # ax.plot(wgrid, spectrum / spectrum.max(), 'k')
 # ax.plot(literature_data[:, 0], literature_data[:, 1], 'r--', linewidth=0.5)
