@@ -102,7 +102,7 @@ class LowestEnergyBandResults(BaseResults):
 
         self._set_defaults()
 
-    def ground_state(self, truncate_val=None, **kwargs):
+    def ground_state(self, truncate_val=None, lowest_only=False, **kwargs):
         """Returns the ground state dispersion computed as the lowest
         energy peak energy as a function of k. Also returns the polaron
         weight."""
@@ -112,6 +112,10 @@ class LowestEnergyBandResults(BaseResults):
         weight = np.array(result[3])
         k = self.k_grid[:len(weight)]
         assert len(weight) == len(w_gs)
+
+        if lowest_only:
+            kstar = np.argmin(w_gs)
+            return k[kstar], w_gs[kstar], weight[kstar]
 
         if truncate_val is not None:
             try:
