@@ -126,6 +126,30 @@ class LowestEnergyBandResults(BaseResults):
 
         return k, w_gs, weight
 
+    def effective_mass(self, npts=15, **kwargs):
+        """Returns the effective mass and the k-location of the ground state.
+
+        [description]
+
+        Parameters
+        ----------
+        **kwargs : {[type]}
+            [description]
+        npts : {number}, optional
+            [description] (the default is 15, which [default_description])
+        """
+
+        result = self.__call__(**kwargs)
+        w_gs = np.array(result[2])
+        k = self.k_grid[:len(w_gs)]
+        kstar = np.argmin(w_gs)
+        lpts = kstar - min(kstar, npts // 2)
+        rpts = kstar + npts // 2
+
+        # Note that the k-grid is in units of pi.
+        p0 = np.polyfit(k[lpts:rpts] * np.pi, w_gs[lpts:rpts], deg=2)
+        return (1.0 / p0[0] / 2.0, k[kstar])
+
 
 class Results(BaseResults):
     """Trials are single spectra A(w) for some fixed k, and all other
