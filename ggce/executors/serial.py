@@ -265,6 +265,9 @@ class SerialDenseExecutor(BaseExecutor):
             'time': []
         }
 
+        finfo = self._parameters.get_fFunctionInfo()
+        eta = eta if eta is not None else finfo.eta
+
         total_phonons = np.sum(self._parameters.N)
 
         for n_phonons in range(total_phonons, 0, -1):
@@ -292,8 +295,7 @@ class SerialDenseExecutor(BaseExecutor):
             )
             meta["time"].append(dt)
 
-        finfo = self._parameters.get_fFunctionInfo()
-        G0 = G0_k_omega(k, w, finfo.a, finfo.eta, finfo.t)
+        G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
 
         beta0 = self._get_beta(k, w, 0, eta=eta)
         result = (G0 / (1.0 - beta0 @ R)).squeeze()
