@@ -6,6 +6,7 @@ import numpy as np
 from ggce.engine.system import System
 from ggce.engine.structures import ParameterObject
 from ggce.utils.logger import Logger
+from ggce.utils.utils import peak_location_and_weight
 
 
 class BaseExecutor:
@@ -65,6 +66,7 @@ class BaseExecutor:
 
         if self.mpi_comm is None:
             self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
+            return jobs
 
         it = iter(jobs)
         return list(iter(lambda: tuple(islice(it, self.size)), ()))[self.rank]
@@ -126,7 +128,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta=None):
+    def compute(self, k, w, eta=None):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -153,3 +155,93 @@ class BaseExecutor:
 
         s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
         return np.array(s)
+
+    def band(
+        self, kgrid, w0, eta_div=3.0, eta_step_div=5.0,
+        next_k_offset_factor=1.5, eta=None, nmax=1000
+    ):
+        """[summary]
+
+        [description]
+
+        Parameters
+        ----------
+        kgrid : {[type]}
+            [description]
+        w0 : {[type]}
+            [description]
+        eta_div : {[type]}
+            [description]
+        eta_step_div : {number}, optional
+            [description] (the default is 3.0, which [default_description])
+        next_k_offset_factor : {number}, optional
+            [description] (the default is 1.5, which [default_description])
+        eta : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        nmax : {number}, optional
+            [description] (the default is 1000, which [default_description])
+
+        Returns
+        -------
+        [type]
+            [description]
+        """
+
+        finfo = self._parameters.get_fFunctionInfo()
+        eta = eta if eta is not None else finfo.eta
+
+        if self.mpi_comm is not None:
+            self._logger.critical(
+                "Band calculations should be run using a serial protocol"
+            )
+            self.mpi_comm.Abort()
+
+        results = []
+        w_val = w0
+        for ii, k_val in enumerate(kgrid):
+
+            current_n_w = 0
+            reference = 0.0
+
+            results.append({
+                'k': k_val,
+                'w': [],
+                'A': [],
+                'ground_state': None,
+                'weight': None
+            })
+
+            while True:
+
+                if current_n_w > nmax:
+                    self._logger.error("Exceeded maximum omega points")
+                    return results
+
+                G, _ = self.solve(k_val, w_val, eta=eta)
+                A = -G.imag / np.pi
+                results[ii]['w'].append(w_val)
+                results[ii]['A'].append(A)
+
+                # Check and see whether or not we've found a local maxima
+                if reference < A:
+
+                    # This is not a maximum
+                    reference = A
+
+                    current_n_w += 1
+                    w_val += eta / eta_step_div
+                    continue
+
+                # This is a maximum, run the calculation again using eta prime
+                eta_prime = eta / eta_div
+                G2, _ = self.solve(k_val, w_val, eta=eta_prime)
+                A2 = -G2.imag / np.pi
+                loc, weight = peak_location_and_weight(
+                    w_val, A, A2, eta, eta_prime
+                )
+                results[ii]['ground_state'] = loc
+                results[ii]['weight'] = weight
+                w_val = loc - eta * next_k_offset_factor
+                break
+
+        return results
