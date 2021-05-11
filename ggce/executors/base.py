@@ -128,7 +128,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def compute(self, k, w, eta=None):
+    def spectrum(self, k, w, eta=None):
         """Solves for the spectrum in serial.
 
         Parameters
