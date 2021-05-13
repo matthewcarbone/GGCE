@@ -11,7 +11,7 @@ from ggce.engine.physics import G0_k_omega
 
 
 BYTES_TO_MB = 1048576
-
+BYTES_TO_GB = 1073741274
 
 class SerialSparseExecutor(BaseExecutor):
     """Uses the SciPy sparse solver engine to solve for G(k, w) in serial."""
@@ -77,6 +77,11 @@ class SerialSparseExecutor(BaseExecutor):
 
         dt = time.time() - t0
         self._logger.debug("Sparse matrix initialized", elapsed=dt)
+
+        ## estimate sparse matrix memory usage
+        ## (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
+        est_mem_used = (16 + 4 + 4) * len(dat) / BYTES_TO_MB
+        self._logger.debug(f"Estimated memory needed is {est_mem_used:.02f} MB")
 
         return row_ind, col_ind, dat
 
