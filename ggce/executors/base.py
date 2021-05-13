@@ -38,8 +38,8 @@ class BaseExecutor:
         self.mpi_world_size = 1
         if mpi_comm is not None:
             self.mpi_comm = mpi_comm
-            self.mpi_rank = mpi_comm.getRank()
-            self.mpi_world_size = mpi_comm.getSize()
+            self.mpi_rank = mpi_comm.Get_rank()
+            self.mpi_world_size = mpi_comm.Get_size()
         self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameter_dict = parameter_dict
