@@ -128,7 +128,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta=None):
+    def spectrum(self, k, w, eta):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -137,10 +137,8 @@ class BaseExecutor:
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -212,9 +210,6 @@ class BaseExecutor:
             quasi-particle weight ('ground_state' and 'weight').
         """
 
-        finfo = self._parameters.get_fFunctionInfo()
-        eta = eta if eta is not None else finfo.eta
-
         if self.mpi_comm is not None:
             self._logger.critical(
                 "Band calculations should be run using a serial protocol"
@@ -242,7 +237,7 @@ class BaseExecutor:
                     self._logger.error("Exceeded maximum omega points")
                     return results
 
-                G, _ = self.solve(k_val, w_val, eta=eta)
+                G, _ = self.solve(k_val, w_val, eta)
                 A = -G.imag / np.pi
                 results[ii]['w'].append(w_val)
                 results[ii]['A'].append(A)
@@ -259,7 +254,7 @@ class BaseExecutor:
 
                 # This is a maximum, run the calculation again using eta prime
                 eta_prime = eta / eta_div
-                G2, _ = self.solve(k_val, w_val, eta=eta_prime)
+                G2, _ = self.solve(k_val, w_val, eta_prime)
                 A2 = -G2.imag / np.pi
                 loc, weight = peak_location_and_weight(
                     w_val, A, A2, eta, eta_prime
