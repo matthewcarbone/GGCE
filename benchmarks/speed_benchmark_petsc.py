@@ -93,7 +93,7 @@ if COMM.getRank() == 0:
 if COMM.getRank() == 0:
 
     xx = np.array([serial_times, parallel_times, serial_greens, parallel_greens]).T
-    np.savetxt(os.path.join(script_dir,f"speed_benchmark_M_{str(cloud_ext)}_n_{str(bosons_max)}.txt"), xx,\
+    np.savetxt(os.path.join(script_dir,f"speed_benchmark_M_{str(cloud_ext)}_N_{str(bosons_max)}.txt"), xx,\
                 header = f"serial time (s)    parallel time (s)    serial G    parallel G",\
                 fmt = ['%.3f %+.0ej', '%.3f %+.0ej' ,'%.5e %+.5ej', '%.5e %+.5ej'],\
                 delimiter = "    " )
@@ -108,4 +108,4 @@ if COMM.getRank() == 0:
     # plt.xlabel('N bosons')
     # plt.ylabel('CPU time, seconds')
     # plt.legend()
-    # plt.savefig(os.path.join(script_dir,f'benchmark_petsc_m{str(cloud_ext)}_n{str(bosons_max)}.png'),format='png')
+    # plt.savefig(os.path.join(script_dir,f'benchmark_petsc_M_{str(cloud_ext)}_N_{str(bosons_max)}.png'),format='png')
