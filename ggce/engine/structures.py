@@ -63,7 +63,7 @@ SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 
 # Define another namedtuple which contains only the terms that the f-functions
 # need to calculate their prefactors, thus saving space.
-fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega", "eta"])
+fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega"])
 
 
 class ParameterObject:
@@ -211,7 +211,6 @@ class ParameterObject:
         self.M = d['M_extent']
         self.N = d.get('N_bosons')
         self.t = d['hopping']
-        self.eta = d['broadening']
         self.a = d.get("lattice_constant", 1.0)
         self.Omega = d['Omega']
         self.protocol = d['protocol']
@@ -242,9 +241,7 @@ class ParameterObject:
         )
 
     def get_fFunctionInfo(self):
-        return fFunctionInfo(
-            a=self.a, t=self.t, Omega=self.Omega, eta=self.eta
-        )
+        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
 
     def _extend_terms(self, m, g, bt):
         """Helper method to extent the self.terms list.
