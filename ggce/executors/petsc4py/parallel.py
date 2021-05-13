@@ -2,7 +2,6 @@
 
 import numpy as np
 import time
-import warnings
 
 from petsc4py import PETSc
 
@@ -10,6 +9,7 @@ from ggce.executors.serial import SerialSparseExecutor
 from ggce.engine.physics import G0_k_omega
 
 BYTES_TO_GB = 1073741274
+
 
 class ParallelSparseExecutor(SerialSparseExecutor):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
@@ -126,10 +126,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         self._logger.debug("PETSc matrix assembled", elapsed=dt)
 
     def check_convergence(self, factored_mat, rtol):
-
-        '''This helper function checks MUMPS convergence
-           using built-in MUMPS error codes and a manual
-           residual check.
+        """This helper function checks MUMPS convergence using built-in MUMPS
+        error codes and a manual residual check.
 
         Parameters
         ----------
@@ -142,36 +140,48 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         -------
         The residual check and MUMPS convergenc criterions are conducted
         in place, nothing is returned.
+        """
 
-        '''
-
-        ## MUMPS main convergence index -- if 0, all good
+        # MUMPS main convergence index -- if 0, all good
         mumps_conv_ind = factored_mat.getMumpsInfog(1)
         if mumps_conv_ind == 0:
-            self._logger.debug(f"According to MUMPS diagnostics, call to MUMPS was successful.")
+            self._logger.debug(
+                "According to MUMPS diagnostics, call to MUMPS was "
+                "successful."
+            )
         elif mumps_conv_ind < 0:
-            warnings.warn(f"A MUMPS error occured with MUMPS error code {mumps_conv_ind}\n" + \
-                            f"See the MUMPS User Guide, Sec. 8, for error diagnostics.")
+            self._logger.error(
+                "A MUMPS error occured with MUMPS error code "
+                f"{mumps_conv_ind} See the MUMPS User Guide, Sec. 8, for "
+                "error  diagnostics."
+            )
         elif mumps_conv_ind > 0:
-            warnings.warn(f"A MUMPS warning occured with MUMPS warning code {mumps_conv_ind}\n" + \
-                            f"See the MUMPS User Guide, Sec. 8, for error diagnostics.")
+            self._logger.warning(
+                "A MUMPS warning occured with MUMPS warning code "
+                f"{mumps_conv_ind} See the MUMPS User Guide, Sec. 8, for "
+                "error diagnostics."
+            )
 
-        # unhappy with MUMPS, we do our own double-check of residual criterion
+        # Unhappy with MUMPS, we do our own double-check of residual criterion
         res = self._vector_b - self._mat_X(self._vector_x)
         res_norm = res.norm(PETSc.NormType.NORM_2)
         if self.mpi_rank == 0:
-            self._logger.debug(f"MUMPS final residual is {res_norm}, rtol is {rtol}")
+            self._logger.debug(
+                f"MUMPS final residual is {res_norm}, rtol is {rtol}"
+            )
 
         if res_norm > rtol:
-            self._logger.debug(f"Final solution failed residual relative tolerance check."+\
-                           f" Solutions likely not fully converged.")
+            self._logger.warning(
+                "Solution failed residual relative tolerance check. "
+                "Solutions likely not fully converged."
+            )
+
         else:
-            self_logger.debug(f"Final solution passed manual residual check.")
+            self._logger.debug("Solution passed manual residual check.")
 
     def check_mem_use(self, factored_mat):
-
-        '''This helper function checks MUMPS memory
-           usage with built-in MUMPS access.
+        """This helper function checks MUMPS memory usage with built-in MUMPS
+        access.
 
         Parameters
         ----------
@@ -183,23 +193,26 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         Returns
         -------
         The memory resuts are given to the logger, nothing is returned.
+        """
 
-        '''
-
-        # each rank reports their memory usage (in millions of bytes)
-        rank_mem_used = factored_mat.getMumpsInfo(26)*1000000 / BYTES_TO_GB
-        self._logger.debug(f"Current rank MUMPS memory usage is {rank_mem_used:.02f} GB")
+        # Each rank reports their memory usage (in millions of bytes)
+        rank_mem_used = factored_mat.getMumpsInfo(26) * 1e6 / BYTES_TO_GB
+        self._logger.debug(
+            f"Current rank MUMPS memory usage is {rank_mem_used:.02f} GB"
+        )
 
         # set up memory usage tracking, report to the logger
         if self.mpi_rank == 0:
             # total memory across all processes
-            total_mem_used = factored_mat.getMumpsInfog(31)*1000000 / BYTES_TO_GB
-            self._logger.debug(f"Total MUMPS memory usage is {total_mem_used:.02f} GB")
-
-
+            total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 / BYTES_TO_GB
+            self._logger.debug(
+                f"Total MUMPS memory usage is {total_mem_used:.02f} GB"
+            )
 
     def solve(self, k, w, eta=None, rtol=1.0e-15):
         """Solve the sparse-represented system using PETSc's KSP context.
+        Note that this method only returns values on MPI rank = 0. All other
+        ranks will return None.
 
         Parameters
         ----------
@@ -274,8 +287,9 @@ class ParallelSparseExecutor(SerialSparseExecutor):
 
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
-        # use a gather operation, called by all ranks, to construct the full vector
-        G = self.mpi_comm.gather(self._vector_x.getArray(),root = 0)
+        # use a gather operation, called by all ranks, to construct the full
+        # vector
+        G = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
         # this returns a list of values of G from all processes
 
         if self.mpi_rank == 0:
