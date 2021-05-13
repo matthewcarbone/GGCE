@@ -156,35 +156,60 @@ class BaseExecutor:
         s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
         return np.array(s)
 
-    def band(
-        self, kgrid, w0, eta_div=3.0, eta_step_div=5.0,
-        next_k_offset_factor=1.5, eta=None, nmax=1000
+    def dispersion(
+        self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
+        next_k_offset_factor=1.5, nmax=1000
     ):
-        """[summary]
+        """Computes the dispersion of the peak closest to the provided w0 by
+        assuming that the peak is Lorentzian in nature. This allows us to
+        take two points, each at a different value of the broadening, eta, and
+        compute the location of the Lorentzian (ground state energy) and
+        quasi-particle weight exactly, at least in principle. As stated, we
+        rely on the assumption that the peak is Lorentzian, which is only true
+        in some cases (e.g. the polaron).
 
-        [description]
+        This method works as follows: (1) An initial guess for the peak
+        location of the first entry in kgrid is provided (w0). (2) The location
+        of the peak is found by slowly increasing w in increments of
+        eta / eta_step_div until the first time the value of A decreases from
+        the previou sone. (3) The location is found (as is the weight) by
+        computing A using a second broadening given by eta / eta_div. (4) This
+        value is logged in results, and the algorithm moves to the next
+        k-point. The new initial guess for the next peak location is given by
+        the found location of the previous k-point minus
+        eta * next_k_offset_factor.
 
         Parameters
         ----------
-        kgrid : {[type]}
-            [description]
-        w0 : {[type]}
-            [description]
-        eta_div : {[type]}
-            [description]
-        eta_step_div : {number}, optional
-            [description] (the default is 3.0, which [default_description])
-        next_k_offset_factor : {number}, optional
-            [description] (the default is 1.5, which [default_description])
-        eta : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        nmax : {number}, optional
-            [description] (the default is 1000, which [default_description])
+        kgrid : list
+            A list of the k-points to calculate.
+        w0 : float
+            The initial guess for the peak location for the first k-point only.
+        eta : float
+            The broadening parameter.
+        eta_div : float, optional
+            Used for the computation of the second A value (the default is
+            3.0, a good empirical value).
+        eta_step_div : float, optional
+            Defines the step in frequency space as eta / eta_step_div (the
+            default is 5.0).
+        next_k_offset_factor : float, optional
+            Defines how far back from the found peak location to start the
+            algorithm at the next k-point. The next start location is given by
+            the found location minus eta * next_k_offset_vactor (the default is
+            1.5).
+        nmax : int, optional
+            The maximum number of steps to take in eta before gracefully
+            erroring out and returning the previously found values (the
+            default is 1000).
 
         Returns
         -------
-        [type]
-            [description]
+        list
+            List of dictionaries, each of which contains 5 keys: the k-value at
+            which the calculation was run ('k'), lists for the w-values and
+            spectrum values ('w' and 'A'), and the ground state energy and
+            quasi-particle weight ('ground_state' and 'weight').
         """
 
         finfo = self._parameters.get_fFunctionInfo()
