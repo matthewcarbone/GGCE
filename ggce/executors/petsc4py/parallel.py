@@ -187,11 +187,12 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         self.mpi_comm.barrier()
 
         # The last rank has the end of the solution vector, which contains G
-        # G is the last entry
-        if self.mpi_rank == 0:
-            G = self._vector_x.getValue(self._linsys_size - 1)
-            return np.array(G), {'time': [dt]}
+        # G is the last entry aka "the last equation" of the matrix
+        # use a gather operation, called by all ranks, to construct the full vector
+        G = self.mpi_comm.gather(self._vector_x.getArray(),root = 0)
+        # this returns a list of values of G from all processes
 
-        # TODO: figure out how to gather the vector into serial form using
-        # the MPI communicator. I.e., return the entire resultant vector on
-        # rank 0, not just G.
+        if self.mpi_rank == 0:
+            # now select only the final process list and final value
+            G = G[self.mpi_world_size-1][-1]
+            return np.array(G), {'time': [dt]}
