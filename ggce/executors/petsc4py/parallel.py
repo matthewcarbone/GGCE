@@ -165,6 +165,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         if res_norm > rtol:
             self._logger.debug(f"Final solution failed residual relative tolerance check."+\
                            f" Solutions likely not fully converged.")
+        else:
+            self_logger.debug(f"Final solution passed manual residual check.")
 
     def check_mem_use(self, factored_mat):
 
