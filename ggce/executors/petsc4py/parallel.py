@@ -188,7 +188,7 @@ class ParallelSparseExecutor(SerialSparseExecutor):
 
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry
-        if self.mpi_rank == self.mpi_world_size - 1:
+        if self.mpi_rank == 0:
             G = self._vector_x.getValue(self._linsys_size - 1)
             return np.array(G), {'time': [dt]}
 
