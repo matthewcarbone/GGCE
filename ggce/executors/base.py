@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from itertools import islice
 import numpy as np
 
 from ggce.engine.system import System
