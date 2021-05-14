@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
+
 # Run with e.g.
-# mpiexec -np `n_processes` python 001_Tutorial.py
+# mpiexec -np `n_processes` python 002_PETSc_simple_example.y
 # to start in parallel
 
 import numpy as np

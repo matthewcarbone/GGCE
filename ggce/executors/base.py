@@ -6,7 +6,7 @@ import numpy as np
 from ggce.engine.system import System
 from ggce.engine.structures import ParameterObject
 from ggce.utils.logger import Logger
-from ggce.utils.utils import peak_location_and_weight
+from ggce.utils.utils import peak_location_and_weight, chunk_jobs
 
 
 class BaseExecutor:
@@ -68,8 +68,24 @@ class BaseExecutor:
             self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
 
-        it = iter(jobs)
-        return list(iter(lambda: tuple(islice(it, self.size)), ()))[self.rank]
+        return chunk_jobs(jobs, self.mpi_world_size, self.mpi_rank)
+
+    def _log_job_distribution_information(self, jobs_on_rank):
+        if self.mpi_comm is None:
+            return
+        all_jobs = self.mpi_comm.gather(jobs_on_rank, root=0)
+        if self.mpi_rank == 0:
+            lengths = np.array([len(xx) for xx in all_jobs])  # Get job lengths
+            std = np.std(lengths)
+            mu = np.mean(lengths)
+            if std == 0:
+                mu = int(mu)
+                self._logger.info(f"Jobs balanced on all ranks ({mu}/rank)")
+            else:
+                self._logger.info(
+                    f"Job balance: {mu:.02f} +/- {std:.02f} per rank"
+                )
+        self.mpi_comm.Barrier()
 
     def get_parameters(self, return_dict=False):
         """Returns the parameter information.
