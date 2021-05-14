@@ -151,7 +151,9 @@ class BaseExecutor:
         if isinstance(w, float):
             w = [w]
 
-        s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
+        s = [
+            [-self.solve(_k, _w, eta)[0].imag / np.pi for _w in w] for _k in k
+        ]
         return np.array(s)
 
     def dispersion(
