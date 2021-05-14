@@ -17,7 +17,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         self._dense_prime_helper()
 
-    def spectrum(self, k, w, eta=None):
+    def spectrum(self, k, w, eta):
         """Solves for the spectrum in parallel. Requires an initialized
         communicator at instantiation.
 
@@ -27,10 +27,8 @@ class ParallelDenseExecutor(SerialDenseExecutor):
             The momentum quantum number point of the calculation.
         w : float or array_like
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -49,12 +47,20 @@ class ParallelDenseExecutor(SerialDenseExecutor):
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
         jobs_on_rank = self.get_jobs_on_this_rank(jobs)
+        self._logger.debug(f"{len(jobs_on_rank)} jobs todo")
+        self._log_job_distribution_information(jobs_on_rank)
 
         # Get the results on this rank.
-        s = [-self.solve(_k, _w)[0].imag / np.pi for (_k, _w) in jobs_on_rank]
+        s = [
+            -self.solve(_k, _w, eta)[0].imag / np.pi
+            for (_k, _w) in jobs_on_rank
+        ]
 
         # Gather the results on rank 0
-        all_results = self.comm.gather(s, root=0)
+        all_results = self.mpi_comm.gather(s, root=0)
 
-        if self.rank == 0:
+        if self.mpi_rank == 0:
+
+            # Unnest the lists
+            all_results = [item for sublist in all_results for item in sublist]
             return np.array(all_results).reshape(len(k), len(w))
