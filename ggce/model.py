@@ -12,24 +12,23 @@ import time
 from ggce.utils.logger import Logger
 
 
-def model_coupling_map(coupling_type, t, Omega, lam, ignore):
+def model_coupling_map(coupling_type, t, Omega, lam):
     """Returns the value for g, the scalar that multiplies the coupling in the
-    Hamiltonian. Converts the user-input lambda value to this g.
+    Hamiltonian. Converts the user-input lambda value to this g. Uses
+    pre-defined values for the dimensionless coupling to get g for a variety
+    of pre-defined default models.
 
     Parameters
     ----------
-    coupling_type : {'H', 'SSH', 'bondSSH', 'EFB'}
-        The desired coupling type. Can be Holstein, SSH (Peierls), bond SSH
-        or Edwards Fermion Boson (EFB).
+    coupling_type : str
+        The desired coupling type. Can be Holstein, Peierls, BondPeierls, or
+        EdwardsFermionBoson
     t : float
         The hopping strength.
     Omega : float
         The (Einsten) boson frequency.
     lam : float
         The dimensionless coupling.
-    ignore : bool
-        If True, simply returns the value for lambda as g. Useful in some
-        situations where the user wants to tune g directly.
 
     Returns
     -------
@@ -42,16 +41,13 @@ def model_coupling_map(coupling_type, t, Omega, lam, ignore):
         If an unknown coupling type is provided.
     """
 
-    if ignore:
-        return lam
-
-    if coupling_type == 'H':  # Holstein
+    if coupling_type == 'Holstein':
         return math.sqrt(2.0 * t * Omega * lam)
-    elif coupling_type == 'EFB':  # EFB convention lam = g for convenience
+    elif coupling_type == 'EdwardsFermionBoson':
         return lam
-    elif coupling_type == 'SSH':  # SSH
+    elif coupling_type == 'Peierls':
         return math.sqrt(t * Omega * lam / 2.0)
-    elif coupling_type == 'bondSSH':  # bond SSH (note this is a guess)
+    elif coupling_type == 'BondPeierls':
         return math.sqrt(t * Omega * lam)
     else:
         raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
@@ -66,6 +62,47 @@ SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega"])
 
 
+class DefaultHamiltonians:
+
+    ALLOWED_TYPES = [
+        'Holstein', 'EdwardsFermionBoson', 'Peierls', 'BondPeierls'
+    ]
+
+    def Holstein(g, bt):
+        return [
+            SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
+            SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
+        ]
+
+    def EdwardsFermionBoson(g, bt):
+        return [
+            SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
+            SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+            SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+            SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
+        ]
+
+    def BondPeierls(g, bt):
+        return [
+            SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
+            SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
+            SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
+            SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
+        ]
+
+    def Peierls(g, bt):
+        return [
+            SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
+            SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
+            SingleTerm(x=1, y=1, d='+', g=-g, bt=bt),
+            SingleTerm(x=1, y=1, d='-', g=-g, bt=bt),
+            SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
+            SingleTerm(x=-1, y=-1, d='-', g=g, bt=bt),
+            SingleTerm(x=-1, y=0, d='+', g=-g, bt=bt),
+            SingleTerm(x=-1, y=0, d='-', g=-g, bt=bt)
+        ]
+
+
 class Model:
 
     def __init__(
@@ -73,130 +110,22 @@ class Model:
     ):
         self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
         self._logger.adjust_logging_level(default_console_logging_level)
+        self._parameters_set = False
 
         # Index uninitialized parameters
         self.t = None
         self.a = None
-        self.M = None
-        self.N = None
-        self.M_tfd = None
-        self.N_tfd = None
+        self.M = []
+        self.N = []
+        self.M_tfd = []
+        self.N_tfd = []
         self.temperature = None
         self.dimension = None
-
-    def set_parameters(self, hopping=1.0, dimension=1, lattice_constant=1.0):
-        """Initializes the core, model-independent parameters of the
-        simulation. Note this also sets the temperature to 0 by default. Use
-        set_temperature to actually change the temperature to something
-        non-zero.
-
-        Parameters
-        ----------
-        hopping : float, optional
-            The nearest-neighbor hopping term (the default is 1.0).
-        dimension : int, optional
-            The dimensionality of the system (the default is 1).
-        lattice_constant : float, optional
-            The lattice constant (the default is 1.0).
-        """
-
-        # List all of the parameters necessary for the run
-        self.t = hopping
-        self.dimension = dimension
-        self.temperature = 0.0
-        self.a = lattice_constant
-
-    def set_finite_temperature(self, temperature, M, N):
-        """[summary]
-
-        [description]
-
-        Parameters
-        ----------
-        temperature : {[type]}
-            [description]
-        M : {[type]}
-            [description]
-        N : {[type]}
-            [description]
-        """
-
-        if temperature == 0.0:
-            self._logger.warning(
-                "You have attempted to set thermo-field dynamics temperature "
-                "to zero explicitly. This only bloats the calculation and "
-                "does not change any results. Doing nothing."
-            )
-            return
-
-        if temperature < 0.0:
-            self._logger.error("Temperature must be non-zero")
-            return
-
-        if M_tfd or
-
-        self.temperature = temperature
-        self.M_tfd = M
-        self.N_tfd = N
-
-    def get_fFunctionInfo(self):
-        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
-
-    def _extend_terms(self, model_type, g, bt):
-        """Helper method to extent the self.terms list.
-
-        This method contains the 'programmed' notation of the coupling terms.
-        Every model must have a corresponding string matching the cases below.
-
-        Parameters
-        ----------
-        model_type : {'H', 'EFB', 'bondSSH', 'SSH'}
-            The model type.
-        g : float
-            The coupling term (multiplying V in the Hamiltonian).
-        bt : int
-            The boson type index. Indexes the place in the model list. For
-            example, if the current boson type is 1 and the model is
-            ['H', 'SSH'], then the boson corresponds to an SSH phonon.
-
-        Raises
-        ------
-        RuntimeError
-            If the model type is unknown.
-        """
-
-        if model_type == 'H':
-            self.terms.extend([
-                SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
-                SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
-            ])
-        elif model_type == 'EFB':
-            self.terms.extend([
-                SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
-                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
-                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
-                SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
-            ])
-        elif model_type == 'bondSSH':
-            self.terms.extend([
-                SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
-                SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
-                SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
-                SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
-            ])
-        elif model_type == 'SSH':
-            self.terms.extend([
-                SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
-                SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
-                SingleTerm(x=1, y=1, d='+', g=-g, bt=bt),
-                SingleTerm(x=1, y=1, d='-', g=-g, bt=bt),
-                SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
-                SingleTerm(x=-1, y=-1, d='-', g=g, bt=bt),
-                SingleTerm(x=-1, y=0, d='+', g=-g, bt=bt),
-                SingleTerm(x=-1, y=0, d='-', g=-g, bt=bt)
-            ])
-        else:
-            raise RuntimeError("Unknown model type when setting terms")
+        self.max_bosons_per_site = None
+        self.Omega = []
+        self.terms = []
+        self.n_boson_types = 0
+        self.models_vis = []  # For visualizing the initialized parameters
 
     def _get_coupling_prefactors(self, Omega):
         """Get's the TFD coupling prefactors.
@@ -223,96 +152,191 @@ class Model:
         else:
             return 1.0, None
 
-    def _adjust_bosons_if_necessary(self):
-        """Adjusts all attributes according to e.g. TFD.
+    def _append_N(self, M, N, tfd=False):
+        """Appends the list self.N or self.N_tfd based on whether or not a
+        hard-core boson constraint was set.
 
-        Note that this method essentially does nothing if T=0.
+        Parameters
+        ----------
+        N : int
+        M : int
+        tfd : bool, optional
+            If True, modifies the self.N_tfd list, else modifies self.N (the
+            default is False).
         """
 
-        # Adjust the number of boson types according to thermofield
-        if self.temperature > 0.0:
-            self.n_boson_types *= 2  # Thermo field "double"
-            assert isinstance(self.M, list)
-            assert isinstance(self.N, list)
-            assert isinstance(self.Omega, list)
-            assert isinstance(self.lambdas, list)
-            assert isinstance(self.models, list)
-
-            new_M = []
-            new_N = []
-            new_Omega = []
-            new_lambdas = []
-            new_models = []
-
-            for ii in range(len(self.models)):
-                new_M.extend([
-                    self.M[ii], self.M[ii]
-                    if self.M_tfd is None else self.M_tfd[ii]
-                ])
-                new_N.extend([
-                    self.N[ii], self.N[ii]
-                    if self.N_tfd is None else self.N_tfd[ii]
-                ])
-
-                # Need the negative Omega here to account for the TFD truly.
-                # the term's value for Omega is never actually called. Here, we
-                # note that the boson frequency is NEGATIVE, indicative of the
-                # fictitious space!
-                new_Omega.extend([self.Omega[ii], -self.Omega[ii]])
-                new_lambdas.extend([self.lambdas[ii], self.lambdas[ii]])
-                new_models.extend([self.models[ii], self.models[ii]])
-
-            self.M = new_M
-            self.N = new_N
-            self.Omega = new_Omega
-
-            # Some of these parameters aren't used but we'll redfine them
-            # anyway for consistency. Some of this is actually used in logging
-            # so it's still useful.
-            self.lambdas = new_lambdas
-            self.models = new_models
-            self.models_vis = []
-            for ii, m in enumerate(self.models):
-                if ii % 2 == 0:  # Even
-                    self.models_vis.append(m)
-                else:
-                    self.models_vis.append(f"~{m}")
+        if self.max_bosons_per_site is None:
+            if tfd:
+                self.N_tfd.append(N)
+            else:
+                self.N.append(N)
         else:
-            self.models_vis = self.models
+            if tfd:
+                self.N_tfd.append(self.max_bosons_per_site * M)
+            else:
+                self.N.append(self.max_bosons_per_site * M)
 
-    def prime(self):
-        """Initializes the terms object, which contains the critical
-        information about the Hamiltonian necessary for running the
-        computation. Note that the sign is *relative*, so as long as
-        every term in V is multiplied by an overall factor, and each term has
-        the correct sign relative to the others, the result will be the
-        same."""
+    def get_fFunctionInfo(self):
+        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
 
-        t0 = time.time()
+    def set_parameters(
+        self, hopping=1.0, dimension=1, lattice_constant=1.0, temperature=0.0,
+        max_bosons_per_site=None
+    ):
+        """Initializes the core, model-independent parameters of the
+        simulation. Note this also sets the temperature to 0 by default. Use
+        set_temperature to actually change the temperature to something
+        non-zero.
 
-        self.terms = []
+        Parameters
+        ----------
+        hopping : float, optional
+            The nearest-neighbor hopping term (the default is 1.0).
+        dimension : int, optional
+            The dimensionality of the system (the default is 1).
+        lattice_constant : float, optional
+            The lattice constant (the default is 1.0).
+        temperature : float, optional
+            The temperature for a TFD simulation, if requested (the default is
+            0.0).
+        max_bosons_per_site : int, optional
+            A hard core or partially hard core boson constraint: this is the
+            maximum number of boson excitations per site on the lattice (the
+            default is None, indicating no restriction).
+        """
 
-        bt = 0
+        if dimension > 1:
+            raise NotImplementedError
 
-        for (m, bigOmega, lam) in zip(self.models, self.Omega, self.lambdas):
-            g = model_coupling_map(m, self.t, bigOmega, lam, self.use_g)
+        if temperature < 0.0:
+            self._logger.error(
+                "Temperature must be non-negative. Parameters remain unset."
+            )
+            return
 
-            # Handle the TFD stuff if necessary
-            V_prefactor, V_tilde_prefactor = \
-                self._get_coupling_prefactors(bigOmega)
+        if hopping < 0.0:
+            self._logger.error(
+                "Hopping strength must be positive. Parameters remain unset."
+            )
 
-            self._extend_terms(m, g*V_prefactor, bt)
-            bt += 1
+        if lattice_constant < 0.0:
+            self._logger.error(
+                "Lattice constant must be positive. Parameters remain unset."
+            )
 
-            # Now we implement the thermo field double changes to the
-            # coupling prefactor, if necessary.
-            if self.temperature > 0.0:
-                self._extend_terms(m, g*V_tilde_prefactor, bt)
-                bt += 1
+        # List all of the parameters necessary for the run
+        self.t = hopping
+        self.dimension = dimension
+        self.temperature = temperature
+        self.a = lattice_constant
+        self.max_bosons_per_site = max_bosons_per_site
+        self._parameters_set = True
 
-        self._adjust_bosons_if_necessary()
+    def add_coupling(
+        self, coupling_type, Omega, M, N, M_tfd=None, N_tfd=None,
+        coupling=None, dimensionless_coupling=None, boson_index_override=None
+    ):
+        """Adds an electron-phonon contribution to the Hamiltonian.
 
-        dt = time.time() - t0
-        self._logger.info(
-            "Parameters object primed; ready for compute", elapsed=dt
-        )
+        Note that the user can override the boson index manually to construct
+        more complicated models, such as single phonon-mode Hamiltonians but
+        with multiple contributions to the coupling term.
+
+        Parameters
+        ----------
+        coupling_type : {[type]}
+            [description]
+        Omega : {[type]}
+            [description]
+        M : {[type]}
+            [description]
+        N : {[type]}
+            [description]
+        M_tfd : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        N_tfd : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        coupling : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        dimensionless_coupling : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        boson_index_override : {[type]}, optional
+            [description] (the default is None, which [default_description])
+        """
+
+        if not self._parameters_set:
+            self._logger.error(
+                "Run set_parameters(...) before adding couplings. No coupling "
+                "was added."
+            )
+            return
+
+        if self.temperature == 0 and (M_tfd is not None or N_tfd is not None):
+            self._logger.warning(
+                "Temperature is set to zero but M_tfd or N_tfd values were "
+                "provided and will be ignored."
+            )
+
+        if coupling_type not in DefaultHamiltonians.ALLOWED_TYPES:
+            self._logger.error(
+                f"Provided coupling_type={coupling_type} must be part of the "
+                "list or pre-defined couplings: "
+                f"{DefaultHamiltonians.ALLOWED_TYPES}. No coupling was added."
+            )
+            return
+
+        if M < 1 or N < 1:
+            self._logger.error(
+                "Provided M and N values for the doubled cloud  must "
+                "both be > 1. No coupling was added."
+            )
+            return
+
+        if coupling is None and dimensionless_coupling is None:
+            self._logger.error(
+                "Provided coupling and dimensionless_coupling cannot both "
+                "be unset. No coupling was added."
+            )
+            return
+
+        if coupling is not None and dimensionless_coupling is not None:
+            self._logger.error(
+                "Provided coupling and dimensionless_coupling cannot both "
+                "be set. No coupling was added."
+            )
+            return
+
+        # Get the term that multiplies the electron-phonon part of the
+        # Hamiltonian
+        g = coupling if coupling is not None else \
+            model_coupling_map(
+                coupling_type, self.t, Omega, dimensionless_coupling
+            )
+
+        # Get the TFD prefactors for the terms in the Hamiltonian. Note that
+        # if temperature = 0, V_tilde_pf will be None.
+        V_pf, V_tilde_pf = self._get_coupling_prefactors(Omega)
+
+        # Extend the terms list with the zero-temperature contribution
+        klass = eval(f"DefaultHamiltonians.{coupling_type}")
+        self.terms.extend(klass(g * V_pf, self.n_boson_types))
+        self.Omega.append(Omega)
+        self.M.append(M)
+        self._append_N(M, N, tfd=False)
+        self.models_vis.append([
+            coupling_type, M, self.N[-1], Omega, g * V_pf
+        ])
+        self.n_boson_types += 1
+
+        # Finite temperature
+        if V_tilde_pf is not None:
+            assert self.temperature > 0.0  # Double check
+            self.terms.extend(klass(g * V_tilde_pf, self.n_boson_types))
+            self.Omega.append(-Omega)  # Omega get's a negative sign!!
+            self.M_tfd.append(M_tfd)
+            self._append_N(M_tfd, N_tfd, tfd=True)
+            self.models_vis.append([
+                f"~{coupling_type}", M_tfd, self.N_tfd[-1], -Omega,
+                g * V_tilde_pf
+            ])
+            self.n_boson_types += 1
