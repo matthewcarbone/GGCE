@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from itertools import islice
 import numpy as np
 
 from ggce.engine.system import System
 from ggce.engine.structures import ParameterObject
 from ggce.utils.logger import Logger
+from ggce.utils.utils import peak_location_and_weight, chunk_jobs
 
 
 class BaseExecutor:
@@ -65,9 +65,26 @@ class BaseExecutor:
 
         if self.mpi_comm is None:
             self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
+            return jobs
 
-        it = iter(jobs)
-        return list(iter(lambda: tuple(islice(it, self.size)), ()))[self.rank]
+        return chunk_jobs(jobs, self.mpi_world_size, self.mpi_rank)
+
+    def _log_job_distribution_information(self, jobs_on_rank):
+        if self.mpi_comm is None:
+            return
+        all_jobs = self.mpi_comm.gather(jobs_on_rank, root=0)
+        if self.mpi_rank == 0:
+            lengths = np.array([len(xx) for xx in all_jobs])  # Get job lengths
+            std = np.std(lengths)
+            mu = np.mean(lengths)
+            if std == 0:
+                mu = int(mu)
+                self._logger.info(f"Jobs balanced on all ranks ({mu}/rank)")
+            else:
+                self._logger.info(
+                    f"Job balance: {mu:.02f} +/- {std:.02f} per rank"
+                )
+        self.mpi_comm.Barrier()
 
     def get_parameters(self, return_dict=False):
         """Returns the parameter information.
@@ -126,7 +143,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta=None):
+    def spectrum(self, k, w, eta):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -135,10 +152,8 @@ class BaseExecutor:
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -151,5 +166,119 @@ class BaseExecutor:
         if isinstance(w, float):
             w = [w]
 
-        s = [[-self.solve(_k, _w)[0].imag / np.pi for _w in w] for _k in k]
+        s = [
+            [-self.solve(_k, _w, eta)[0].imag / np.pi for _w in w] for _k in k
+        ]
         return np.array(s)
+
+    def dispersion(
+        self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
+        next_k_offset_factor=1.5, nmax=1000
+    ):
+        """Computes the dispersion of the peak closest to the provided w0 by
+        assuming that the peak is Lorentzian in nature. This allows us to
+        take two points, each at a different value of the broadening, eta, and
+        compute the location of the Lorentzian (ground state energy) and
+        quasi-particle weight exactly, at least in principle. As stated, we
+        rely on the assumption that the peak is Lorentzian, which is only true
+        in some cases (e.g. the polaron).
+
+        This method works as follows: (1) An initial guess for the peak
+        location of the first entry in kgrid is provided (w0). (2) The location
+        of the peak is found by slowly increasing w in increments of
+        eta / eta_step_div until the first time the value of A decreases from
+        the previou sone. (3) The location is found (as is the weight) by
+        computing A using a second broadening given by eta / eta_div. (4) This
+        value is logged in results, and the algorithm moves to the next
+        k-point. The new initial guess for the next peak location is given by
+        the found location of the previous k-point minus
+        eta * next_k_offset_factor.
+
+        Parameters
+        ----------
+        kgrid : list
+            A list of the k-points to calculate.
+        w0 : float
+            The initial guess for the peak location for the first k-point only.
+        eta : float
+            The broadening parameter.
+        eta_div : float, optional
+            Used for the computation of the second A value (the default is
+            3.0, a good empirical value).
+        eta_step_div : float, optional
+            Defines the step in frequency space as eta / eta_step_div (the
+            default is 5.0).
+        next_k_offset_factor : float, optional
+            Defines how far back from the found peak location to start the
+            algorithm at the next k-point. The next start location is given by
+            the found location minus eta * next_k_offset_vactor (the default is
+            1.5).
+        nmax : int, optional
+            The maximum number of steps to take in eta before gracefully
+            erroring out and returning the previously found values (the
+            default is 1000).
+
+        Returns
+        -------
+        list
+            List of dictionaries, each of which contains 5 keys: the k-value at
+            which the calculation was run ('k'), lists for the w-values and
+            spectrum values ('w' and 'A'), and the ground state energy and
+            quasi-particle weight ('ground_state' and 'weight').
+        """
+
+        if self.mpi_comm is not None:
+            self._logger.critical(
+                "Band calculations should be run using a serial protocol"
+            )
+            self.mpi_comm.Abort()
+
+        results = []
+        w_val = w0
+        for ii, k_val in enumerate(kgrid):
+
+            current_n_w = 0
+            reference = 0.0
+
+            results.append({
+                'k': k_val,
+                'w': [],
+                'A': [],
+                'ground_state': None,
+                'weight': None
+            })
+
+            while True:
+
+                if current_n_w > nmax:
+                    self._logger.error("Exceeded maximum omega points")
+                    return results
+
+                G, _ = self.solve(k_val, w_val, eta)
+                A = -G.imag / np.pi
+                results[ii]['w'].append(w_val)
+                results[ii]['A'].append(A)
+
+                # Check and see whether or not we've found a local maxima
+                if reference < A:
+
+                    # This is not a maximum
+                    reference = A
+
+                    current_n_w += 1
+                    w_val += eta / eta_step_div
+                    continue
+
+                # This is a maximum, run the calculation again using eta prime
+                eta_prime = eta / eta_div
+                G2, _ = self.solve(k_val, w_val, eta_prime)
+                A2 = -G2.imag / np.pi
+                loc, weight = peak_location_and_weight(
+                    w_val, A, A2, eta, eta_prime
+                )
+                results[ii]['ground_state'] = loc
+                results[ii]['weight'] = weight
+                w_val = loc - eta * next_k_offset_factor
+                break
+
+        return results

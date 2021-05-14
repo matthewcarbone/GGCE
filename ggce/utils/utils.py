@@ -1,60 +1,10 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
+import numpy as np
 from pathlib import Path
 import pickle
-import shlex
-import subprocess
 import uuid
 import time
-
-
-LIFO_QUEUE_PATH = '.LIFO_queue.yaml'
-JOB_DATA_PATH = 'job_data'
-
-
-class LoggerOnRank:
-
-    def __init__(self, rank, logger, debug_flag=False):
-        self.rank = rank
-        self.logger = logger
-        self.debug_flag = debug_flag
-
-    def debug(self, msg):
-        if self.debug_flag:
-            self.logger.debug(f"({self.rank}) {msg}")
-
-    def info(self, msg):
-        self.logger.info(f"({self.rank}) {msg}")
-
-    def warning(self, msg):
-        self.logger.warning(f"({self.rank}) {msg}")
-
-    def error(self, msg):
-        self.logger.error(f"({self.rank}) {msg}")
-
-    def critical(self, msg):
-        self.logger.critical(f"({self.rank}) {msg}")
-
-
-class RankTools:
-    """A helper class containing information about the current MPI communicator
-    as well as the rank, and logger."""
-
-    def __init__(self, communicator, logger, debug):
-        self.size = communicator.size
-        self.rank = communicator.rank
-        self.logger = \
-            LoggerOnRank(rank=self.rank, logger=logger, debug_flag=bool(debug))
-
-    def chunk_jobs(self, jobs):
-        """Returns self.SIZE chunks, each of which is a list which is a
-        reasonably equally distributed representation of jobs."""
-
-        return [jobs[ii::self.size] for ii in range(self.size)]
 
 
 class Buffer:
@@ -79,46 +29,12 @@ class Buffer:
             self.flush()
 
 
-def lorentzian(x, x0, a, gam):
-    return abs(a) * gam**2 / (gam**2 + (x - x0)**2)
+def chunk_jobs(jobs, world_size, rank):
+    return np.array_split(jobs, world_size)[rank].tolist()
 
 
 def flatten(t):
     return [item for sublist in t for item in sublist]
-
-
-# https://stackoverflow.com/questions/8924173/how-do-i-print-bold-text-in-python
-class Color:
-    PURPLE = '\033[95m'
-    CYAN = '\033[96m'
-    DARKCYAN = '\033[36m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
-
-
-def bold(s):
-    """Makes a string bold for console output."""
-
-    return Color.BOLD + s + Color.END
-
-
-def listdir_fullpath(d):
-    return [p for p in d.iterdir()]
-
-
-def listdir_files_fp(d):
-    x = listdir_fullpath(d)
-    return [xx for xx in x if not xx.is_dir()]
-
-
-def listdir_fullpath_dirs_only(d):
-    dirs = listdir_fullpath(d)
-    return [d for d in dirs if d.is_dir()]
 
 
 def elapsed_time_str(dt):
@@ -187,18 +103,34 @@ def time_remaining(time_elapsed, percentage_complete):
     return (100.0 - percentage_complete) * time_elapsed / percentage_complete
 
 
-def run_command(command, silent=True):
-    """https://www.endpoint.com/blog/2015/01/28/
-    getting-realtime-output-using-python"""
+def mpi_required(func):
+    """Decorator that ensures a class has an MPI communicator defined.
 
-    process = subprocess.Popen(shlex.split(command), stdout=subprocess.PIPE)
+    [description]
 
-    while True:
-        output = process.stdout.readline()
-        if output == b'' and process.poll() is not None:
-            break
-        if output and not silent:
-            print(output.strip().decode())
+    Parameters
+    ----------
+    func : {[type]}
+        [description]
 
-    rc = process.poll()
-    return rc
+    """
+
+    def wrapper(self, *args, **kwargs):
+        assert self.mpi_comm is not None
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
+def peak_location_and_weight(self, w, A, Aprime, eta, eta_prime):
+    """Assumes that the polaron peak is a Lorentzian has the same weight
+    no matter the eta. With these assumptions, we can determine the
+    location and weight exactly using two points, each from a different
+    eta calculation."""
+
+    numerator1 = np.sqrt(eta * eta_prime)
+    numerator2 = (A * eta - Aprime * eta_prime)
+    den1 = Aprime * eta - A * eta_prime
+    den2 = A * eta - Aprime * eta_prime
+    loc = w - np.abs(numerator1 * numerator2 / np.sqrt(den1 * den2))
+    area = np.pi * A * ((w - loc)**2 + eta**2) / eta
+    return loc, area

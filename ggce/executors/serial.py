@@ -13,6 +13,7 @@ from ggce.engine.physics import G0_k_omega
 BYTES_TO_MB = 1048576
 BYTES_TO_GB = 1073741274
 
+
 class SerialSparseExecutor(BaseExecutor):
     """Uses the SciPy sparse solver engine to solve for G(k, w) in serial."""
 
@@ -39,10 +40,8 @@ class SerialSparseExecutor(BaseExecutor):
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -78,14 +77,16 @@ class SerialSparseExecutor(BaseExecutor):
         dt = time.time() - t0
         self._logger.debug("Sparse matrix initialized", elapsed=dt)
 
-        ## estimate sparse matrix memory usage
-        ## (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
-        est_mem_used = (16 + 4 + 4) * len(dat) / BYTES_TO_MB
-        self._logger.debug(f"Estimated memory needed is {est_mem_used:.02f} MB")
+        # estimate sparse matrix memory usage
+        # (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
+        est_mem_used = 24 * len(dat) / BYTES_TO_MB
+        self._logger.debug(
+            f"Estimated memory needed is {est_mem_used:.02f} MB"
+        )
 
         return row_ind, col_ind, dat
 
-    def _scaffold(self, k, w, eta=None):
+    def _scaffold(self, k, w, eta):
         """Prepare the X, v sparse representation of the matrix to solve.
 
         Parameters
@@ -95,9 +96,7 @@ class SerialSparseExecutor(BaseExecutor):
         w : float
             The frequency grid point of the calculation.
         eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -135,7 +134,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         return X, v
 
-    def solve(self, k, w, eta=None):
+    def solve(self, k, w, eta):
         """Solve the sparse-represented system.
 
         Parameters
@@ -145,9 +144,7 @@ class SerialSparseExecutor(BaseExecutor):
         w : float
             The frequency grid point of the calculation.
         eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -219,7 +216,7 @@ class SerialDenseExecutor(BaseExecutor):
 
         return A
 
-    def _get_alpha(self, k, w, n_phonons, eta=None):
+    def _get_alpha(self, k, w, n_phonons, eta):
 
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, -1, eta)
@@ -227,7 +224,7 @@ class SerialDenseExecutor(BaseExecutor):
         self._logger.debug("Filled alpha", elapsed=dt)
         return A
 
-    def _get_beta(self, k, w, n_phonons, eta=None):
+    def _get_beta(self, k, w, n_phonons, eta):
 
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, 1, eta)
@@ -235,7 +232,7 @@ class SerialDenseExecutor(BaseExecutor):
         self._logger.debug("Filled beta", elapsed=dt)
         return A
 
-    def solve(self, k, w, eta=None):
+    def solve(self, k, w, eta):
         """Solve the dense-represented system.
 
         Parameters
@@ -244,10 +241,8 @@ class SerialDenseExecutor(BaseExecutor):
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -265,20 +260,22 @@ class SerialDenseExecutor(BaseExecutor):
             'time': []
         }
 
+        finfo = self._parameters.get_fFunctionInfo()
+
         total_phonons = np.sum(self._parameters.N)
 
         for n_phonons in range(total_phonons, 0, -1):
 
             # Special case of the recursion where R_N = alpha_N.
             if n_phonons == total_phonons:
-                R = self._get_alpha(k, w, n_phonons, eta=eta)
+                R = self._get_alpha(k, w, n_phonons, eta)
                 meta["alphas"].append(R.shape)
                 continue
 
             # Get the next loop's alpha and beta values
-            beta = self._get_beta(k, w, n_phonons, eta=eta)
+            beta = self._get_beta(k, w, n_phonons, eta)
             meta["betas"].append(beta.shape)
-            alpha = self._get_alpha(k, w, n_phonons, eta=eta)
+            alpha = self._get_alpha(k, w, n_phonons, eta)
             meta["alphas"].append(alpha.shape)
 
             # Compute the next R
@@ -292,10 +289,9 @@ class SerialDenseExecutor(BaseExecutor):
             )
             meta["time"].append(dt)
 
-        finfo = self._parameters.get_fFunctionInfo()
-        G0 = G0_k_omega(k, w, finfo.a, finfo.eta, finfo.t)
+        G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
 
-        beta0 = self._get_beta(k, w, 0, eta=eta)
+        beta0 = self._get_beta(k, w, 0, eta)
         result = (G0 / (1.0 - beta0 @ R)).squeeze()
 
         dt_all = time.time() - t0_all

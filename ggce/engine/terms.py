@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 import cmath
 import numpy as np
 
@@ -330,16 +326,13 @@ class EOMTerm(Term):
         self.f_arg = self.hterm.y
         self.constant_prefactor = self.hterm.g
 
-    def coefficient(self, k, w, eta=None):
+    def coefficient(self, k, w, eta):
         """This will set the prefactor to G0, since we assume
         that as a base class it originates from the g0 terms in the main
         EOM. Note that an index term does not have this method defined, since
         that terms prefactor should always be 1 (set by default to the
         constant prefactor), and this method will be overridden by
         AnnihilationTerm and CreationTerm classes."""
-
-        if eta is None:
-            eta = self.system_params.eta
 
         return self.constant_prefactor * physics.G0_k_omega(
             k, w, self.system_params.a, eta, self.system_params.t
@@ -373,16 +366,13 @@ class NonIndexTerm(Term):
         self.f_arg -= location
         self.modify_n_bosons(self.hterm.bt, location)
 
-    def coefficient(self, k, w, eta=None):
+    def coefficient(self, k, w, eta):
 
         exp_term = cmath.exp(
             1j * k * self.system_params.a * self.exp_shift
         )
 
         w_freq_shift = w - self.freq_shift
-
-        if eta is None:
-            eta = self.system_params.eta
 
         g_contrib = physics.g0_delta_omega(
             self.g_arg, w_freq_shift, self.system_params.a,
