@@ -87,9 +87,7 @@ class ParameterObject:
             self.use_g = True
 
     def _set_temperature(self, d):
-        """Handle setting the temperature. The temperature in the original
-        input file must not be defined for zero-temperature calculations, and
-        must be a float > 0.0 for the finite-temperature calculations.
+        """Handle setting the temperature.
 
         Parameters
         ----------
@@ -97,13 +95,11 @@ class ParameterObject:
             Input dictionary.
         """
 
-        if self.protocol in ["tfd", "trace"]:
-            self.temperature = d['temperature']
-            assert self.temperature is not None
-            assert self.temperature > 0.0
-        else:
-            assert d.get("temperature") is None
-            self.temperature = 0.0
+        self.temperature = d.get('temperature', 0.0)
+        if self.temperature < 0.0:
+            msg = "Temperature must be non-negative."
+            self._logger.critical(msg)
+            raise ValueError(msg)
 
     def _set_extra_boson_clouds(self, d):
         """Handles setting extra boson cloud information depending on the
@@ -122,21 +118,14 @@ class ParameterObject:
             Input dictionary.
         """
 
-        if self.protocol not in ["tfd", "trace"]:
-            assert d.get("M_tfd") is None
-            assert d.get("N_tfd") is None
-            assert d.get("M_trace") is None
-            assert d.get("N_trace") is None
-        elif self.protocol == "tfd":
+        if self.temperature > 0.0:
             self.M_tfd = d["M_tfd"]
             self.N_tfd = d.get("N_tfd")
-            assert d.get("M_trace") is None
-            assert d.get("N_trace") is None
-        elif self.protocol == "trace":
-            assert d.get("M_tfd") is None
-            assert d.get("N_tfd") is None
-            self.M_trace = d["M_trace"]
-            self.N_trace = d.get("N_trace")
+        elif d.get("M_tfd") is not None or d.get("N_tfd") is not None:
+            self._logger.warning(
+                "M_tfd and N_tfd will be ignored in a zero-temperature "
+                "calculation"
+            )
 
     def _set_absolute_extent_information(self, d):
         """Sets the absolute extent and runs assertions on it.
@@ -147,21 +136,39 @@ class ParameterObject:
             Input dictionary.
         """
 
-        if self.protocol not in ["tfd", "trace"]:
-            if self.n_boson_types > 1:
+        # Non-zero temperature or n_boson_types > 1 require absolute extent
+        if self.temperature > 0.0 or self.n_boson_types > 1:
+            try:
                 self.absolute_extent = d["absolute_extent"]
-                assert self.absolute_extent >= np.max(self.M)
-            else:
-                assert d.get("absolute_extent") is None
-                self.absolute_extent = self.M[0]
-        else:
-            self.absolute_extent = d["absolute_extent"]
-            assert self.absolute_extent >= np.max(self.M)
-            if self.protocol == "tfd":
-                assert self.absolute_extent >= np.max(self.M_tfd)
-            elif self.protocol == "trace":
-                assert self.absolute_extent >= np.max(self.M_trace)
-        assert self.absolute_extent > 0
+            except KeyError:
+                msg = "absolute_extent must be specified for finite-T or " \
+                    "multi-phonon mode models"
+                self._logger.critical(msg)
+                raise KeyError(msg)
+
+        # In the case of zero-T, single phonon mode models with the
+        # absolute_extent specified, throw a warning informing the user that it
+        # will be ignored.
+        if self.temperature == 0.0 and self.n_boson_types == 1:
+            self.absolute_extent = d.get("absolute_extent")
+            if self.absolute_extent is not None:
+                self._logger.warning(
+                    "absolute_extent will be ignored in models with only one "
+                    "type of boson or in zero T calculations."
+                )
+            self.absolute_extent = self.M[0]
+
+        # If the absolute extent is specified, it must satisfy certain
+        # restrictions
+        if self.absolute_extent < np.max(self.M):
+            msg = "abasolute_extent must be >= M"
+            self._logger.critical(msg)
+            raise ValueError(msg)
+
+        if self.absolute_extent < 1:
+            msg = "absolute_extent must be >0"
+            self._logger.critical(msg)
+            raise ValueError(msg)
 
     def _set_max_bosons_per_site(self, d):
         """Handles the maximum bosons per site assertions (hard bosons).
@@ -174,38 +181,38 @@ class ParameterObject:
 
         self.max_bosons_per_site = d.get('max_bosons_per_site')
         if self.max_bosons_per_site is not None:
-            assert self.max_bosons_per_site > 0
-            assert isinstance(self.max_bosons_per_site, int)
-            assert self.N is None
+            if self.max_bosons_per_site <= 0:
+                msg = "max_bosons_per_site must be > 0 or None"
+                self._logger.critical(msg)
+                raise ValueError(msg)
+
+            second_cond = self.temperature > 0.0 and self.N_tfd is not None
+            if self.N is not None or second_cond:
+                msg = "N (and N_tfd) must be None when max_bosons_per_site " \
+                    "is set"
+                self._logger.critical(msg)
+                raise ValueError(msg)
+
             self.N = [
                 self.max_bosons_per_site * self.n_boson_types * m
                 for m in self.M
             ]
-
-            if self.protocol == "tfd":
-                assert self.N_tfd is None
+            if self.temperature > 0.0:
                 self.N_tfd = [
                     self.max_bosons_per_site * self.n_boson_types * m
                     for m in self.M_tfd
                 ]
-            elif self.protocol == "trace":
-                assert self.N_trace is None
-                self.N_trace = [
-                    self.max_bosons_per_site * self.n_boson_types * m
-                    for m in self.M_trace
-                ]
-        else:
-            assert self.N is not None
-            if self.protocol == "tfd":
-                assert self.N_tfd is not None
-            elif self.protocol == "trace":
-                assert self.N_trace is not None
+
+        elif self.N is None or (self.temperature > 0.0 and self.N_tfd is None):
+            msg = "N (and N_tfd) must be set when n_bosons_per_site is None"
+            self._logger.critical(msg)
+            raise ValueError(msg)
 
     def __init__(self, d, logger=Logger(dummy=True)):
 
         t0 = time.time()
 
-        self.logger = logger
+        self._logger = logger
 
         # Start with parameters that are required for all trials
         self.M = d['M_extent']
@@ -213,7 +220,6 @@ class ParameterObject:
         self.t = d['hopping']
         self.a = d.get("lattice_constant", 1.0)
         self.Omega = d['Omega']
-        self.protocol = d['protocol']
 
         # Handle the coupling
         self._set_coupling(d)
@@ -236,7 +242,7 @@ class ParameterObject:
         self._set_max_bosons_per_site(d)
 
         dt = time.time() - t0
-        self.logger.info(
+        self._logger.info(
             "Parameters object initialized successfully", elapsed=dt
         )
 
@@ -315,8 +321,7 @@ class ParameterObject:
             The modifying prefactor to the real and fictitious couplings.
         """
 
-        if self.protocol == "tfd":
-            assert self.temperature > 0.0
+        if self.temperature > 0.0:
             beta = 1.0 / self.temperature
             theta_beta = np.arctanh(np.exp(-beta * Omega / 2.0))
             V_prefactor = np.cosh(theta_beta)
@@ -328,12 +333,11 @@ class ParameterObject:
     def _adjust_bosons_if_necessary(self):
         """Adjusts all attributes according to e.g. TFD.
 
-        Note that this method essentially does nothing if the protocol is not
-        TFD.
+        Note that this method essentially does nothing if T=0.
         """
 
         # Adjust the number of boson types according to thermofield
-        if self.protocol == "tfd":
+        if self.temperature > 0.0:
             self.n_boson_types *= 2  # Thermo field "double"
             assert isinstance(self.M, list)
             assert isinstance(self.N, list)
@@ -409,13 +413,13 @@ class ParameterObject:
 
             # Now we implement the thermo field double changes to the
             # coupling prefactor, if necessary.
-            if self.protocol == "tfd":
+            if self.temperature > 0.0:
                 self._extend_terms(m, g*V_tilde_prefactor, bt)
                 bt += 1
 
         self._adjust_bosons_if_necessary()
 
         dt = time.time() - t0
-        self.logger.info(
+        self._logger.info(
             "Parameters object primed; ready for compute", elapsed=dt
         )
