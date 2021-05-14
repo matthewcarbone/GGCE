@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 import cmath
 import numpy as np
 
