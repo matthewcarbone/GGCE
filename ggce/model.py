@@ -66,190 +66,83 @@ SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
 fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega"])
 
 
-class ParameterObject:
+class Model:
 
-    def _set_coupling(self, d):
-        """Handle the coupling, which can be defined as either lambda (the
-        dimensionless coupling) or the coupling itself (g). In the latter case,
-        use_g will be set to True so as to ignore any dimensionless coupling
-        conversion.
+    def __init__(
+        self, name="model", default_console_logging_level="info", log_file=None
+    ):
+        self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
+        self._logger.adjust_logging_level(default_console_logging_level)
 
-        Parameters
-        ----------
-        d : dict
-            Input dictionary.
-        """
+        # Index uninitialized parameters
+        self.t = None
+        self.a = None
+        self.M = None
+        self.N = None
+        self.M_tfd = None
+        self.N_tfd = None
+        self.temperature = None
+        self.dimension = None
 
-        self.lambdas = d.get('dimensionless_coupling')
-        self.use_g = False
-        if self.lambdas is None:
-            self.lambdas = d['coupling']
-            self.use_g = True
-
-    def _set_temperature(self, d):
-        """Handle setting the temperature.
-
-        Parameters
-        ----------
-        d : dict
-            Input dictionary.
-        """
-
-        self.temperature = d.get('temperature', 0.0)
-        if self.temperature < 0.0:
-            msg = "Temperature must be non-negative."
-            self._logger.critical(msg)
-            raise ValueError(msg)
-
-    def _set_extra_boson_clouds(self, d):
-        """Handles setting extra boson cloud information depending on the
-        protocol.
-
-        Notes
-        -----
-        The number of bosons is actually an optional quantity in the parameter
-        file due to the option of setting a hard boson constraint
-        (max_bosons_per_site). These possibilities are handled in a later
-        assertion.
+    def set_parameters(self, hopping=1.0, dimension=1, lattice_constant=1.0):
+        """Initializes the core, model-independent parameters of the
+        simulation. Note this also sets the temperature to 0 by default. Use
+        set_temperature to actually change the temperature to something
+        non-zero.
 
         Parameters
         ----------
-        d : dict
-            Input dictionary.
+        hopping : float, optional
+            The nearest-neighbor hopping term (the default is 1.0).
+        dimension : int, optional
+            The dimensionality of the system (the default is 1).
+        lattice_constant : float, optional
+            The lattice constant (the default is 1.0).
         """
 
-        if self.temperature > 0.0:
-            self.M_tfd = d["M_tfd"]
-            self.N_tfd = d.get("N_tfd")
-        elif d.get("M_tfd") is not None or d.get("N_tfd") is not None:
+        # List all of the parameters necessary for the run
+        self.t = hopping
+        self.dimension = dimension
+        self.temperature = 0.0
+        self.a = lattice_constant
+
+    def set_finite_temperature(self, temperature, M, N):
+        """[summary]
+
+        [description]
+
+        Parameters
+        ----------
+        temperature : {[type]}
+            [description]
+        M : {[type]}
+            [description]
+        N : {[type]}
+            [description]
+        """
+
+        if temperature == 0.0:
             self._logger.warning(
-                "M_tfd and N_tfd will be ignored in a zero-temperature "
-                "calculation"
+                "You have attempted to set thermo-field dynamics temperature "
+                "to zero explicitly. This only bloats the calculation and "
+                "does not change any results. Doing nothing."
             )
+            return
 
-    def _set_absolute_extent_information(self, d):
-        """Sets the absolute extent and runs assertions on it.
+        if temperature < 0.0:
+            self._logger.error("Temperature must be non-zero")
+            return
 
-        Parameters
-        ----------
-        d : dict
-            Input dictionary.
-        """
+        if M_tfd or
 
-        # Non-zero temperature or n_boson_types > 1 require absolute extent
-        if self.temperature > 0.0 or self.n_boson_types > 1:
-            try:
-                self.absolute_extent = d["absolute_extent"]
-            except KeyError:
-                msg = "absolute_extent must be specified for finite-T or " \
-                    "multi-phonon mode models"
-                self._logger.critical(msg)
-                raise KeyError(msg)
-
-        # In the case of zero-T, single phonon mode models with the
-        # absolute_extent specified, throw a warning informing the user that it
-        # will be ignored.
-        if self.temperature == 0.0 and self.n_boson_types == 1:
-            self.absolute_extent = d.get("absolute_extent")
-            if self.absolute_extent is not None:
-                self._logger.warning(
-                    "absolute_extent will be ignored in models with only one "
-                    "type of boson or in zero T calculations."
-                )
-            self.absolute_extent = self.M[0]
-
-        # If the absolute extent is specified, it must satisfy certain
-        # restrictions
-        if self.absolute_extent < np.max(self.M):
-            msg = "abasolute_extent must be >= M"
-            self._logger.critical(msg)
-            raise ValueError(msg)
-
-        if self.absolute_extent < 1:
-            msg = "absolute_extent must be >0"
-            self._logger.critical(msg)
-            raise ValueError(msg)
-
-    def _set_max_bosons_per_site(self, d):
-        """Handles the maximum bosons per site assertions (hard bosons).
-
-        Parameters
-        ----------
-        d : dict
-            Input dictionary.
-        """
-
-        self.max_bosons_per_site = d.get('max_bosons_per_site')
-        if self.max_bosons_per_site is not None:
-            if self.max_bosons_per_site <= 0:
-                msg = "max_bosons_per_site must be > 0 or None"
-                self._logger.critical(msg)
-                raise ValueError(msg)
-
-            second_cond = self.temperature > 0.0 and self.N_tfd is not None
-            if self.N is not None or second_cond:
-                msg = "N (and N_tfd) must be None when max_bosons_per_site " \
-                    "is set"
-                self._logger.critical(msg)
-                raise ValueError(msg)
-
-            self.N = [
-                self.max_bosons_per_site * self.n_boson_types * m
-                for m in self.M
-            ]
-            if self.temperature > 0.0:
-                self.N_tfd = [
-                    self.max_bosons_per_site * self.n_boson_types * m
-                    for m in self.M_tfd
-                ]
-
-        elif self.N is None or (self.temperature > 0.0 and self.N_tfd is None):
-            msg = "N (and N_tfd) must be set when n_bosons_per_site is None"
-            self._logger.critical(msg)
-            raise ValueError(msg)
-
-    def __init__(self, d, logger=Logger(dummy=True)):
-
-        t0 = time.time()
-
-        self._logger = logger
-
-        # Start with parameters that are required for all trials
-        self.M = d['M_extent']
-        self.N = d.get('N_bosons')
-        self.t = d['hopping']
-        self.a = d.get("lattice_constant", 1.0)
-        self.Omega = d['Omega']
-
-        # Handle the coupling
-        self._set_coupling(d)
-
-        # Handle temperature
-        self._set_temperature(d)
-
-        # Handle extra boson clouds due to TFD or other finite-T methods
-        self._set_extra_boson_clouds(d)
-
-        # Set the model
-        self.models = d['model']
-        self.n_boson_types = len(self.models)
-        assert self.n_boson_types == len(self.M)
-
-        # Handle the absolute extent information
-        self._set_absolute_extent_information(d)
-
-        # Handle the hard boson constraints
-        self._set_max_bosons_per_site(d)
-
-        dt = time.time() - t0
-        self._logger.info(
-            "Parameters object initialized successfully", elapsed=dt
-        )
+        self.temperature = temperature
+        self.M_tfd = M
+        self.N_tfd = N
 
     def get_fFunctionInfo(self):
         return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
 
-    def _extend_terms(self, m, g, bt):
+    def _extend_terms(self, model_type, g, bt):
         """Helper method to extent the self.terms list.
 
         This method contains the 'programmed' notation of the coupling terms.
@@ -257,7 +150,7 @@ class ParameterObject:
 
         Parameters
         ----------
-        m : {'H', 'EFB', 'bondSSH', 'SSH'}
+        model_type : {'H', 'EFB', 'bondSSH', 'SSH'}
             The model type.
         g : float
             The coupling term (multiplying V in the Hamiltonian).
@@ -272,26 +165,26 @@ class ParameterObject:
             If the model type is unknown.
         """
 
-        if m == 'H':
+        if model_type == 'H':
             self.terms.extend([
                 SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
                 SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
             ])
-        elif m == 'EFB':
+        elif model_type == 'EFB':
             self.terms.extend([
                 SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
                 SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
                 SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
                 SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
             ])
-        elif m == 'bondSSH':
+        elif model_type == 'bondSSH':
             self.terms.extend([
                 SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
                 SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
                 SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
                 SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
             ])
-        elif m == 'SSH':
+        elif model_type == 'SSH':
             self.terms.extend([
                 SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
                 SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
