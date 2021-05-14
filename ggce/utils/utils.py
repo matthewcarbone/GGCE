@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 import numpy as np
 from pathlib import Path
 import pickle
