@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 
 # Import the parallel executor and load in the MPI communicator
-from ggce.executors.parallel import ParallelDenseExecutor
+from ggce.executors.parallel import ParallelDenseExecutor  # noqa: E402
 COMM = MPI.COMM_WORLD
 
 literature_data = np.loadtxt(os.path.join(script_dir, "000_example_A.txt"))
