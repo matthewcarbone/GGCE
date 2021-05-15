@@ -20,7 +20,6 @@ class SerialSparseExecutor(BaseExecutor):
     def _sparse_prime_helper(self):
         """Helper primer for use in the sparse solvers."""
 
-        self._prime_parameters()
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=True)
 
@@ -56,7 +55,7 @@ class SerialSparseExecutor(BaseExecutor):
         col_ind = []
         dat = []
 
-        total_bosons = np.sum(self._parameters.N)
+        total_bosons = np.sum(self._model.N)
         for n_bosons in range(total_bosons + 1):
             for eq in self._system.equations[n_bosons]:
                 row_dict = dict()
@@ -185,7 +184,6 @@ class SerialDenseExecutor(BaseExecutor):
     """
 
     def _dense_prime_helper(self):
-        self._prime_parameters()
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=False)
 
@@ -260,9 +258,9 @@ class SerialDenseExecutor(BaseExecutor):
             'time': []
         }
 
-        finfo = self._parameters.get_fFunctionInfo()
+        finfo = self._model.get_fFunctionInfo()
 
-        total_phonons = np.sum(self._parameters.N)
+        total_phonons = np.sum(self._model.N)
 
         for n_phonons in range(total_phonons, 0, -1):
 

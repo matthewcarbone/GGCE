@@ -112,7 +112,7 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         self._mat_X.assemblyEnd(self._mat_X.AssemblyType.FINAL)
 
         # Assign values for the b vector
-        finfo = self._parameters.get_fFunctionInfo()
+        finfo = self._model.get_fFunctionInfo()
         G0 = G0_k_omega(k, w, finfo.a, finfo.eta, finfo.t)
         self._vector_b.setValues(self._linsys_size - 1, G0)
 
