@@ -33,6 +33,12 @@ def chunk_jobs(jobs, world_size, rank):
     return np.array_split(jobs, world_size)[rank].tolist()
 
 
+def float_to_list(val):
+    if isinstance(val, float):
+        val = [val]
+    return val
+
+
 def flatten(t):
     return [item for sublist in t for item in sublist]
 

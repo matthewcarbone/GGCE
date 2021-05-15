@@ -3,6 +3,7 @@
 import numpy as np
 
 from ggce.executors.serial import SerialDenseExecutor
+from ggce.utils.utils import float_to_list
 
 
 class ParallelDenseExecutor(SerialDenseExecutor):
@@ -17,7 +18,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         self._dense_prime_helper()
 
-    def spectrum(self, k, w, eta):
+    def spectrum(self, k, w, eta, return_G=False):
         """Solves for the spectrum in parallel. Requires an initialized
         communicator at instantiation.
 
@@ -29,6 +30,9 @@ class ParallelDenseExecutor(SerialDenseExecutor):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        return_G : bool
+            If True, returns the Green's function as opposed to the spectral
+            function.
 
         Returns
         -------
@@ -36,10 +40,8 @@ class ParallelDenseExecutor(SerialDenseExecutor):
             The resultant spectrum.
         """
 
-        if isinstance(k, (float, int)):
-            k = [k]
-        if isinstance(w, (float, int)):
-            w = [w]
+        k = float_to_list(k)
+        w = float_to_list(w)
 
         # Generate a list of tuples for the (k, w) points to calculate.
         jobs = [(_k, _w) for _w in w for _k in k]
@@ -51,10 +53,10 @@ class ParallelDenseExecutor(SerialDenseExecutor):
         self._log_job_distribution_information(jobs_on_rank)
 
         # Get the results on this rank.
-        s = [
-            -self.solve(_k, _w, eta)[0].imag / np.pi
-            for (_k, _w) in jobs_on_rank
-        ]
+        s = [[
+            self.solve(_k, _w, eta, ii + jj * len(k))[0]
+            for ii, _w in enumerate(w)
+        ] for jj, _k in enumerate(k)]
 
         # Gather the results on rank 0
         all_results = self.mpi_comm.gather(s, root=0)
@@ -63,4 +65,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
             # Unnest the lists
             all_results = [item for sublist in all_results for item in sublist]
-            return np.array(all_results).reshape(len(k), len(w))
+            arr = np.array(all_results).reshape(len(k), len(w))
+            if return_G:
+                return arr
+            return -arr.imag / np.pi
