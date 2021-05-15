@@ -4,7 +4,8 @@ import numpy as np
 
 from ggce.engine.system import System
 from ggce.utils.logger import Logger
-from ggce.utils.utils import peak_location_and_weight, chunk_jobs
+from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
+    float_to_list
 
 
 class BaseExecutor:
@@ -22,11 +23,14 @@ class BaseExecutor:
     mpi_comm: mpi4py.MPI.Intracomm, optional
         The MPI communicator accessed via MPI.COMM_WORLD. (The default is
         None, which is taken to imply a single MPI process).
+    log_every : int, optional
+        Determines how often to log calculation results at the info level (the
+        default is 1).
     """
 
     def __init__(
         self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None,
+        log_file=None, mpi_comm=None, log_every=1
     ):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
@@ -42,6 +46,8 @@ class BaseExecutor:
         self._model = model
         self._system = None
         self._basis = None
+        self._log_every = log_every
+        self._total_jobs_on_this_rank = None
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
@@ -114,7 +120,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta):
+    def spectrum(self, k, w, eta, return_G=False):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -125,6 +131,9 @@ class BaseExecutor:
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        return_G : bool
+            If True, returns the Green's function as opposed to the spectral
+            function.
 
         Returns
         -------
@@ -132,15 +141,19 @@ class BaseExecutor:
             The resultant spectrum.
         """
 
-        if isinstance(k, float):
-            k = [k]
-        if isinstance(w, float):
-            w = [w]
+        k = float_to_list(k)
+        w = float_to_list(w)
 
-        s = [
-            [-self.solve(_k, _w, eta)[0].imag / np.pi for _w in w] for _k in k
-        ]
-        return np.array(s)
+        self._total_jobs_on_this_rank = len(k) * len(w)
+
+        s = [[
+            self.solve(_k, _w, eta, ii + jj * len(k))[0]
+            for ii, _w in enumerate(w)
+        ] for jj, _k in enumerate(k)]
+
+        if return_G:
+            return np.array(s)
+        return -np.array(s).imag / np.pi
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,

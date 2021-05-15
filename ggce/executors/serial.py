@@ -133,7 +133,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         return X, v
 
-    def solve(self, k, w, eta):
+    def solve(self, k, w, eta, index=None):
         """Solve the sparse-represented system.
 
         Parameters
@@ -142,8 +142,10 @@ class SerialSparseExecutor(BaseExecutor):
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
+        eta : float
             The artificial broadening parameter of the calculation.
+        index : int, optional
+            The calculation index (the default is None).
 
         Returns
         -------
@@ -158,12 +160,20 @@ class SerialSparseExecutor(BaseExecutor):
         t0 = time.time()
         res = spsolve(X, v)
         dt = time.time() - t0
-        self._logger.debug("Sparse matrices solved", elapsed=dt)
 
         G = res[self._basis['{G}(0.0)']]
+        A = -G.imag / np.pi
 
-        if -G.imag < 0.0:
+        if A < 0.0:
             self._log_spectral_error(k, w)
+
+        if index is not None:
+            msg = f"({index:03}/{self._total_jobs_on_this_rank:03}) Solved: " \
+                f"A({k:.02f}, {w:.02f}) = {A:.02f}"
+            if index % self._log_every == 0:
+                self._logger.info(msg, elapsed=dt)
+            else:
+                self._logger.debug(msg, elapsed=dt)
 
         return np.array(G), {'time': [dt]}
 
@@ -230,7 +240,7 @@ class SerialDenseExecutor(BaseExecutor):
         self._logger.debug("Filled beta", elapsed=dt)
         return A
 
-    def solve(self, k, w, eta):
+    def solve(self, k, w, eta, index=None):
         """Solve the dense-represented system.
 
         Parameters
@@ -241,6 +251,8 @@ class SerialDenseExecutor(BaseExecutor):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        index : int, optional
+            The calculation index (the default is None).
 
         Returns
         -------
@@ -290,14 +302,24 @@ class SerialDenseExecutor(BaseExecutor):
         G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
 
         beta0 = self._get_beta(k, w, 0, eta)
-        result = (G0 / (1.0 - beta0 @ R)).squeeze()
+        G = (G0 / (1.0 - beta0 @ R)).squeeze()
 
         dt_all = time.time() - t0_all
-        self._logger.debug("Solve complete", elapsed=dt_all)
+        # self._logger.debug("Solve complete", elapsed=dt_all)
 
         meta["time"].append(dt_all)
 
-        if -result.imag < 0.0:
+        A = -G.imag / np.pi
+
+        if A < 0.0:
             self._log_spectral_error(k, w)
 
-        return np.array(result, dtype=np.complex64), meta
+        if index is not None:
+            msg = f"({index:03}/{self._total_jobs_on_this_rank:03}) Solved: " \
+                f"A({k:.02f}, {w:.02f}) = {A:.02f}"
+            if index % self._log_every == 0:
+                self._logger.info(msg, elapsed=dt_all)
+            else:
+                self._logger.debug(msg, elapsed=dt_all)
+
+        return np.array(G, dtype=np.complex64), meta
