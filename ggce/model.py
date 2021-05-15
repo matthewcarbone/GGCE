@@ -7,7 +7,6 @@ __email__ = "x94carbone@gmail.com"
 from collections import namedtuple
 import numpy as np
 import math
-import time
 
 from ggce.utils.logger import Logger
 
@@ -108,7 +107,7 @@ class Model:
     def __init__(
         self, name="model", default_console_logging_level="info", log_file=None
     ):
-        self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
+        self._logger = Logger(log_file, mpi_rank=0)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameters_set = False
 
@@ -122,10 +121,30 @@ class Model:
         self.temperature = None
         self.dimension = None
         self.max_bosons_per_site = None
+        self.absolute_extent = None
         self.Omega = []
         self.terms = []
         self.n_boson_types = 0
         self.models_vis = []  # For visualizing the initialized parameters
+
+    def visualize(self, silent=False):
+        """Visualize the model you've initialized."""
+
+        print(f"Model parameters initialized: {self._parameters_set}")
+        print("Model globals:")
+        print(f"\tt={self.t}, a={self.a}, T={self.temperature},", end=' ')
+        print(f"dim={self.dimension},", end=' ')
+        print(f"hard-core={self.max_bosons_per_site},", end=' ')
+        print(f"absolute-extent={self.absolute_extent}")
+        print("Model components:")
+        for ii, model in enumerate(self.models_vis):
+            model_type = model[0]
+            M = model[1]
+            N = model[2]
+            Omega = model[3]
+            g = model[4]
+            print(f"\t({ii}) {model_type}")
+            print(f"\t\tM={M}, N={N}, O={Omega:.05f}, g={g:.05f}")
 
     def _get_coupling_prefactors(self, Omega):
         """Get's the TFD coupling prefactors.
@@ -232,6 +251,41 @@ class Model:
         self.max_bosons_per_site = max_bosons_per_site
         self._parameters_set = True
 
+    def _update_absolute_extent(self):
+
+        ae1 = np.max(self.M)
+        if self.temperature > 0.0:
+            ae1 = max(np.max(self.M_tfd), ae1)
+
+        if self.absolute_extent is None:
+            self.absolute_extent = ae1
+        else:
+            self.absolute_extent = max(ae1, self.absolute_extent)
+
+    def set_absolute_extent(self, ae):
+        """The absolute_extent defines how far away boson clouds of different
+        modes can be apart from each other. For example, two phonon modes each
+        with M = 3 and absolute_extent = 4 can occupy a total length over the
+        lattice of at most 4.
+
+        Parameters
+        ----------
+        ae : int
+        """
+
+        ae1 = np.max(self.M)
+        if self.temperature > 0.0:
+            ae1 = max(np.max(self.M_tfd), ae1)
+
+        if ae < ae1:
+            self._logger.error(
+                "Cannot set an absolute_extent less than the maximum "
+                f"specified extent for any given cloud, {ae1}."
+            )
+            return
+
+        self.absolute_extent = ae
+
     def add_coupling(
         self, coupling_type, Omega, M, N, M_tfd=None, N_tfd=None,
         coupling=None, dimensionless_coupling=None, boson_index_override=None
@@ -276,6 +330,13 @@ class Model:
                 "Temperature is set to zero but M_tfd or N_tfd values were "
                 "provided and will be ignored."
             )
+
+        if self.temperature > 0.0 and (M_tfd is None or N_tfd is None):
+            self._logger.error(
+                "Temperature > 0 but M_tfd or N_tfd not set. No coupling "
+                "was added."
+            )
+            return
 
         if coupling_type not in DefaultHamiltonians.ALLOWED_TYPES:
             self._logger.error(
@@ -340,3 +401,5 @@ class Model:
                 g * V_tilde_pf
             ])
             self.n_boson_types += 1
+
+        self._update_absolute_extent()

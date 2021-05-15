@@ -3,7 +3,6 @@
 import numpy as np
 
 from ggce.engine.system import System
-from ggce.engine.structures import ParameterObject
 from ggce.utils.logger import Logger
 from ggce.utils.utils import peak_location_and_weight, chunk_jobs
 
@@ -13,9 +12,7 @@ class BaseExecutor:
 
     Parameters
     ----------
-    parameter_dict: dict
-        Dictionary of the parameters used to initialize the
-        ParameterObject.
+    model: ggce.model.Model
     default_console_logging_level: str
         The default level for initializing the logger. (The default is
         'INFO', which will log everything at info or above).
@@ -28,7 +25,7 @@ class BaseExecutor:
     """
 
     def __init__(
-        self, parameter_dict, default_console_logging_level='INFO',
+        self, model, default_console_logging_level='INFO',
         log_file=None, mpi_comm=None,
     ):
         # Initialize the executor's logger and adjust the default logging level
@@ -42,8 +39,7 @@ class BaseExecutor:
             self.mpi_world_size = mpi_comm.Get_size()
         self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
         self._logger.adjust_logging_level(default_console_logging_level)
-        self._parameter_dict = parameter_dict
-        self._parameters = None
+        self._model = model
         self._system = None
         self._basis = None
 
@@ -86,26 +82,6 @@ class BaseExecutor:
                 )
         self.mpi_comm.Barrier()
 
-    def get_parameters(self, return_dict=False):
-        """Returns the parameter information.
-
-        Parameters
-        ----------
-        return_dict: bool
-            If True, returns the dictionary used to initialize the
-            ParameterObject, else returns the ParameterObject instance itself,
-            which will be None if _prime_parameters() was not called. (The
-            default is False).
-
-        Returns
-        -------
-        dict or ParameterObject or None
-        """
-
-        if return_dict:
-            return self._parameter_dict
-        return self._parameters
-
     def get_system(self):
         """Returns the system object, which will be None if _prime_system()
         has not been called.
@@ -117,14 +93,9 @@ class BaseExecutor:
 
         return self._system
 
-    def _prime_parameters(self):
-
-        self._parameters = ParameterObject(self._parameter_dict, self._logger)
-        self._parameters.prime()
-
     def _prime_system(self):
 
-        self._system = System(self._parameters, self._logger)
+        self._system = System(self._model, self._logger)
         self._system.initialize_generalized_equations()
         self._system.initialize_equations()
         self._system.generate_unique_terms()
