@@ -22,22 +22,21 @@ except ModuleNotFoundError:
 
 
 # Import the parallel executor and load in the MPI communicator
+from ggce.model import Model  # noqa: E402
 from ggce.executors.parallel import ParallelDenseExecutor  # noqa: E402
 COMM = MPI.COMM_WORLD
 
 literature_data = np.loadtxt(os.path.join(script_dir, "000_example_A.txt"))
 
 # Select the input parameters and load in the parallel model
-system_params = {
-    "model": ["EFB"],
-    "M_extent": [3],
-    "N_bosons": [9],
-    "Omega": [1.25],
-    "dimensionless_coupling": [2.5],
-    "hopping": 0.1,
-    "protocol": "zero temperature"
-}
-executor = ParallelDenseExecutor(system_params, "info", mpi_comm=COMM)
+model = Model()
+model.set_parameters(hopping=0.1)
+model.add_coupling(
+    "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
+    dimensionless_coupling=2.5
+)
+
+executor = ParallelDenseExecutor(model, "info", mpi_comm=COMM)
 executor.prime()
 
 wgrid = np.linspace(-5.5, -2.5, 101)
