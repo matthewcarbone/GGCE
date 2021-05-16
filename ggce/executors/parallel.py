@@ -51,12 +51,13 @@ class ParallelDenseExecutor(SerialDenseExecutor):
         jobs_on_rank = self.get_jobs_on_this_rank(jobs)
         self._logger.debug(f"{len(jobs_on_rank)} jobs todo")
         self._log_job_distribution_information(jobs_on_rank)
+        self._total_jobs_on_this_rank = len(jobs_on_rank)
 
         # Get the results on this rank.
-        s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k))[0]
-            for ii, _w in enumerate(w)
-        ] for jj, _k in enumerate(k)]
+        s = [
+            self.solve(_k, _w, eta, ii)[0]
+            for ii, (_k, _w) in enumerate(jobs_on_rank)
+        ]
 
         # Gather the results on rank 0
         all_results = self.mpi_comm.gather(s, root=0)
