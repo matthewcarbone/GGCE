@@ -83,10 +83,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
             The momentum quantum number point of the calculation.
         w : float or array_like
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
 
         Returns
         -------
@@ -113,7 +111,7 @@ class ParallelSparseExecutor(SerialSparseExecutor):
 
         # Assign values for the b vector
         finfo = self._model.get_fFunctionInfo()
-        G0 = G0_k_omega(k, w, finfo.a, finfo.eta, finfo.t)
+        G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
         self._vector_b.setValues(self._linsys_size - 1, G0)
 
         # Need to assemble before use
@@ -173,7 +171,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
         if res_norm > rtol:
             self._logger.warning(
                 "Solution failed residual relative tolerance check. "
-                "Solutions likely not fully converged."
+                "Solutions likely not fully converged: "
+                f"res_norm ({res_norm:.02e}) > rtol ({rtol:.02e})"
             )
 
         else:
@@ -209,7 +208,7 @@ class ParallelSparseExecutor(SerialSparseExecutor):
                 f"Total MUMPS memory usage is {total_mem_used:.02f} GB"
             )
 
-    def solve(self, k, w, eta=None, rtol=1.0e-15):
+    def solve(self, k, w, eta, rtol=1.0e-15):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
         ranks will return None.
@@ -220,10 +219,8 @@ class ParallelSparseExecutor(SerialSparseExecutor):
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
-            The artificial broadening parameter of the calculation (the default
-            is None, which uses the value provided in parameter_dict at
-            instantiation).
+        eta : float
+            The artificial broadening parameter of the calculation.
         rtol : float, optional
             PETSc's relative tolerance (the default is 1.0e-15).
 
