@@ -167,13 +167,7 @@ class SerialSparseExecutor(BaseExecutor):
         if A < 0.0:
             self._log_spectral_error(k, w)
 
-        if index is not None:
-            msg = f"({index:03}/{self._total_jobs_on_this_rank:03}) Solved: " \
-                f"A({k:.02f}, {w:.02f}) = {A:.02f}"
-            if index % self._log_every == 0:
-                self._logger.info(msg, elapsed=dt)
-            else:
-                self._logger.debug(msg, elapsed=dt)
+        self._log_current_status(k, w, A, index, dt)
 
         return np.array(G), {'time': [dt]}
 
@@ -305,7 +299,6 @@ class SerialDenseExecutor(BaseExecutor):
         G = (G0 / (1.0 - beta0 @ R)).squeeze()
 
         dt_all = time.time() - t0_all
-        # self._logger.debug("Solve complete", elapsed=dt_all)
 
         meta["time"].append(dt_all)
 
@@ -314,12 +307,6 @@ class SerialDenseExecutor(BaseExecutor):
         if A < 0.0:
             self._log_spectral_error(k, w)
 
-        if index is not None:
-            msg = f"({index:03}/{self._total_jobs_on_this_rank:03}) Solved: " \
-                f"A({k:.02f}, {w:.02f}) = {A:.02f}"
-            if index % self._log_every == 0:
-                self._logger.info(msg, elapsed=dt_all)
-            else:
-                self._logger.debug(msg, elapsed=dt_all)
+        self._log_current_status(k, w, A, index, dt_all)
 
         return np.array(G, dtype=np.complex64), meta
