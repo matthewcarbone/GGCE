@@ -20,7 +20,6 @@ class SerialSparseExecutor(BaseExecutor):
     def _sparse_prime_helper(self):
         """Helper primer for use in the sparse solvers."""
 
-        self._prime_parameters()
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=True)
 
@@ -56,7 +55,7 @@ class SerialSparseExecutor(BaseExecutor):
         col_ind = []
         dat = []
 
-        total_bosons = np.sum(self._parameters.N)
+        total_bosons = np.sum(self._model.N)
         for n_bosons in range(total_bosons + 1):
             for eq in self._system.equations[n_bosons]:
                 row_dict = dict()
@@ -134,7 +133,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         return X, v
 
-    def solve(self, k, w, eta):
+    def solve(self, k, w, eta, index=None):
         """Solve the sparse-represented system.
 
         Parameters
@@ -143,8 +142,10 @@ class SerialSparseExecutor(BaseExecutor):
             The momentum quantum number point of the calculation.
         w : float
             The frequency grid point of the calculation.
-        eta : float, optional
+        eta : float
             The artificial broadening parameter of the calculation.
+        index : int, optional
+            The calculation index (the default is None).
 
         Returns
         -------
@@ -159,12 +160,14 @@ class SerialSparseExecutor(BaseExecutor):
         t0 = time.time()
         res = spsolve(X, v)
         dt = time.time() - t0
-        self._logger.debug("Sparse matrices solved", elapsed=dt)
 
         G = res[self._basis['{G}(0.0)']]
+        A = -G.imag / np.pi
 
-        if -G.imag < 0.0:
+        if A < 0.0:
             self._log_spectral_error(k, w)
+
+        self._log_current_status(k, w, A, index, dt)
 
         return np.array(G), {'time': [dt]}
 
@@ -185,7 +188,6 @@ class SerialDenseExecutor(BaseExecutor):
     """
 
     def _dense_prime_helper(self):
-        self._prime_parameters()
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=False)
 
@@ -232,7 +234,7 @@ class SerialDenseExecutor(BaseExecutor):
         self._logger.debug("Filled beta", elapsed=dt)
         return A
 
-    def solve(self, k, w, eta):
+    def solve(self, k, w, eta, index=None):
         """Solve the dense-represented system.
 
         Parameters
@@ -243,6 +245,8 @@ class SerialDenseExecutor(BaseExecutor):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        index : int, optional
+            The calculation index (the default is None).
 
         Returns
         -------
@@ -260,9 +264,9 @@ class SerialDenseExecutor(BaseExecutor):
             'time': []
         }
 
-        finfo = self._parameters.get_fFunctionInfo()
+        finfo = self._model.get_fFunctionInfo()
 
-        total_phonons = np.sum(self._parameters.N)
+        total_phonons = np.sum(self._model.N)
 
         for n_phonons in range(total_phonons, 0, -1):
 
@@ -292,14 +296,17 @@ class SerialDenseExecutor(BaseExecutor):
         G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
 
         beta0 = self._get_beta(k, w, 0, eta)
-        result = (G0 / (1.0 - beta0 @ R)).squeeze()
+        G = (G0 / (1.0 - beta0 @ R)).squeeze()
 
         dt_all = time.time() - t0_all
-        self._logger.debug("Solve complete", elapsed=dt_all)
 
         meta["time"].append(dt_all)
 
-        if -result.imag < 0.0:
+        A = -G.imag / np.pi
+
+        if A < 0.0:
             self._log_spectral_error(k, w)
 
-        return np.array(result, dtype=np.complex64), meta
+        self._log_current_status(k, w, A, index, dt_all)
+
+        return np.array(G, dtype=np.complex64), meta

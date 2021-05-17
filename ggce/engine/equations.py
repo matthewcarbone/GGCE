@@ -85,8 +85,12 @@ class Equation:
         for term in self.terms_list:
             id1 = term.identifier(full=full)
             if coef is not None:
-                id1 += f" -> {term.coefficient(*coef)}"
-            print("\t", id1, term.f_arg)
+                c = term.coefficient(*coef)
+                if c.imag < 0:
+                    id1 += f" -> {c.real:.02e} - {-c.imag:.02e}i"
+                else:
+                    id1 += f" -> {c.real:.02e} + {c.imag:.02e}i"
+            print("\t", id1)
 
     def _populate_f_arg_terms(self):
         """Populates the required f_arg terms for the 'rhs' (in self.terms_list)
