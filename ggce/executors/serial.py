@@ -22,6 +22,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         self._prime_system()
         self._basis = self._system.get_basis(full_basis=True)
+        self._total_jobs_on_this_rank = 1
 
     def prime(self):
         self._sparse_prime_helper()
@@ -133,7 +134,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         return X, v
 
-    def solve(self, k, w, eta, index=None):
+    def solve(self, k, w, eta, index=None, **kwargs):
         """Solve the sparse-represented system.
 
         Parameters
@@ -234,7 +235,7 @@ class SerialDenseExecutor(BaseExecutor):
         self._logger.debug("Filled beta", elapsed=dt)
         return A
 
-    def solve(self, k, w, eta, index=None):
+    def solve(self, k, w, eta, index=None, **kwargs):
         """Solve the dense-represented system.
 
         Parameters

@@ -136,7 +136,7 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta, return_G=False):
+    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -147,6 +147,8 @@ class BaseExecutor:
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        **solve_kwargs
+            Extra arguments to pass to solve().
         return_G : bool
             If True, returns the Green's function as opposed to the spectral
             function.
@@ -163,7 +165,7 @@ class BaseExecutor:
         self._total_jobs_on_this_rank = len(k) * len(w)
 
         s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k))[0]
+            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)[0]
             for ii, _w in enumerate(w)
         ] for jj, _k in enumerate(k)]
 
@@ -173,7 +175,7 @@ class BaseExecutor:
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
-        next_k_offset_factor=1.5, nmax=1000
+        next_k_offset_factor=1.5, nmax=1000, **solve_kwargs
     ):
         """Computes the dispersion of the peak closest to the provided w0 by
         assuming that the peak is Lorentzian in nature. This allows us to
@@ -233,12 +235,6 @@ class BaseExecutor:
             quasi-particle weight ('ground_state' and 'weight').
         """
 
-        # if self.mpi_comm is not None:
-        #     self._logger.critical(
-        #         "Band calculations should be run using a serial protocol"
-        #     )
-        #     self.mpi_comm.Abort()
-
         results = []
         w_val = w0
         for ii, k_val in enumerate(kgrid):
@@ -260,7 +256,7 @@ class BaseExecutor:
                     self._logger.error("Exceeded maximum omega points")
                     return results
 
-                G, _ = self.solve(k_val, w_val, eta)
+                G, _ = self.solve(k_val, w_val, eta, **solve_kwargs)
                 A = -G.imag / np.pi
                 results[ii]['w'].append(w_val)
                 results[ii]['A'].append(A)
@@ -277,7 +273,7 @@ class BaseExecutor:
 
                 # This is a maximum, run the calculation again using eta prime
                 eta_prime = eta / eta_div
-                G2, _ = self.solve(k_val, w_val, eta_prime)
+                G2, _ = self.solve(k_val, w_val, eta_prime, **solve_kwargs)
                 A2 = -G2.imag / np.pi
                 loc, weight = peak_location_and_weight(
                     w_val, A, A2, eta, eta_prime
