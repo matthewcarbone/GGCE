@@ -7,6 +7,7 @@ from petsc4py import PETSc
 
 from ggce.executors.petsc4py.base import BaseExecutorPETSC
 from ggce.engine.physics import G0_k_omega
+from ggce.utils.utils import float_to_list
 
 BYTES_TO_GB = 1073741274
 
@@ -260,7 +261,7 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
 
         raise NotImplementedError
 
-    def solve(self, k, w, eta, rtol=1.0e-10):
+    def solve(self, k, w, eta, index=None, rtol=1.0e-15):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
         ranks will return None.
@@ -342,17 +343,69 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
         # use a gather operation, called by all ranks, to construct the full
-        # vector (currently not used but will be later)
-        G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
-        if self.mpi_rank == 0:
-        # now select only the final value from the array
-            G_val = G_vec[self.mpi_world_size-1][-1]
-        else:
-            G_val = None
-        # and bcast to all processes
-        G_val = self.mpi_comm.bcast(G_val, root=0)
 
-        return np.array(G_val), {'time': [dt], \
-                            'mumps_exit_code': [self.mumps_conv_ind], \
-                            'mumps_mem_tot': [self.total_mem_used], \
-                            'manual_tolerance_excess': [self.tol_excess]}
+        # vector
+        G = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
+
+        if self.mpi_rank == 0:
+
+            # now select only the final process list and final value
+            G = G[self.mpi_world_size - 1][-1]
+            A = -G.imag / np.pi
+            if A < 0.0:
+                self._log_spectral_error(k, w)
+            self._log_current_status(k, w, A, index, t0 - time.time())
+            return np.array(G), {'time': [dt]}
+
+    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
+        """Solves for the spectrum in serial.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
+        **solve_kwargs
+            Extra arguments to pass to solve().
+        return_G : bool
+            If True, returns the Green's function as opposed to the spectral
+            function.
+
+        Returns
+        -------
+        np.ndarray
+            The resultant spectrum.
+        """
+
+        k = float_to_list(k)
+        w = float_to_list(w)
+
+        self._total_jobs_on_this_rank = len(k) * len(w)
+
+        cc = 0
+        s = []
+        for _k in k:
+            s_tmp = []
+
+            for _w in w:
+                G, _ = self.solve(_k, _w, eta, cc, **solve_kwargs)[0]
+                cc += 1
+
+                if self.mpi_rank == 0:
+                    s_tmp.append(G)
+
+            if self.mpi_rank == 0:
+                s.append(s_tmp)
+                s_tmp = []
+
+        s = [[
+            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)[0]
+            for ii, _w in enumerate(w)
+        ] for jj, _k in enumerate(k)]
+
+        if return_G:
+            return np.array(s)
+        return -np.array(s).imag / np.pi

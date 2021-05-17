@@ -18,7 +18,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         self._dense_prime_helper()
 
-    def spectrum(self, k, w, eta, return_G=False):
+    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
         """Solves for the spectrum in parallel. Requires an initialized
         communicator at instantiation.
 
@@ -55,7 +55,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         # Get the results on this rank.
         s = [
-            self.solve(_k, _w, eta, ii)[0]
+            self.solve(_k, _w, eta, ii, **solve_kwargs)[0]
             for ii, (_k, _w) in enumerate(jobs_on_rank)
         ]
 
@@ -71,13 +71,12 @@ class ParallelDenseExecutor(SerialDenseExecutor):
                 return arr
             return -arr.imag / np.pi
 
-    def dispersion(self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
-        next_k_offset_factor=1.5, nmax=1000):
-
-        '''
-        For now the dispersion method has to be run serially across (k,w)
+    def dispersion(
+        self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
+        next_k_offset_factor=1.5, nmax=1000
+    ):
+        """For now the dispersion method has to be run serially across (k,w)
         points and does not work with parallelization across (k,w). It does
-        however work with the PETSc "across matrix" parallelization.
-        '''
+        however work with the PETSc "across matrix" parallelization."""
 
         raise NotImplementedError
