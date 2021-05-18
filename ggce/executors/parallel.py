@@ -18,7 +18,9 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         self._dense_prime_helper()
 
-    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
+    ):
         """Solves for the spectrum in parallel. Requires an initialized
         communicator at instantiation.
 
@@ -33,6 +35,10 @@ class ParallelDenseExecutor(SerialDenseExecutor):
         return_G : bool
             If True, returns the Green's function as opposed to the spectral
             function.
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
 
         Returns
         -------
@@ -44,7 +50,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
         w = float_to_list(w)
 
         # Generate a list of tuples for the (k, w) points to calculate.
-        jobs = [(_k, _w) for _w in w for _k in k]
+        jobs = [(_k, _w) for _k in k for _w in w]
 
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
@@ -55,7 +61,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         # Get the results on this rank.
         s = [
-            self.solve(_k, _w, eta, ii, **solve_kwargs)[0]
+            self.solve(_k, _w, eta, ii, **solve_kwargs)
             for ii, (_k, _w) in enumerate(jobs_on_rank)
         ]
 
@@ -64,12 +70,18 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         if self.mpi_rank == 0:
 
-            # Unnest the lists
-            all_results = [item for sublist in all_results for item in sublist]
-            arr = np.array(all_results).reshape(len(k), len(w))
+            s = [xx[0] for xx in all_results]
+            meta = [xx[1] for xx in all_results]
             if return_G:
-                return arr
-            return -arr.imag / np.pi
+                res = np.array(s)
+            else:
+                res = -np.array(s).imag / np.pi
+
+            # Ensure the returned array has the proper shape
+            res = res.reshape(len(k), len(w))
+            if return_meta:
+                return (res, meta)
+            return res
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,

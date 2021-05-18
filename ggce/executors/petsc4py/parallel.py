@@ -354,11 +354,14 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
             A = -G.imag / np.pi
             if A < 0.0:
                 self._log_spectral_error(k, w)
-            self._log_current_status(k, w, A, index, t0 - time.time())
+            self._log_current_status(k, w, A, index, time.time() - t0)
             return np.array(G), {'time': [dt]}
 
-    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
-        """Solves for the spectrum in serial.
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
+    ):
+        """Solves for the spectrum using the PETSc solver backend. Computation
+        is serial over k,w, but for each k,w it is massively paralle.
 
         Parameters
         ----------
@@ -373,6 +376,10 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         return_G : bool
             If True, returns the Green's function as opposed to the spectral
             function.
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
 
         Returns
         -------
@@ -383,29 +390,23 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         k = float_to_list(k)
         w = float_to_list(w)
 
+        # All of the jobs run "on the same rank" in this context, whereas in
+        # reality self.solve is parallel for every k,w point
         self._total_jobs_on_this_rank = len(k) * len(w)
 
-        cc = 0
-        s = []
-        for _k in k:
-            s_tmp = []
-
-            for _w in w:
-                G, _ = self.solve(_k, _w, eta, cc, **solve_kwargs)[0]
-                cc += 1
-
-                if self.mpi_rank == 0:
-                    s_tmp.append(G)
-
-            if self.mpi_rank == 0:
-                s.append(s_tmp)
-                s_tmp = []
-
         s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)[0]
+            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)
             for ii, _w in enumerate(w)
         ] for jj, _k in enumerate(k)]
 
-        if return_G:
-            return np.array(s)
-        return -np.array(s).imag / np.pi
+        if self.mpi_rank == 0:
+            # Separate meta information
+            s = [xx[0] for xx in s]
+            meta = [xx[1] for xx in s]
+            if return_G:
+                s = np.array(s)
+            else:
+                s = -np.array(s).imag / np.pi
+            if return_meta:
+                return (s, meta)
+            return s

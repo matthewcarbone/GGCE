@@ -136,7 +136,9 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta, return_G=False, **solve_kwargs):
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
+    ):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -151,12 +153,16 @@ class BaseExecutor:
             Extra arguments to pass to solve().
         return_G : bool
             If True, returns the Green's function as opposed to the spectral
-            function.
+            function (the default is False).
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
 
         Returns
         -------
-        np.ndarray
-            The resultant spectrum.
+        np.ndarray, dict
+            The resultant spectrum, or resultant spectrum and meta information.
         """
 
         k = float_to_list(k)
@@ -164,14 +170,28 @@ class BaseExecutor:
 
         self._total_jobs_on_this_rank = len(k) * len(w)
 
-        s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)[0]
-            for ii, _w in enumerate(w)
-        ] for jj, _k in enumerate(k)]
+        # This orders the jobs such that when constructed into an array, the
+        # k-points are the rows and the w-points are the columns after reshape
+        jobs = [(_k, _w) for _k in k for _w in w]
+
+        s = [
+            self.solve(_k, _w, eta, ii, **solve_kwargs)
+            for ii, (_k, _w) in enumerate(jobs)
+        ]
+
+        # Separate meta information
+        res = [xx[0] for xx in s]
+        meta = [xx[1] for xx in s]
 
         if return_G:
-            return np.array(s)
-        return -np.array(s).imag / np.pi
+            res = np.array(res)
+        else:
+            res = -np.array(res).imag / np.pi
+        res = res.reshape(len(k), len(w))
+
+        if return_meta:
+            return (res, meta)
+        return res
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
