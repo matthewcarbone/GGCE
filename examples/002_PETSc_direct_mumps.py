@@ -22,7 +22,7 @@ try:
     import ggce
 except ModuleNotFoundError:
     sys.path.append(head_ggce_dir)
-    import ggce
+    import ggce  # noqa: F401
 
 # Import the parallel executor and load in the MPI communicator
 from ggce.model import Model  # noqa: E402
@@ -32,7 +32,7 @@ COMM = MPI.COMM_WORLD
 
 # load the "grouth truth" data from https://journals.aps.org/prb/
 # abstract/10.1103/PhysRevB.82.085116, figure 5 center for comparison
-literature_data = np.loadtxt(os.path.join(script_dir,"000_example_A.txt"))
+literature_data = np.loadtxt(os.path.join(script_dir, "000_example_A.txt"))
 
 # Select the input parameters and load in the parallel model
 M, N = 3, 9
@@ -49,13 +49,16 @@ executor.prime()
 
 # arrange a omega array and use list comprehension to execute calculations
 wgrid = np.linspace(-5.5, -2.5, 100)
-spectrum = [executor.solve(0.5 * np.pi, w, 0.005) for w in wgrid]
+
+# Set rtol appropriately large (but still small enough) so that we don't get
+# a ton of tolerance warnings
+spectrum = executor.spectrum(0.5 * np.pi, wgrid, 0.005, rtol=1e-13)
 
 # Results are returned on RANK 0 only
 if COMM.Get_rank() == 0:
     spectrum = np.array([-s[0].imag / np.pi for s in spectrum])
     xx = np.array([wgrid.squeeze(), spectrum.squeeze()]).T
-    np.savetxt(os.path.join(script_dir,f"parallel_results.txt"), xx)
+    np.savetxt(os.path.join(script_dir, "tmp_parallel_results.txt"), xx)
 
     # Compare with "ground truth" (see https://journals.aps.org/prb/
     # abstract/10.1103/PhysRevB.82.085116, figure 5 center) via:
