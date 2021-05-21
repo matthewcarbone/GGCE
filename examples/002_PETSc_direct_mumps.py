@@ -66,4 +66,4 @@ if COMM.Get_rank() == 0:
     # ax.set_ylabel("$A(\pi/2, \omega)$ [normalized]")
     # ax.set_xlabel("$\omega$")
     # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    # plt.savefig(os.path.join(script_dir,f'petsc_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')
+    # plt.savefig(os.path.join(script_dir,f'petsc_mumps_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')
