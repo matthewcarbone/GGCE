@@ -6,11 +6,10 @@
 
 import numpy as np
 
-# uncomment if want to visualize PETSc speed benchmark
+# uncomment if want to visualize PETSc accuracy benchmark
 # import matplotlib as mpl
 # import matplotlib.pyplot as plt
 
-# from petsc4py import PETSc
 from mpi4py import MPI
 
 import sys
@@ -25,27 +24,34 @@ except ModuleNotFoundError:
     sys.path.append(head_ggce_dir)
     import ggce
 
+# Import the parallel executor and load in the MPI communicator
 from ggce.model import Model  # noqa: E402
-from ggce.executors.petsc4py.parallel import ParallelSparseExecutor  # noqa: E402
+from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS  # noqa: E402
 
 COMM = MPI.COMM_WORLD
 
+# load the "grouth truth" data from https://journals.aps.org/prb/
+# abstract/10.1103/PhysRevB.82.085116, figure 5 center for comparison
 literature_data = np.loadtxt(os.path.join(script_dir,"000_example_A.txt"))
 
+# Select the input parameters and load in the parallel model
+M, N = 3, 9
 model = Model()
 model.set_parameters(hopping=0.1)
 model.add_coupling(
-    "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
+    "EdwardsFermionBoson", Omega=1.25, M=M, N=N,
     dimensionless_coupling=2.5
 )
 
-executor = ParallelSparseExecutor(model, "info", mpi_comm=COMM)
-# executor = SerialDenseExecutor(system_params, "info")
+# Set up an executor to manage the calculation
+executor = ParallelSparseExecutorMUMPS(model, "info", mpi_comm=COMM)
 executor.prime()
 
+# arrange a omega array and use list comprehension to execute calculations
 wgrid = np.linspace(-5.5, -2.5, 100)
 spectrum = [executor.solve(0.5 * np.pi, w, 0.005) for w in wgrid]
 
+# Results are returned on RANK 0 only
 if COMM.Get_rank() == 0:
     spectrum = np.array([-s[0].imag / np.pi for s in spectrum])
     xx = np.array([wgrid.squeeze(), spectrum.squeeze()]).T
@@ -54,11 +60,10 @@ if COMM.Get_rank() == 0:
     # Compare with "ground truth" (see https://journals.aps.org/prb/
     # abstract/10.1103/PhysRevB.82.085116, figure 5 center) via:
     # fig, ax = plt.subplots(1, 1, figsize=(3, 2))
-    # M, N = system_params["M_extent"][0], system_params["N_bosons"][0]
     # ax.plot(wgrid, spectrum / spectrum.max(), 'k', label = rf'PETSc ($M={M}, N={N}$)')
     # ax.plot(literature_data[:, 0], literature_data[:, 1] / literature_data[:,1].max(),\
     #                             'r--', linewidth=0.5, label='Ground truth')
     # ax.set_ylabel("$A(\pi/2, \omega)$ [normalized]")
     # ax.set_xlabel("$\omega$")
     # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    # plt.savefig(os.path.join(script_dir,f'petsc_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')
+    # plt.savefig(os.path.join(script_dir,f'petsc_mumps_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')
