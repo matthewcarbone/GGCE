@@ -47,7 +47,7 @@ class BaseExecutor:
         self._system = None
         self._basis = None
         self._log_every = log_every
-        self._total_jobs_on_this_rank = None
+        self._total_jobs_on_this_rank = 1
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
