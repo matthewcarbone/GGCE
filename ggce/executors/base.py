@@ -124,7 +124,7 @@ class BaseExecutor:
         msg1 = f"({index:03}/{self._total_jobs_on_this_rank:03}) solved "
         msg_debug = f"{msg1} A({k:.02e}, {w:.02e}) = {A:.02e}"
         if index % self._log_every == 0:
-            self._logger.info(msg1, elapsed=dt)
+            self._logger.info(msg_debug, elapsed=dt)
         self._logger.debug(msg_debug, elapsed=dt)
 
     def _scaffold():
