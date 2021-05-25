@@ -257,6 +257,7 @@ class BaseExecutor:
 
         results = []
         w_val = w0
+        nk = len(kgrid)
         for ii, k_val in enumerate(kgrid):
 
             current_n_w = 0
@@ -301,6 +302,10 @@ class BaseExecutor:
                 results[ii]['ground_state'] = loc
                 results[ii]['weight'] = weight
                 w_val = loc - eta * next_k_offset_factor
+                self._logger.info(
+                    f"For k ({ii:03}/{nk:03}) = {k_val:.02f}: GS={loc:.08f}, "
+                    f"wt={weight:.02e}"
+                )
                 break
 
         return results
