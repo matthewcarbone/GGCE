@@ -26,7 +26,11 @@ from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS
 
 # run PETSc benchmark at cloud size cloud_ext with up to bosons_max bosons
 cloud_ext = 10
+<<<<<<< HEAD
 bosons_min = 3
+=======
+bosons_min = 7
+>>>>>>> ab38b7569bb5d10b180b5f4fab2c5b20923207da
 bosons_max = 7
 bosons_step = 1
 bosons_array = np.arange(bosons_min, bosons_max+1, 1)
@@ -114,7 +118,7 @@ if COMM.Get_rank() == 0:
                         time_average_parallel, std_error_parallel, \
                                             serial_greens, parallel_greens]).T
     np.savetxt(os.path.join(script_dir,f"speed_benchmark_M_{str(cloud_ext)}_N_{bosons_min}_{bosons_max}.txt"), xx,\
-                header = f"serial time (s)    serial time error (s)    parallel time (s)    parallel tiem error (s)"
+                header = f"serial time (s)    serial time error (s)    parallel time (s)    parallel time error (s)"
                 f"    serial G    parallel G",\
                 fmt = ['%.3f %+.0ej', '%.3f %+.0ej' ,'%.5e %+.5ej', '%.5e %+.5ej'],\
                 delimiter = "    " )
