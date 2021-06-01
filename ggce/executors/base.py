@@ -112,6 +112,12 @@ class BaseExecutor:
         )
 
     def _log_current_status(self, k, w, A, index, dt):
+
+        # if running in serial, this prevents an error thrown on trying to
+        # pass NoneType a formatting string
+        if self._total_jobs_on_this_rank is None:
+            return None
+
         if index is None:
             index = -1
         index += 1
