@@ -27,7 +27,7 @@ from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS
 # run PETSc benchmark at cloud size cloud_ext with up to bosons_max bosons
 cloud_ext = 10
 bosons_min = 3
-bosons_max = 8
+bosons_max = 7
 bosons_step = 1
 bosons_array = np.arange(bosons_min, bosons_max+1, 1)
 
