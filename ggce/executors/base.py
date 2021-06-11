@@ -194,6 +194,9 @@ class BaseExecutor:
         the found location of the previous k-point minus
         eta * next_k_offset_factor.
 
+        UPDATE: The method can now be run using a PETSc parallel protocol
+        (however, running it with across-(k,w) parallelization will not work).
+
         Parameters
         ----------
         kgrid : list
@@ -227,11 +230,11 @@ class BaseExecutor:
             quasi-particle weight ('ground_state' and 'weight').
         """
 
-        if self.mpi_comm is not None:
-            self._logger.critical(
-                "Band calculations should be run using a serial protocol"
-            )
-            self.mpi_comm.Abort()
+        # if self.mpi_comm is not None:
+        #     self._logger.critical(
+        #         "Band calculations should be run using a serial protocol"
+        #     )
+        #     self.mpi_comm.Abort()
 
         results = []
         w_val = w0
