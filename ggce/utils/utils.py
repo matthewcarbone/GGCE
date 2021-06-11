@@ -127,7 +127,7 @@ def mpi_required(func):
     return wrapper
 
 
-def peak_location_and_weight(self, w, A, Aprime, eta, eta_prime):
+def peak_location_and_weight(w, A, Aprime, eta, eta_prime):
     """Assumes that the polaron peak is a Lorentzian has the same weight
     no matter the eta. With these assumptions, we can determine the
     location and weight exactly using two points, each from a different
