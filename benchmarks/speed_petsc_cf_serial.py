@@ -26,7 +26,7 @@ from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS
 
 # run PETSc benchmark at cloud size cloud_ext with up to bosons_max bosons
 cloud_ext = 10
-bosons_min = 7
+bosons_min = 3
 bosons_max = 7
 bosons_step = 1
 bosons_array = np.arange(bosons_min, bosons_max+1, 1)
@@ -102,21 +102,22 @@ if COMM.Get_rank() == 0:
 
     # first calculate averages and standard error
     time_average_serial = np.average(serial_times, axis=-1)
+    greens_average_serial = np.average(serial_greens, axis=-1)
     std_error_serial = [np.std(serial_times[ii,:], ddof=1) / \
                                 np.sqrt(len(serial_times[ii,:])) \
                                         for ii in range(len(bosons_array)) ]
     time_average_parallel = np.average(parallel_times, axis=-1)
+    greens_average_parallel = np.average(parallel_greens, axis=-1)
     std_error_parallel = [np.std(parallel_times[ii,:], ddof=1) / \
                                 np.sqrt(len(parallel_times[ii,:])) \
                                         for ii in range(len(bosons_array)) ]
-
     xx = np.array([time_average_serial, std_error_serial, \
                         time_average_parallel, std_error_parallel, \
-                                            serial_greens, parallel_greens]).T
+                                            greens_average_serial, greens_average_parallel]).T
     np.savetxt(os.path.join(script_dir,f"speed_benchmark_M_{str(cloud_ext)}_N_{bosons_min}_{bosons_max}.txt"), xx,\
                 header = f"serial time (s)    serial time error (s)    parallel time (s)    parallel time error (s)"
                 f"    serial G    parallel G",\
-                fmt = ['%.3f %+.0ej', '%.3f %+.0ej' ,'%.5e %+.5ej', '%.5e %+.5ej'],\
+                fmt = ['%.3f %+.0ej', '%.3f %+.0ej', '%.3f %+.0ej', '%.3f %+.0ej' ,'%.5e %+.5ej', '%.5e %+.5ej'],\
                 delimiter = "    " )
 
     # uncomment if speed benchmark visualization desired
