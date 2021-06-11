@@ -194,8 +194,11 @@ class BaseExecutor:
         the found location of the previous k-point minus
         eta * next_k_offset_factor.
 
-        UPDATE: The method can now be run using a PETSc parallel protocol
-        (however, running it with across-(k,w) parallelization will not work).
+        UPDATE: The method can now be run using PETSc "ParallelSparse" protocol.
+        It is parallel in that the for a single (k,w) point, the matrix is
+        distributed across different tasks: however, it is "serial" in that
+        it still works its way through one (k,w) point at a time. If you try to
+        call this using ParallelDenseExecutor you will get a NotImplementedError.
 
         Parameters
         ----------
