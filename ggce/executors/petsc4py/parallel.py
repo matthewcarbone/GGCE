@@ -84,9 +84,9 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         )
 
         # set up memory usage tracking, report to the logger on head node only
+        # total memory across all processes
+        self.total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 / BYTES_TO_GB
         if self.mpi_rank == 0:
-            # total memory across all processes
-            self.total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 / BYTES_TO_GB
             self._logger.debug(
                 f"Total MUMPS memory usage is {self.total_mem_used:.02f} GB"
             )
@@ -172,17 +172,20 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
         # use a gather operation, called by all ranks, to construct the full
-        # vector
-        G = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
-        # this returns a list of values of G from all processes
-
+        # vector (currently not used but will be later)
+        G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
         if self.mpi_rank == 0:
-            # now select only the final process list and final value
-            G = G[self.mpi_world_size-1][-1]
-            return np.array(G), {'time': [dt], \
-                                'mumps_exit_code': [self.mumps_conv_ind], \
-                                'mumps_mem_tot': [self.total_mem_used], \
-                                'manual_tolerance_excess': [self.tol_excess]}
+        # now select only the final value from the array
+            G_val = G_vec[self.mpi_world_size-1][-1]
+        else:
+            G_val = None
+        # and bcast to all processes
+        G_val = self.mpi_comm.bcast(G_val, root=0)
+
+        return np.array(G_val), {'time': [dt], \
+                            'mumps_exit_code': [self.mumps_conv_ind], \
+                            'mumps_mem_tot': [self.total_mem_used], \
+                            'manual_tolerance_excess': [self.tol_excess]}
 
 class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
@@ -339,11 +342,17 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
         # use a gather operation, called by all ranks, to construct the full
-        # vector
-        G = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
-        # this returns a list of values of G from all processes
-
+        # vector (currently not used but will be later)
+        G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
         if self.mpi_rank == 0:
-            # now select only the final process list and final value
-            G = G[self.mpi_world_size-1][-1]
-            return np.array(G), {'time': [dt]}
+        # now select only the final value from the array
+            G_val = G_vec[self.mpi_world_size-1][-1]
+        else:
+            G_val = None
+        # and bcast to all processes
+        G_val = self.mpi_comm.bcast(G_val, root=0)
+
+        return np.array(G_val), {'time': [dt], \
+                            'mumps_exit_code': [self.mumps_conv_ind], \
+                            'mumps_mem_tot': [self.total_mem_used], \
+                            'manual_tolerance_excess': [self.tol_excess]}
