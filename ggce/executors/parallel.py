@@ -70,3 +70,14 @@ class ParallelDenseExecutor(SerialDenseExecutor):
             if return_G:
                 return arr
             return -arr.imag / np.pi
+
+    def dispersion(self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
+        next_k_offset_factor=1.5, nmax=1000):
+
+        '''
+        For now the dispersion method has to be run serially across (k,w)
+        points and does not work with parallelization across (k,w). It does
+        however work with the PETSc "across matrix" parallelization.
+        '''
+
+        raise NotImplementedError

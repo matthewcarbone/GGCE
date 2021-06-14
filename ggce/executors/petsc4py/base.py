@@ -179,9 +179,13 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         pc.apply(self._vector_b, _vector_b_condt)
         _vector_b_norm  = _vector_b_condt.norm(PETSc.NormType.NORM_2)
 
+        # create variable measuring how much tolerance is met / exceeded
+        # if positive, we are in trouble
+        self.tol_excess = _vector_res_norm - rtol * _vector_b_norm
+
         # do a manual residual check on head node
         if self.mpi_rank == 0:
-            if _vector_res_norm > (rtol * _vector_b_norm):
+            if self.tol_excess > 0:
                 self._logger.warning(
                     "Solution failed residual relative tolerance check. "
                     "Solutions likely not fully converged: "

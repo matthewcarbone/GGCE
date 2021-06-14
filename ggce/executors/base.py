@@ -112,6 +112,12 @@ class BaseExecutor:
         )
 
     def _log_current_status(self, k, w, A, index, dt):
+
+        # if running in serial, this prevents an error thrown on trying to
+        # pass NoneType a formatting string
+        if self._total_jobs_on_this_rank is None:
+            return None
+
         if index is None:
             index = -1
         index += 1
@@ -188,6 +194,12 @@ class BaseExecutor:
         the found location of the previous k-point minus
         eta * next_k_offset_factor.
 
+        UPDATE: The method can now be run using PETSc "ParallelSparse" protocol.
+        It is parallel in that the for a single (k,w) point, the matrix is
+        distributed across different tasks: however, it is "serial" in that
+        it still works its way through one (k,w) point at a time. If you try to
+        call this using ParallelDenseExecutor you will get a NotImplementedError.
+
         Parameters
         ----------
         kgrid : list
@@ -221,11 +233,11 @@ class BaseExecutor:
             quasi-particle weight ('ground_state' and 'weight').
         """
 
-        if self.mpi_comm is not None:
-            self._logger.critical(
-                "Band calculations should be run using a serial protocol"
-            )
-            self.mpi_comm.Abort()
+        # if self.mpi_comm is not None:
+        #     self._logger.critical(
+        #         "Band calculations should be run using a serial protocol"
+        #     )
+        #     self.mpi_comm.Abort()
 
         results = []
         w_val = w0
