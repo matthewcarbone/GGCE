@@ -6,7 +6,6 @@ import time
 from petsc4py import PETSc
 
 from ggce.executors.petsc4py.base import BaseExecutorPETSC
-from ggce.engine.physics import G0_k_omega
 from ggce.utils.utils import float_to_list
 
 BYTES_TO_GB = 1073741274
@@ -24,7 +23,8 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
 
     def check_conv(self, factored_mat, rtol, elapsed):
         """This helper function checks MUMPS convergence using built-in MUMPS
-        error codes. Factored_mat holds the MUMPS error codes and control values.
+        error codes. Factored_mat holds the MUMPS error codes and control
+        values.
 
         Parameters
         ----------
@@ -52,14 +52,16 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
             elif self.mumps_conv_ind < 0:
                 self._logger.error(
                     "A MUMPS error occured with MUMPS error code "
-                    f"{self.mumps_conv_ind} See the MUMPS User Guide, Sec. 8, for "
-                    f"error  diagnostics. The calculation took {elapsed:.2f} sec."
+                    f"{self.mumps_conv_ind} See the MUMPS User Guide, Sec. 8, "
+                    "for error  diagnostics. The calculation took "
+                    f"{elapsed:.2f} sec."
                 )
             elif self.mumps_conv_ind > 0:
                 self._logger.warning(
                     "A MUMPS warning occured with MUMPS warning code "
-                    f"{self.mumps_conv_ind} See the MUMPS User Guide, Sec. 8, for "
-                    f"error diagnostics. The calculation took {elapsed:.2f} sec."
+                    f"{self.mumps_conv_ind} See the MUMPS User Guide, Sec. 8, "
+                    "for error diagnostics. The calculation took "
+                    f"{elapsed:.2f} sec."
                 )
 
     def check_mem_use(self, factored_mat):
@@ -86,7 +88,8 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
 
         # set up memory usage tracking, report to the logger on head node only
         # total memory across all processes
-        self.total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 / BYTES_TO_GB
+        self.total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 \
+            / BYTES_TO_GB
         if self.mpi_rank == 0:
             self._logger.debug(
                 f"Total MUMPS memory usage is {self.total_mem_used:.02f} GB"
@@ -147,11 +150,6 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         ksp.solve(self._vector_b, self._vector_x)
         dt = time.time() - t0
 
-        ## export some data from the solver and return on debug
-        # solver_info = ksp.view()
-        # if self.mpi_rank == 0:
-        #     self._logger.debug(solver_info)
-
         # assemble the solution vector
         self._vector_x.assemblyBegin()
         self._vector_x.assemblyEnd()
@@ -175,18 +173,23 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         # use a gather operation, called by all ranks, to construct the full
         # vector (currently not used but will be later)
         G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
+
+        # Now select only the final value from the array
         if self.mpi_rank == 0:
-        # now select only the final value from the array
             G_val = G_vec[self.mpi_world_size-1][-1]
         else:
             G_val = None
+
         # and bcast to all processes
         G_val = self.mpi_comm.bcast(G_val, root=0)
 
-        return np.array(G_val), {'time': [dt], \
-                            'mumps_exit_code': [self.mumps_conv_ind], \
-                            'mumps_mem_tot': [self.total_mem_used], \
-                            'manual_tolerance_excess': [self.tol_excess]}
+        return np.array(G_val), {
+            'time': [dt],
+            'mumps_exit_code': [self.mumps_conv_ind],
+            'mumps_mem_tot': [self.total_mem_used],
+            'manual_tolerance_excess': [self.tol_excess]
+        }
+
 
 class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
@@ -220,16 +223,18 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         if self.mpi_rank == 0:
             if gmres_conv_ind > 0:
                 self._logger.debug(
-                    f"According to PETSc diagnostics, call to GMRES was "
+                    "According to PETSc diagnostics, call to GMRES was "
                     f"successful. It exited with code {gmres_conv_ind}."
-                    f"See the PETSc header in petsc/include/petscksp.h, "
-                    f"lines 518-680 for details. The calculation took {elapsed:.2f} sec."
+                    "See the PETSc header in petsc/include/petscksp.h, "
+                    f"lines 518-680 for details. The calculation took "
+                    f"{elapsed:.2f} sec."
                 )
             elif gmres_conv_ind < 0:
                 self._logger.error(
-                    "A PETSc calculation divergence was detected with error code  "
-                    f"{gmres_conv_ind}. See include/petscksp.h, lines 518-680 for "
-                    f"error  diagnostics. The calculation took {elapsed:.2f} sec."
+                    "A PETSc calculation divergence was detected with error "
+                    f"code {gmres_conv_ind}. See include/petscksp.h, "
+                    "lines 518-680 for error  diagnostics. The calculation "
+                    f"took {elapsed:.2f} sec."
                 )
 
         # now do a check using the final residual from getconvergenceHistory
@@ -237,8 +242,10 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         its = ksp.getIterationNumber()
         # if on head node, log the residual history for debugging
         if self.mpi_rank == 0:
-            self._logger.debug(f"Run ended after {its} iterations. "
-                                    f"Convergence history is \n {res_hist}.")
+            self._logger.debug(
+                f"Run ended after {its} iterations. "
+                f"Convergence history is \n {res_hist}."
+            )
 
     def check_mem_use(self, factored_mat):
         """This helper function checks PETSc sovler memory usage
@@ -329,12 +336,12 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
 
         self.mpi_comm.barrier()
 
-        # implement manual residual check, as well as check PETSc output code
+        # Implement manual residual check, as well as check PETSc output code
         # in there we call for convergence history
         self.check_conv_manual(pc, rtol=rtol)
         self.check_conv(ksp, rtol=rtol, elapsed=dt)
 
-        # now check memory usage
+        # Now check memory usage
         # memory check not wrapped in petsc4py for GMRES
         # self.check_mem_use(factored_mat)
 
@@ -349,7 +356,7 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
 
         if self.mpi_rank == 0:
 
-            # now select only the final process list and final value
+            # Now select only the final process list and final value
             G = G[self.mpi_world_size - 1][-1]
             A = -G.imag / np.pi
             if A < 0.0:
@@ -400,6 +407,7 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
         ] for jj, _k in enumerate(k)]
 
         if self.mpi_rank == 0:
+
             # Separate meta information
             s = [xx[0] for xx in s]
             meta = [xx[1] for xx in s]
