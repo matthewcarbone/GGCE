@@ -125,6 +125,7 @@ class Model:
         self.Omega = []
         self.terms = []
         self.n_boson_types = 0
+        self._boson_counter = 0
         self.models_vis = []  # For visualizing the initialized parameters
 
     def visualize(self, silent=False):
@@ -380,19 +381,19 @@ class Model:
 
         # Extend the terms list with the zero-temperature contribution
         klass = eval(f"DefaultHamiltonians.{coupling_type}")
-        self.terms.extend(klass(g * V_pf, self.n_boson_types))
+        self.terms.extend(klass(g * V_pf, self._boson_counter))
         self.Omega.append(Omega)
         self.M.append(M)
         self._append_N(M, N, tfd=False)
         self.models_vis.append([
             coupling_type, M, self.N[-1], Omega, g * V_pf
         ])
-        self.n_boson_types += 1
+        self._boson_counter += 1
 
         # Finite temperature
         if V_tilde_pf is not None:
             assert self.temperature > 0.0  # Double check
-            self.terms.extend(klass(g * V_tilde_pf, self.n_boson_types))
+            self.terms.extend(klass(g * V_tilde_pf, self._boson_counter))
             self.Omega.append(-Omega)  # Omega get's a negative sign!!
             self.M_tfd.append(M_tfd)
             self._append_N(M_tfd, N_tfd, tfd=True)
@@ -400,6 +401,20 @@ class Model:
                 f"~{coupling_type}", M_tfd, self.N_tfd[-1], -Omega,
                 g * V_tilde_pf
             ])
-            self.n_boson_types += 1
 
+        self.n_boson_types = len(self.Omega)
         self._update_absolute_extent()
+
+    def finalize(self):
+        """Completes the model initialization and locks the ability to make
+        any modifications."""
+
+        if self.temperature > 0.0:
+            N_tmp = []
+            for N, N_tfd in zip(self.N, self.N_tfd):
+                N_tmp.extend([N, N_tfd])
+            self.N = N_tmp
+            M_tmp = []
+            for M, M_tfd in zip(self.M, self.M_tfd):
+                M_tmp.extend([M, M_tfd])
+            self.M = M_tmp
