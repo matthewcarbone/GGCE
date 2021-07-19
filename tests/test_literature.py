@@ -1,60 +1,12 @@
 #!/usr/bin/env python3
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
-
-import argparse
 import numpy as np
-from pathlib import Path
-import pytest
-import shutil
-import yaml
+
+from ggce.model import Model
+from ggce.executors.serial import SerialSparseExecutor, SerialDenseExecutor
 
 
-from ggce.overlord import Prime
-from ggce.engine.structures import SystemParams
-from ggce.engine import system
-from ggce.utils import utils
-
-
-DUMMY_CACHE = "DUMMY_CACHE"
-DUMMY_LIFO = "DUMMY_LIFO"
-
-
-@pytest.fixture
-def efb_figure5_trials():
-    args = argparse.ArgumentParser()
-    args.add_argument('-i', '--input', dest='inp')
-    a = args.parse_args(['-i', 'inp/benchmarks/EFB_Figure5.yaml'])
-    primer = Prime(a)
-    primer.cache_dir = Path(DUMMY_CACHE)
-    primer.queue_path = Path(DUMMY_LIFO)
-    run_name = primer.scaffold()
-    config_path = Path(DUMMY_CACHE) / Path(run_name) / "configs/00000000.yaml"
-    sy = SystemParams(yaml.safe_load(open(config_path)))
-    sy.prime()
-    shutil.rmtree(DUMMY_CACHE)
-    Path.unlink(Path(DUMMY_LIFO))
-    return sy
-
-
-@pytest.fixture
-def efb_figure6_trials():
-    args = argparse.ArgumentParser()
-    args.add_argument('-i', '--input', dest='inp')
-    a = args.parse_args(['-i', 'inp/benchmarks/EFB_Figure6.yaml'])
-    primer = Prime(a)
-    primer.cache_dir = Path(DUMMY_CACHE)
-    primer.queue_path = Path(DUMMY_LIFO)
-    run_name = primer.scaffold()
-    config_path = Path(DUMMY_CACHE) / Path(run_name) / "configs/00000000.yaml"
-    sy = SystemParams(yaml.safe_load(open(config_path)))
-    sy.prime()
-    shutil.rmtree(DUMMY_CACHE)
-    Path.unlink(Path(DUMMY_LIFO))
-    return sy
+ATOL = 1.0e-5
 
 
 class TestLiteratureEFB:
@@ -62,8 +14,20 @@ class TestLiteratureEFB:
     true answers in Berciu & Fehske, PRB 82, 085116 (2010) after normalizing to
     height 1, and "randomly" selected."""
 
-    def test_EFB_figure5_k0(self, efb_figure5_trials):
-        sp = efb_figure5_trials
+    def test_EFB_figure5_k0(self):
+
+        model = Model()
+        model.set_parameters(hopping=0.1)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
+            dimensionless_coupling=2.5
+        )
+
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
             [-5.50000000e+00,  1.43501419e-03],
@@ -96,29 +60,26 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        results_dense = executor_dense.spectrum(0.0, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(0.0, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(0.0, w)
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(0.0, w)
-                dense.append(-G.imag / np.pi)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
-            sparse = np.array(sparse)
-            dense = np.array(dense)
+    def test_EFB_figure6_k0(self):
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        model = Model()
+        model.set_parameters(hopping=3.333333333)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=0.41666666, M=3, N=9,
+            dimensionless_coupling=0.83333333
+        )
 
-    def test_EFB_figure6_k0(self, efb_figure6_trials):
-        sp = efb_figure6_trials
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
             [-7.91666666e+00,  3.96981633e-03],
@@ -151,29 +112,26 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        results_dense = executor_dense.spectrum(0.0, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(0.0, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(0.0, w)
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(0.0, w)
-                dense.append(-G.imag / np.pi)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
-            sparse = np.array(sparse)
-            dense = np.array(dense)
+    def test_EFB_figure5_k1(self):
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        model = Model()
+        model.set_parameters(hopping=0.1)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
+            dimensionless_coupling=2.5
+        )
 
-    def test_EFB_figure5_k1(self, efb_figure5_trials):
-        sp = efb_figure5_trials
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
              [-5.50000000e+00,  5.70009767e-04],
@@ -206,29 +164,27 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        k = 0.5 * np.pi
+        results_dense = executor_dense.spectrum(k, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(k, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(0.5 * np.pi, w)
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(0.5 * np.pi, w)
-                dense.append(-G.imag / np.pi)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
-            sparse = np.array(sparse)
-            dense = np.array(dense)
+    def test_EFB_figure6_k1(self):
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        model = Model()
+        model.set_parameters(hopping=3.333333333)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=0.41666666, M=3, N=9,
+            dimensionless_coupling=0.83333333
+        )
 
-    def test_EFB_figure6_k1(self, efb_figure6_trials):
-        sp = efb_figure6_trials
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
             [-7.91666666e+00,  2.32625925e-03],
@@ -261,33 +217,27 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        k = 0.08333333 * np.pi
+        results_dense = executor_dense.spectrum(k, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(k, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(
-                    0.08333333 * np.pi, w
-                )
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(
-                    0.08333333 * np.pi, w
-                )
-                dense.append(-G.imag / np.pi)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
-            sparse = np.array(sparse)
-            dense = np.array(dense)
+    def test_EFB_figure5_k2(self):
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        model = Model()
+        model.set_parameters(hopping=0.1)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
+            dimensionless_coupling=2.5
+        )
 
-    def test_EFB_figure5_k2(self, efb_figure5_trials):
-        sp = efb_figure5_trials
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
              [-5.50000000e+00,  6.56198651e-04],
@@ -320,29 +270,27 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        k = np.pi
+        results_dense = executor_dense.spectrum(k, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(k, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(np.pi, w)
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(np.pi, w)
-                dense.append(-G.imag / np.pi)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
-            sparse = np.array(sparse)
-            dense = np.array(dense)
+    def test_EFB_figure6_k2(self):
 
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        model = Model()
+        model.set_parameters(hopping=3.333333333)
+        model.add_coupling(
+            "EdwardsFermionBoson", Omega=0.41666666, M=3, N=9,
+            dimensionless_coupling=0.83333333
+        )
 
-    def test_EFB_figure6_k2(self, efb_figure6_trials):
-        sp = efb_figure6_trials
+        executor_dense = SerialDenseExecutor(model, "error")
+        executor_dense.prime()
+
+        executor_sparse = SerialSparseExecutor(model, "error")
+        executor_sparse.prime()
 
         gt = np.array([
             [-7.91666666e+00,  8.08789021e-04],
@@ -375,27 +323,9 @@ class TestLiteratureEFB:
         w_grid = gt[:, 0]
         A_gt = gt[:, 1]
 
-        with utils.DisableLogger():
-            sy = system.System(sp)
-            sy.initialize_generalized_equations()
-            sy.initialize_equations()
-            sy.generate_unique_terms()
-            sy.prime_solver()
+        k = 0.16666667 * np.pi
+        results_dense = executor_dense.spectrum(k, w_grid, eta=0.005)
+        results_sparse = executor_sparse.spectrum(k, w_grid, eta=0.005)
 
-            sparse = []
-            dense = []
-            for w in w_grid:
-                G, meta = sy.one_shot_sparse_solve(
-                    0.16666667 * np.pi, w
-                )
-                sparse.append(-G.imag / np.pi)
-                G, meta = sy.continued_fraction_dense_solve(
-                    0.16666667 * np.pi, w
-                )
-                dense.append(-G.imag / np.pi)
-
-            sparse = np.array(sparse)
-            dense = np.array(dense)
-
-            assert np.allclose(sparse, dense, atol=1e-4)
-            assert np.allclose(dense, A_gt, atol=1e-4)
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)

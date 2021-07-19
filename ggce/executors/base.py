@@ -47,7 +47,7 @@ class BaseExecutor:
         self._system = None
         self._basis = None
         self._log_every = log_every
-        self._total_jobs_on_this_rank = None
+        self._total_jobs_on_this_rank = 1
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
@@ -124,7 +124,7 @@ class BaseExecutor:
         msg1 = f"({index:03}/{self._total_jobs_on_this_rank:03}) solved "
         msg_debug = f"{msg1} A({k:.02e}, {w:.02e}) = {A:.02e}"
         if index % self._log_every == 0:
-            self._logger.info(msg1, elapsed=dt)
+            self._logger.info(msg_debug, elapsed=dt)
         self._logger.debug(msg_debug, elapsed=dt)
 
     def _scaffold():
@@ -136,7 +136,9 @@ class BaseExecutor:
     def solve():
         raise NotImplementedError
 
-    def spectrum(self, k, w, eta, return_G=False):
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
+    ):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -147,14 +149,20 @@ class BaseExecutor:
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        **solve_kwargs
+            Extra arguments to pass to solve().
         return_G : bool
             If True, returns the Green's function as opposed to the spectral
-            function.
+            function (the default is False).
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
 
         Returns
         -------
-        np.ndarray
-            The resultant spectrum.
+        np.ndarray, dict
+            The resultant spectrum, or resultant spectrum and meta information.
         """
 
         k = float_to_list(k)
@@ -162,18 +170,32 @@ class BaseExecutor:
 
         self._total_jobs_on_this_rank = len(k) * len(w)
 
-        s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k))[0]
-            for ii, _w in enumerate(w)
-        ] for jj, _k in enumerate(k)]
+        # This orders the jobs such that when constructed into an array, the
+        # k-points are the rows and the w-points are the columns after reshape
+        jobs = [(_k, _w) for _k in k for _w in w]
+
+        s = [
+            self.solve(_k, _w, eta, ii, **solve_kwargs)
+            for ii, (_k, _w) in enumerate(jobs)
+        ]
+
+        # Separate meta information
+        res = [xx[0] for xx in s]
+        meta = [xx[1] for xx in s]
 
         if return_G:
-            return np.array(s)
-        return -np.array(s).imag / np.pi
+            res = np.array(res)
+        else:
+            res = -np.array(res).imag / np.pi
+        res = res.reshape(len(k), len(w))
+
+        if return_meta:
+            return (res, meta)
+        return res
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
-        next_k_offset_factor=1.5, nmax=1000
+        next_k_offset_factor=1.5, nmax=1000, **solve_kwargs
     ):
         """Computes the dispersion of the peak closest to the provided w0 by
         assuming that the peak is Lorentzian in nature. This allows us to
@@ -233,14 +255,9 @@ class BaseExecutor:
             quasi-particle weight ('ground_state' and 'weight').
         """
 
-        # if self.mpi_comm is not None:
-        #     self._logger.critical(
-        #         "Band calculations should be run using a serial protocol"
-        #     )
-        #     self.mpi_comm.Abort()
-
         results = []
         w_val = w0
+        nk = len(kgrid)
         for ii, k_val in enumerate(kgrid):
 
             current_n_w = 0
@@ -260,7 +277,7 @@ class BaseExecutor:
                     self._logger.error("Exceeded maximum omega points")
                     return results
 
-                G, _ = self.solve(k_val, w_val, eta)
+                G, _ = self.solve(k_val, w_val, eta, **solve_kwargs)
                 A = -G.imag / np.pi
                 results[ii]['w'].append(w_val)
                 results[ii]['A'].append(A)
@@ -277,7 +294,7 @@ class BaseExecutor:
 
                 # This is a maximum, run the calculation again using eta prime
                 eta_prime = eta / eta_div
-                G2, _ = self.solve(k_val, w_val, eta_prime)
+                G2, _ = self.solve(k_val, w_val, eta_prime, **solve_kwargs)
                 A2 = -G2.imag / np.pi
                 loc, weight = peak_location_and_weight(
                     w_val, A, A2, eta, eta_prime
@@ -285,6 +302,10 @@ class BaseExecutor:
                 results[ii]['ground_state'] = loc
                 results[ii]['weight'] = weight
                 w_val = loc - eta * next_k_offset_factor
+                self._logger.info(
+                    f"For k ({ii:03}/{nk:03}) = {k_val:.02f}: GS={loc:.08f}, "
+                    f"wt={weight:.02e}"
+                )
                 break
 
         return results
