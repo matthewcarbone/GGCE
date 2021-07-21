@@ -7,6 +7,7 @@ from petsc4py import PETSc
 
 from ggce.executors.serial import SerialSparseExecutor
 from ggce.engine.physics import G0_k_omega
+from ggce.utils.utils import float_to_list
 
 BYTES_TO_GB = 1073741274
 
@@ -194,3 +195,60 @@ class BaseExecutorPETSC(SerialSparseExecutor):
                 )
             else:
                 self._logger.debug("Solution passed manual residual check.")
+
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs\
+        ):
+        """Solves for the spectrum using the PETSc solver backend. Computation
+        is serial over k,w, but for each k,w it is massively paralle.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float, ndarray
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
+        **solve_kwargs
+            Extra arguments to pass to solve().
+        return_G : bool
+            If True, returns the Green's function as opposed to the spectral
+            function.
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
+
+        Returns
+        -------
+        np.ndarray
+            The resultant spectrum.
+        """
+
+        k = float_to_list(k)
+        w = float_to_list(w)
+
+        # All of the jobs run "on the same rank" in this context, whereas in
+        # reality self.solve is parallel for every k,w point
+        self._total_jobs_on_this_rank = len(k) * len(w)
+
+        s = np.array([[
+            self.solve(_k, _w, eta, **solve_kwargs)
+            for ii, _w in enumerate(w)
+        ] for jj, _k in enumerate(k)])
+
+        # Separate meta information
+        s_vals = s[:,:,0]
+        meta = s[:,:,1]
+
+        if return_G:
+            return_vals = s_vals
+        else:
+            return_vals = [[-s_val.imag / np.pi for s_val in s_vals_array]\
+                                                    for s_vals_array in s_vals]
+
+        if return_meta:
+            return (return_vals, meta)
+
+        return return_vals
