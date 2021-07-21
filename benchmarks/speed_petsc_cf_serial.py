@@ -127,10 +127,10 @@ if COMM.Get_rank() == 0:
     plt.scatter(bosons_array, \
                 time_average_parallel, \
                 label = f"parallel, sparse (PETSc), M = {cloud_ext}")
-    plt.errorbar(bosons_array, time_average_serial, 0, \
-                std_error_serial, 'none', color = 'b')
-    plt.errorbar(bosons_array, time_average_parallel, 0, \
-                std_error_parallel, 'none', color = 'r',)
+    plt.errorbar(bosons_array, time_average_serial, std_error_serial, \
+                0, 'none', color = 'b')
+    plt.errorbar(bosons_array, time_average_parallel, std_error_parallel, \
+                0, 'none', color = 'r',)
     plt.xlabel('N bosons', fontsize=16)
     plt.xticks(size=12)
     plt.ylabel('CPU time, seconds', fontsize=16)
