@@ -4,7 +4,6 @@ import time
 from petsc4py import PETSc
 
 from ggce.executors.petsc4py.base import BaseExecutorPETSC
-from ggce.utils.utils import float_to_list
 
 BYTES_TO_GB = 1073741274
 
@@ -266,7 +265,7 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
 
         raise NotImplementedError
 
-    def solve(self, k, w, eta, index=None, rtol=1.0e-15):
+    def solve(self, k, w, eta, index=None, rtol=1.0e-10):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
         ranks will return None.
@@ -361,58 +360,3 @@ class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
                 self._log_spectral_error(k, w)
             self._log_current_status(k, w, A, index, time.time() - t0)
             return np.array(G), {'time': [dt]}
-
-    def spectrum(
-        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
-    ):
-        """Solves for the spectrum using the PETSc solver backend. Computation
-        is serial over k,w, but for each k,w it is massively paralle.
-
-        Parameters
-        ----------
-        k : float
-            The momentum quantum number point of the calculation.
-        w : float
-            The frequency grid point of the calculation.
-        eta : float
-            The artificial broadening parameter of the calculation.
-        **solve_kwargs
-            Extra arguments to pass to solve().
-        return_G : bool
-            If True, returns the Green's function as opposed to the spectral
-            function.
-        return_meta : bool
-            If True, returns a tuple of the Green's function and the dictionary
-            containing meta information. If False, returns just the Green's
-            function (the default is False).
-
-        Returns
-        -------
-        np.ndarray
-            The resultant spectrum.
-        """
-
-        k = float_to_list(k)
-        w = float_to_list(w)
-
-        # All of the jobs run "on the same rank" in this context, whereas in
-        # reality self.solve is parallel for every k,w point
-        self._total_jobs_on_this_rank = len(k) * len(w)
-
-        s = [[
-            self.solve(_k, _w, eta, ii + jj * len(k), **solve_kwargs)
-            for ii, _w in enumerate(w)
-        ] for jj, _k in enumerate(k)]
-
-        if self.mpi_rank == 0:
-
-            # Separate meta information
-            s = [xx[0] for xx in s]
-            meta = [xx[1] for xx in s]
-            if return_G:
-                s = np.array(s)
-            else:
-                s = -np.array(s).imag / np.pi
-            if return_meta:
-                return (s, meta)
-            return s
