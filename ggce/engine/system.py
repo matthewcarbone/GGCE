@@ -244,9 +244,12 @@ class System:
 
         # Need to generalize this
         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
+            assert len(self.system_params.M) == 1
+            assert len(self.system_params.N) == 1
+
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
-                self.system_params.M, self.system_params.N, self.n_boson_types
+                self.system_params.M[0], self.system_params.N[0]
             )
             self.logger.debug(
                 f"Predicted {T} equations from combinatorics equations"
