@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 __author__ = "Matthew R. Carbone & John Sous"
 __maintainer__ = "Matthew R. Carbone"
 __email__ = "x94carbone@gmail.com"
@@ -60,46 +58,3 @@ def total_generalized_equations(M, N, nbt):
         ]) for m in range(1, M[bt] + 1)
     ]) for bt in range(nbt)]
     return int(np.prod(bosons))
-
-    # total = 0
-    # for nn in range(1, N + 1):
-    #     for mm in range(1, M + 1):
-    #         if nn == 1:
-    #             if mm == 1:
-    #                 total += 1
-    #         elif nn == 2:
-    #             total += 1
-    #         elif nn >= 2 and mm == 1:
-    #             total += 1
-    #         else:
-    #             total += binom(mm + nn - 3, nn - 2)
-    # return total
-
-
-def mgf_sum_rule(w, s, order):
-    return np.sum(s[1:] * w[1:]**order * np.diff(w))
-
-
-def holstein_sum_rule_check(w, s, config):
-    """Imports the wgrid (w), spectrum (s) and config and produces a summary
-    of the sum rules."""
-
-    ek = -2.0 * config.t * np.cos(config.k * config.a)
-    g = config.g
-
-    print("Sum rules ratios: (computed / analytic)")
-
-    # First sum rule, area under curve is 1:
-    s0 = mgf_sum_rule(w, s, 0)
-    print(f"\t#0: {s0:.04f}")
-
-    s1 = mgf_sum_rule(w, s, 1) / ek
-    print(f"\t#1: {s1:.04f}")
-
-    s2_ana = ek**2 + g**2
-    s2 = mgf_sum_rule(w, s, 2) / s2_ana
-    print(f"\t#2: {s2:.04f}")
-
-    s3_ana = ek**3 + 2.0 * g**2 * ek + g**2 * config.Omega
-    s3 = mgf_sum_rule(w, s, 3) / s3_ana
-    print(f"\t#3: {s3:.04f}")
