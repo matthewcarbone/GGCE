@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 from collections import OrderedDict
 import copy
 import numpy as np
@@ -19,7 +13,7 @@ BYTES_TO_MB = 1048576
 
 def config_space_gen(length, total_sum):
     """Generator for yielding all possible combinations of integers of
-    length `length` that sum to total_sum. Not that cases such as
+    length `length` that sum to total_sum. Note that cases such as
     length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
     out, since these do not correspond to valid f-functions.
 

@@ -1,6 +1,4 @@
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
+"""All functions corresponding to physical quantities are located here."""
 
 import numpy as np
 from scipy.special import comb
