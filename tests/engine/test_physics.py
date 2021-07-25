@@ -47,15 +47,3 @@ def G0_k_omega(k, omega, a, eta, tf):
 @pytest.mark.parametrize("t", [0.0, 1.0, 50.0])
 def test_G0_k_omega(k, o, a, e, t):
     assert G0_k_omega(k, o, a, e, t) == physics.G0_k_omega(k, o, a, e, t)
-
-
-@pytest.mark.parametrize("mn", [
-    (1, 1), (1, 2), (1, 10), (10, 2), (5, 2), (3, 2)
-])
-def test_generalized_equations_combinatorics_term_is1(mn):
-    assert physics.generalized_equations_combinatorics_term(*mn) == 1
-
-
-def test_generalized_equations_combinatorics_term():
-    assert physics.generalized_equations_combinatorics_term(3, 3) == 3
-    assert physics.generalized_equations_combinatorics_term(2, 3) == 2
