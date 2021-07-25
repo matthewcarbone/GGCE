@@ -19,7 +19,8 @@ jobs:
         python-version: [3.7.3]
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout repo
+      uses: actions/checkout@v2
 
     - name: Setup Conda
       uses: s-weigand/setup-conda@v1
@@ -63,7 +64,7 @@ jobs:
       timeout-minutes: 10
       with:
         # Repository upload token - get it from codecov.io. Required only for private repositories
-        token: 06a43383-7621-4259-906c-75967a8be621
+        token: ${{ secrets.CODECOV_SECRET }} 
         # Specify whether or not CI build should fail if Codecov runs into an error during upload
         fail_ci_if_error: false
         threshold: 0%
