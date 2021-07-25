@@ -4,9 +4,9 @@ import copy
 import time
 
 from ggce.engine.equations import Equation, GreenEquation
-from ggce.engine.physics import total_generalized_equations
 from ggce.utils.logger import Logger
-from ggce.utils.combinatorics import ConfigurationSpaceGenerator
+from ggce.utils.combinatorics import ConfigurationSpaceGenerator, \
+    total_generalized_equations
 
 BYTES_TO_MB = 1048576
 
