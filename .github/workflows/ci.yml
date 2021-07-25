@@ -45,13 +45,13 @@ jobs:
         conda install -q -c conda-forge pytest-cov
         conda install -q -c anaconda flake8
 
-    - name: Lint with flake8
-      run: |
+    # - name: Lint with flake8
+    #   run: |
         # stop the build if there are Python syntax errors or undefined names
         # flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         # flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
-        flake8 ggce
+    #    flake8 ggce
     
     - name: Unit tests
       if: ${{ always() }}
@@ -67,4 +67,4 @@ jobs:
         token: ${{ secrets.CODECOV_SECRET }} 
         # Specify whether or not CI build should fail if Codecov runs into an error during upload
         fail_ci_if_error: false
-        threshold: 0%
+        threshold: 1%
