@@ -66,6 +66,26 @@ def config_space_gen(length, total_sum):
     Source of algorithm:
     https://stackoverflow.com/questions/7748442/
     generate-all-possible-lists-of-length-n-that-sum-to-s-in-python
+
+    Note this generator is quite fast. For 10,015,005 equations,
+    > %timeit list(config_space_gen(10, 20))
+    12 s ± 621 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+    > len(list(config_space_gen(10, 20)))
+    10015005
+    So there is really no reason to speed up this function.
+
+    Parameters
+    ----------
+    length : int
+        The size of the array to be produced (total number of distinguishable
+        bins).
+    total_sum : int
+        The number of indistinguishable balls.
+
+    Yields
+    ------
+    tuple
+        The next configuration in the overall set of valid configurations.
     """
 
     if length == 1:
