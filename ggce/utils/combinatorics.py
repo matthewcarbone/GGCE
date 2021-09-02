@@ -1,3 +1,7 @@
+from pathlib import Path
+import pickle
+import os
+
 import numpy as np
 from scipy.special import comb
 
@@ -205,17 +209,53 @@ class ConfigurationSpaceGenerator:
 
         return True
 
-    def __call__(self):
+    @property
+    def identifier(self):
+        """Gets the identifier filename for this configuration.
+        
+        Returns
+        -------
+        str
+            The (pickle) filename.
+        """
+
+        return f"{self.absolute_extent}_{self.M}_{self.N}.pkl"
+
+    def __call__(self, logger, check_load=True):
         """Generates all possible configurations of bosons for the composite
         system. Then, reduce that space down based on the specific rules for
         each boson type.
+        
+        Parameters
+        ----------
+        logger : ggce.utils.logger.Logger
+        check_load : bool, optional
+            If True, checks the disk for the existence of the basis that was
+            constructed already. This can save a huge amount of compute time,
+            since the basis would otherwise be constructed on every MPI rank.
+            In fact, it is recommended that the user preconstruct the basis
+            anyway.
         
         Returns
         -------
         dict
             A dictionary with keys as the number of phonons and values as
-            lists of valid configurations.
+            lists of valid configurations.        
         """
+
+        path = os.environ.get("GGCE_CONFIG_STORAGE", None)
+        if path is None:
+            logger.debug("Environment variable GGCE_CONFIG_STORAGE is unset")
+            logger.debug("Defaulting to $HOME/.GGCE/GGCE_config_storage")
+            path = Path.home() / Path(".GGCE/GGCE_config_storage")
+        if not path.isdir():
+            path.mkdir(exist_ok=False, parents=True)
+        file_path = path / Path(self.identifier)
+
+        if check_load:
+            if file_path.exists():
+                logger.info("Check load is True and basis exists; loading")
+                return pickle.load(open(file_path, "rb"))
 
         nb_max = sum(self.N)
         config_dict = {N: [] for N in range(1, nb_max + 1)}
@@ -233,5 +273,9 @@ class ConfigurationSpaceGenerator:
 
                 # Extend the temporary config
                 config_dict[nb].extend(tmp_legal_configs)
+
+        if not file_path.exists():
+            logger.info(f"Basis generated and saved to {file_path}")
+            pickle.dump(config_dict, open(file_path, "wb"), protocol=4)
 
         return config_dict

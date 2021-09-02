@@ -8,31 +8,44 @@ from ggce.utils.logger import Logger
 from ggce.utils.combinatorics import ConfigurationSpaceGenerator, \
     total_generalized_equations
 
-BYTES_TO_MB = 1048576
-
 
 class System:
     """Defines a list of Equations (a system of equations, so to speak) and
     operations on that system.
-
+    
     Attributes
     ----------
+    csg : ggce.utils.combinatorics.ConfigSpaceGenerator
+        The class used to generate the generalized equations basis.
+    equations : TYPE
+        Description
     generalized_equations : List[Equation]
         A list of equations constituting the system; in general form, meaning
         all except for the Green's function are not defined for specific
         delta values.
+    master_f_arg_list : TYPE
+        Description
+    max_bosons_per_site : TYPE
+        Description
+    n_boson_types : TYPE
+        Description
+    system_params : TYPE
+        Description
     """
 
     def __init__(self, model, logger=Logger(dummy=True)):
         """Initializer.
-
+        
         Parameters
         ----------
         model : ggce.model.Model
             Container for the full set of parameters.
+        logger : ggce.utils.logger.Logger, optional
+            A user-provided logger. Default is a dummy logger which does
+            nothing.
         """
 
-        self.logger = logger
+        self._logger = logger
 
         self.system_params = copy.deepcopy(model)
 
@@ -85,16 +98,26 @@ class System:
         for config in configs:
             self._append_generalized_equation(n_bosons, config)
 
-    def initialize_generalized_equations(self):
+    def initialize_generalized_equations(self, check_load=True):
         """Starting with values for the order of the momentum approximation
         and the maximum allowed number of bosons, this method generates a list
         of config arrays, consisting of all possible legal contributions,
         meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
-        sum of all of the entries equals n, where n = [1, ..., n_max]."""
+        sum of all of the entries equals n, where n = [1, ..., n_max].
+        
+        Parameters
+        ----------
+        check_load : bool
+        
+        Returns
+        -------
+        int
+            The number of generalized equations.
+        """
 
         t0 = time.time()
 
-        allowed_configs = self.csg()
+        allowed_configs = self.csg(self._logger, check_load)
 
         # Generate all possible numbers of bosons consistent with n_max.
         for n_bosons, configs in allowed_configs.items():
@@ -118,7 +141,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.generalized_equations.values()])
-        self.logger.info(f"Generated {L} generalized equations", elapsed=dt)
+        self._logger.info(f"Generated {L} generalized equations", elapsed=dt)
 
         # Need to generalize this
         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
@@ -129,14 +152,14 @@ class System:
             T = 1 + total_generalized_equations(
                 self.system_params.M[0], self.system_params.N[0]
             )
-            self.logger.debug(
+            self._logger.debug(
                 f"Predicted {T} equations from combinatorics equations"
             )
 
             assert T == L, f"{T}, {L}"
 
         totals = self._get_total_terms()
-        self.logger.debug(f"Predicting {totals} total terms")
+        self._logger.debug(f"Predicting {totals} total terms")
 
         # Initialize the self.equations attribute's lists here since we know
         # all the keys:
@@ -194,7 +217,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.equations.values()])
-        self.logger.info(f"Generated {L} equations", elapsed=dt)
+        self._logger.info(f"Generated {L} equations", elapsed=dt)
 
         return L
 
@@ -244,12 +267,12 @@ class System:
         dt = time.time() - t0
 
         if unique_short_identifiers == all_terms_rhs:
-            self.logger.info("Closure checked and valid", elapsed=dt)
+            self._logger.info("Closure checked and valid", elapsed=dt)
         else:
-            self.logger.error("Invalid closure!")
+            self._logger.error("Invalid closure!")
             print(unique_short_identifiers - all_terms_rhs)
             print(all_terms_rhs - unique_short_identifiers)
-            self.logger.critical("Critical error due to invalid closure.")
+            self._logger.critical("Critical error due to invalid closure.")
 
     def get_basis(self, full_basis=False):
         """Prepares the solver-specific information.
@@ -303,6 +326,6 @@ class System:
                 }
 
         dt = time.time() - t0
-        self.logger.info("Basis has been constructed", elapsed=dt)
+        self._logger.info("Basis has been constructed", elapsed=dt)
 
         return basis

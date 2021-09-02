@@ -10,28 +10,46 @@ from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
 
 class BaseExecutor:
     """Base executor class.
-
-    Parameters
+    
+    Attributes
     ----------
-    model: ggce.model.Model
-    default_console_logging_level: str
-        The default level for initializing the logger. (The default is
-        'INFO', which will log everything at info or above).
-    log_file: str
-        Location of the log file. (The default is None, which defaults to
-        no log file being produced).
-    mpi_comm: mpi4py.MPI.Intracomm, optional
-        The MPI communicator accessed via MPI.COMM_WORLD. (The default is
-        None, which is taken to imply a single MPI process).
-    log_every : int, optional
-        Determines how often to log calculation results at the info level (the
-        default is 1).
+    mpi_comm : mpi4py.MPI.Intracomm
+    mpi_rank : int
+        The mpi rank that this executor lives on.
+    mpi_world_size : int
+        The mpi world size.
     """
 
     def __init__(
         self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None, log_every=1
+        log_file=None, mpi_comm=None, log_every=1, check_load=True
     ):
+        """Summary
+        
+        Parameters
+        ----------
+        model: ggce.model.Model
+        default_console_logging_level : str
+            The default level for initializing the logger. (The default is
+            'INFO', which will log everything at info or above).
+        log_file : str
+            Location of the log file. (The default is None, which defaults to
+            no log file being produced).
+        mpi_comm : mpi4py.MPI.Intracomm, optional
+            The MPI communicator accessed via MPI.COMM_WORLD. (The default is
+            None, which is taken to imply a single MPI process).
+        log_every : int, optional
+            Determines how often to log calculation results at the info level
+            (the default is 1).
+        check_load : bool, optional
+            If True, the config space generator will attempt to check the
+            path set by environment variable $GGCE_CONFIG_STORAGE (or by
+            default /home/user/.GGCE/GGCE_config_storage) for an existing
+            basis. This can save a lot of time if the basis is pre-generated,
+            since instead of each MPI rank computing the basis itself, each
+            rank simply loads the precomputed basis once.
+        """
+
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
         self.mpi_comm = None
@@ -48,6 +66,7 @@ class BaseExecutor:
         self._basis = None
         self._log_every = log_every
         self._total_jobs_on_this_rank = 1
+        self._check_load = True
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
@@ -102,7 +121,7 @@ class BaseExecutor:
     def _prime_system(self):
 
         self._system = System(self._model, self._logger)
-        self._system.initialize_generalized_equations()
+        self._system.initialize_generalized_equations(self._check_load)
         self._system.initialize_equations()
         self._system.generate_unique_terms()
 
