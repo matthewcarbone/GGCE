@@ -23,18 +23,18 @@ class System:
         delta values.
     """
 
-    def __init__(self, system_params, logger=Logger(dummy=True)):
+    def __init__(self, model, logger=Logger(dummy=True)):
         """Initializer.
 
         Parameters
         ----------
-        system_params : SystemParameters
+        model : ggce.model.Model
             Container for the full set of parameters.
         """
 
         self.logger = logger
 
-        self.system_params = copy.deepcopy(system_params)
+        self.system_params = copy.deepcopy(model)
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class

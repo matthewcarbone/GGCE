@@ -128,7 +128,7 @@ class Model:
         self._boson_counter = 0
         self.models_vis = []  # For visualizing the initialized parameters
 
-    def visualize(self, silent=False):
+    def visualize(self):
         """Visualize the model you've initialized."""
 
         print(f"Model parameters initialized: {self._parameters_set}")
