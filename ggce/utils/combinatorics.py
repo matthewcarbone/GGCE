@@ -99,50 +99,87 @@ def config_space_gen(length, total_sum):
 
 class ConfigurationSpaceGenerator:
     """Helper class for generating configuration spaces of bosons.
-
-    Parameters
+    
+    Attributes
     ----------
-    system_params : SystemParams
-        The system parameters containing:
-        * absolute_extent : int
-            The maximum extent of the cloud. Note that this is NOT trivially
-            the sum(M) since there are different ways in which the clouds can
-            overlap. Take for instance, two boson types, with M1 = 3 and
-            M2 = 2. These clouds can overlap such that absolute extent is at
-            most 5, and they can also overlap such that the maximal extent is
-            3.
-        * M : list
-            Length of the allowed cloud extent for each boson type.
-        * N : list
-            Total number of maximum allowed bosons for each boson type. The
-            absolute maximum number of bosons is trivially sum(N).
+    absolute_extent : int
+        The maximum extent of the cloud. Note that this is NOT trivially
+        the sum(M) since there are different ways in which the clouds can
+        overlap. Take for instance, two boson types, with M1 = 3 and
+        M2 = 2. These clouds can overlap such that absolute extent is at
+        most 5, and they can also overlap such that the maximal extent is
+        3.
+    M : List[int]
+        Length of the allowed cloud extent for each boson type.
+    max_bosons_per_site : int
+        The number of maximum bosons allowed/site. Used for e.g. hard core
+        constraints.
+    N : List[int]
+        Total number of maximum allowed bosons for each boson type. The
+        absolute maximum number of bosons is trivially sum(N).  
+    N_2d : np.ndarray
+        The 2d version of N.
+    n_boson_types : int
+        The number of bonson types (length of M).
     """
 
-    def __init__(self, system_params):
-        self.absolute_extent = system_params.absolute_extent
-        self.M = system_params.M
-        assert self.absolute_extent >= max(self.M)
-        self.N = system_params.N
+    def __init__(self, model):
+        """Summary
+        
+        Parameters
+        ----------
+        model : ggce.model.Model
+            The container for the system parameters.
+        """
+
+        self.absolute_extent = model.absolute_extent
+        self.M = model.M
+        self.N = model.N
         self.N_2d = np.atleast_2d(self.N).T
         self.n_boson_types = len(self.M)
+        self.max_bosons_per_site = model.max_bosons_per_site
+        assert isinstance(self.N, list)
+        assert isinstance(self.M, list)
+        assert self.absolute_extent >= max(self.M)
         assert len(self.N) == self.n_boson_types
-        self.max_bosons_per_site = system_params.max_bosons_per_site
 
     def extent_of_1d(self, config1d):
-        """Gets the extent of a 1d vector."""
+        """Gets the extent of a 1d vector.
+        
+        Parameters
+        ----------
+        config1d : np.ndarray
+            A 1d vector of integers.
+        
+        Returns
+        -------
+        int
+            The extent of this slice of the cloud.
+        """
 
         where_nonzero = np.where(config1d != 0)[0]
         L = len(where_nonzero)
         if L < 2:
             return L
-
         minimum_index = min(where_nonzero)
         maximum_index = max(where_nonzero)
         return maximum_index - minimum_index + 1
 
     def is_legal(self, config):
         """Checks the condition of a config. If legal, returns True, else
-        returns False."""
+        returns False.
+        
+        Parameters
+        ----------
+        config : np.ndarray
+            The configuration (for a 1d system, this is a 2d array where the
+            rows represent models and the columns sites).
+        
+        Returns
+        -------
+        bool
+            True if the configuration is legal and False otherwise.
+        """
 
         # First, check that the edges of the cloud have at least one boson
         # of either type on it.
@@ -171,7 +208,14 @@ class ConfigurationSpaceGenerator:
     def __call__(self):
         """Generates all possible configurations of bosons for the composite
         system. Then, reduce that space down based on the specific rules for
-        each boson type."""
+        each boson type.
+        
+        Returns
+        -------
+        dict
+            A dictionary with keys as the number of phonons and values as
+            lists of valid configurations.
+        """
 
         nb_max = sum(self.N)
         config_dict = {N: [] for N in range(1, nb_max + 1)}
