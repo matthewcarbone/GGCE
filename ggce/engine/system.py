@@ -1,12 +1,84 @@
 from collections import OrderedDict
 import copy
-
+import os
+from pathlib import Path
+import pickle
 import time
 
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.utils.logger import Logger
 from ggce.utils.combinatorics import ConfigurationSpaceGenerator, \
     total_generalized_equations
+
+
+def get_GGCE_CONFIG_STORAGE(default_name=".GGCE/GGCE_config_storage"):
+    """Returns the user-set value for the location to store the basis
+    functions. If  is set as an environment variable,
+    that value is returned. Else, the default of /default_name is
+    returned.
+    
+    Parameters
+    ----------
+    default_name : str, optional
+        The name of the directory [structure], relative to $HOME, where the
+        basis functions should be stored.
+
+    Returns
+    -------
+    Posix.Path
+    """
+
+    path = os.environ.get("GGCE_CONFIG_STORAGE", None)
+    if path is None:
+        path = Path.home() / Path(default_name)
+    return path
+
+
+class GeneralizedEquations(dict):
+    """Summary
+    """
+    
+    @staticmethod
+    def _get_name(model):
+        ae = model.absolute_extent
+        M = model.M
+        N = model.N
+        max_bosons_per_site = model.max_bosons_per_site
+        return f"{ae}_{M}_{N}_{max_bosons_per_site}_GeneralizedEquations.pkl"
+
+    @classmethod
+    def load(cls, model):
+        name = Path(GeneralizedEquations._get_name(model))
+        name = get_GGCE_CONFIG_STORAGE() / name
+        if name.exists():
+            d = pickle.load(open(name, "rb"))
+            return cls(d, model, recompute_required=False)
+        else:
+            return cls(dict(), model)
+
+    def save(self):
+        root = get_GGCE_CONFIG_STORAGE() 
+        name = root / self._name
+        if not root.exists():
+            root.mkdir(exist_ok=False, parents=True)
+
+        # Convert the class into a proper dictionary before saving
+        pickle.dump(dict(self), open(name, "wb"), protocol=4)
+
+    def __init__(self, x, model, recompute_required=True):
+        """Summary
+        
+        Parameters
+        ----------
+        x : TYPE
+            Description
+        recompute_required : bool, optional
+            Description
+        """
+
+        super().__init__(x)
+        self._name = self.__class__._get_name(model)
+        self._recompute_required = recompute_required
 
 
 class System:
@@ -23,17 +95,9 @@ class System:
         A list of equations constituting the system; in general form, meaning
         all except for the Green's function are not defined for specific
         delta values.
-    master_f_arg_list : TYPE
-        Description
-    max_bosons_per_site : TYPE
-        Description
-    n_boson_types : TYPE
-        Description
-    system_params : TYPE
-        Description
     """
 
-    def __init__(self, model, logger=Logger(dummy=True)):
+    def __init__(self, model, logger=Logger(dummy=True), check_load=True):
         """Initializer.
         
         Parameters
@@ -43,30 +107,54 @@ class System:
         logger : ggce.utils.logger.Logger, optional
             A user-provided logger. Default is a dummy logger which does
             nothing.
+        check_load : bool, optional
+            If True, checks the disk for the existence of the basis that was
+            constructed already. This can save a huge amount of compute time,
+            since the basis would otherwise be constructed on every MPI rank.
+            In fact, it is recommended that the user preconstruct the basis
+            anyway.
         """
 
         self._logger = logger
 
-        self.system_params = copy.deepcopy(model)
+        self._system_params = copy.deepcopy(model)
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = self.system_params.n_boson_types
-        self.max_bosons_per_site = self.system_params.max_bosons_per_site
+        self._n_boson_types = self._system_params.n_boson_types
+        self._max_bosons_per_site = self._system_params.max_bosons_per_site
 
-        self.master_f_arg_list = None
+        self._master_f_arg_list = None
 
         # The equations are organized by the number of bosons contained
         # in their configuration space.
-        self.generalized_equations = dict()
+        if check_load:
+            self.generalized_equations = \
+                GeneralizedEquations.load(self._system_params)
+            if self.generalized_equations._recompute_required:
+                self._logger.info(
+                    "Generalized equations not saved; recalculating"
+                )
+            else:
+                self._logger.info(
+                    "Generalized equations loaded"
+                )
+        else:
+            self.generalized_equations = \
+                GeneralizedEquations(dict(), self._system_params)
+            self._logger.warning(
+                "check_load is False, recalculation of the bases will be "
+                "forced"
+            )
         self.equations = dict()
 
         # Config space generator
-        self.csg = ConfigurationSpaceGenerator(self.system_params)
+        self.csg = ConfigurationSpaceGenerator(self._system_params)
+        self._check_load = check_load
 
     def _append_generalized_equation(self, n_bosons, config):
 
-        eq = Equation(config, system_params=self.system_params)
+        eq = Equation(config, system_params=self._system_params)
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
@@ -107,7 +195,7 @@ class System:
         
         Parameters
         ----------
-        check_load : bool
+        check_load : bool, optional
         
         Returns
         -------
@@ -117,24 +205,31 @@ class System:
 
         t0 = time.time()
 
-        allowed_configs = self.csg(self._logger, check_load)
+        if not self.generalized_equations._recompute_required:
+            self._logger.debug("generalized equations read from disk")
 
-        # Generate all possible numbers of bosons consistent with n_max.
-        for n_bosons, configs in allowed_configs.items():
-            self._extend_legal_configs(n_bosons, configs)
+        else:
+            allowed_configs = self.csg()
 
-        # Manually append the Green's function (do the same as above except)
-        # for this special case. Note that no matter what this is always
-        # neded, but the form of the GreenEquation EOM will differ depending
-        # on the system type.
-        eq = GreenEquation(system_params=self.system_params)
-        eq.initialize_index_term()
-        eq.initialize_terms()
-        eq._populate_f_arg_terms()
-        self._append_master_dictionary(eq)
+            # Generate all possible numbers of bosons consistent with n_max.
+            for n_bosons, configs in allowed_configs.items():
+                self._extend_legal_configs(n_bosons, configs)
 
-        # Only one Green's function, with "zero" bosons
-        self.generalized_equations[0] = [eq]
+            # Manually append the Green's function (do the same as above
+            # except) for this special case. Note that no matter what this is
+            # always neded, but the form of the GreenEquation EOM will differ
+            # depending on the system type.
+            eq = GreenEquation(system_params=self._system_params)
+            eq.initialize_index_term()
+            eq.initialize_terms()
+            eq._populate_f_arg_terms()
+            self._append_master_dictionary(eq)
+
+            # Only one Green's function, with "zero" bosons
+            self.generalized_equations[0] = [eq]
+
+            # Save this configuration to disk for the next time
+            self.generalized_equations.save()
 
         self._determine_unique_dictionary()
 
@@ -144,16 +239,16 @@ class System:
         self._logger.info(f"Generated {L} generalized equations", elapsed=dt)
 
         # Need to generalize this
-        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
-            assert len(self.system_params.M) == 1
-            assert len(self.system_params.N) == 1
+        if self._n_boson_types == 1 and self._max_bosons_per_site is None:
+            assert len(self._system_params.M) == 1
+            assert len(self._system_params.N) == 1
 
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
-                self.system_params.M[0], self.system_params.N[0]
+                self._system_params.M[0], self._system_params.N[0]
             )
             self._logger.debug(
-                f"Predicted {T} equations from combinatorics equations"
+                f"Predicted {T} generalized equations from combinatorics"
             )
 
             assert T == L, f"{T}, {L}"
@@ -171,31 +266,31 @@ class System:
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
 
-        if self.master_f_arg_list is None:
-            self.master_f_arg_list = copy.deepcopy(eq.f_arg_terms)
+        if self._master_f_arg_list is None:
+            self._master_f_arg_list = copy.deepcopy(eq.f_arg_terms)
             return
 
         # Else, we append the terms
         for n_mat_id, l_deltas in eq.f_arg_terms.items():
             for delta in l_deltas:
                 try:
-                    self.master_f_arg_list[n_mat_id].append(delta)
+                    self._master_f_arg_list[n_mat_id].append(delta)
                 except KeyError:
-                    self.master_f_arg_list[n_mat_id] = [delta]
+                    self._master_f_arg_list[n_mat_id] = [delta]
 
     def _determine_unique_dictionary(self):
         """Sorts the master delta terms for easier readability and takes
         only unique delta terms."""
 
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
-            self.master_f_arg_list[n_mat_id] = list(set(l_deltas))
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+            self._master_f_arg_list[n_mat_id] = list(set(l_deltas))
 
     def _get_total_terms(self):
         """Predicts the total number of required specific equations needed
         to close the system."""
 
         cc = 0
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
             cc += len(l_deltas)
         return cc
 
@@ -208,7 +303,7 @@ class System:
         for n_bosons, l_eqs in self.generalized_equations.items():
             for eq in l_eqs:
                 n_mat_id = eq.index_term._get_boson_config_identifier()
-                l_deltas = self.master_f_arg_list[n_mat_id]
+                l_deltas = self._master_f_arg_list[n_mat_id]
                 for true_delta in l_deltas:
                     eq_copy = copy.deepcopy(eq)
                     eq_copy.init_full(true_delta)

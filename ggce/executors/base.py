@@ -47,7 +47,7 @@ class BaseExecutor:
             default /home/user/.GGCE/GGCE_config_storage) for an existing
             basis. This can save a lot of time if the basis is pre-generated,
             since instead of each MPI rank computing the basis itself, each
-            rank simply loads the precomputed basis once.
+            rank simply loads the precomputed basis once. Default is True.
         """
 
         # Initialize the executor's logger and adjust the default logging level
@@ -66,7 +66,7 @@ class BaseExecutor:
         self._basis = None
         self._log_every = log_every
         self._total_jobs_on_this_rank = 1
-        self._check_load = True
+        self._check_load = check_load
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
@@ -119,7 +119,6 @@ class BaseExecutor:
         return self._system
 
     def _prime_system(self):
-
         self._system = System(self._model, self._logger)
         self._system.initialize_generalized_equations(self._check_load)
         self._system.initialize_equations()
