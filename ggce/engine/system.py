@@ -81,6 +81,35 @@ class GeneralizedEquations(dict):
         self._recompute_required = recompute_required
 
 
+class Metadata(dict):
+
+    def load(cls, name):
+        if name.exists():
+            d = pickle.load(open(name, "rb"))
+            return cls(d, name=name, recompute_required=False)
+        else:
+            return cls(dict(), name=name, recompute_required=True)
+
+    def save(self):
+        self._name.parent.mkdir(exist_ok=True, parents=True)
+        pickle.dump(dict(self), open(self._name, "wb"), protocol=4)
+
+    def __init__(self, x, name=None, recompute_required=True):
+        """Summary
+
+        Parameters
+        ----------
+        x : TYPE
+            Description
+        recompute_required : bool, optional
+            Description
+        """
+
+        super().__init__(x)
+        self._name = Path(name)
+        self._recompute_required = recompute_required
+
+
 class System:
     """Defines a list of Equations (a system of equations, so to speak) and
     operations on that system.
@@ -117,20 +146,43 @@ class System:
 
         self._logger = logger
 
-        self._system_params = copy.deepcopy(model)
+        self._model = copy.deepcopy(model)
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self._n_boson_types = self._system_params.n_boson_types
-        self._max_bosons_per_site = self._system_params.max_bosons_per_site
+        self._n_boson_types = self._model.n_boson_types
+        self._max_bosons_per_site = self._model.max_bosons_per_site
 
         self._master_f_arg_list = None
 
         # The equations are organized by the number of bosons contained
         # in their configuration space.
+        self._initialize_generalized_equations_object(check_load)
+
+        self.equations = dict()
+
+        # Config space generator
+        self.csg = ConfigurationSpaceGenerator(self._model)
+        self._check_load = check_load
+
+    @property
+    def _generalized_equation_name(self):
+        ae = self._model.absolute_extent
+        M = self._model.M
+        N = self._model.N
+        max_bosons_per_site = self._model.max_bosons_per_site
+        return f"{ae}_{M}_{N}_{max_bosons_per_site}_GeneralizedEquations.pkl"
+
+    @property
+    def _equation_name(self):
+        return self.__equation_name
+
+    def _initialize_generalized_equations_object(self, check_load):
+
+        name = self._generalized_equation_name
+
         if check_load:
-            self.generalized_equations = \
-                GeneralizedEquations.load(self._system_params)
+            self.generalized_equations = Metadata.load(name)
             if self.generalized_equations._recompute_required:
                 self._logger.info(
                     "Generalized equations not saved; recalculating"
@@ -140,21 +192,15 @@ class System:
                     "Generalized equations loaded"
                 )
         else:
-            self.generalized_equations = \
-                GeneralizedEquations(dict(), self._system_params)
+            self.generalized_equations = Metadata(dict(), name)
             self._logger.warning(
                 "check_load is False, recalculation of the bases will be "
                 "forced"
             )
-        self.equations = dict()
-
-        # Config space generator
-        self.csg = ConfigurationSpaceGenerator(self._system_params)
-        self._check_load = check_load
 
     def _append_generalized_equation(self, n_bosons, config):
 
-        eq = Equation(config, system_params=self._system_params)
+        eq = Equation(config, system_params=self._model)
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
@@ -219,7 +265,7 @@ class System:
             # except) for this special case. Note that no matter what this is
             # always neded, but the form of the GreenEquation EOM will differ
             # depending on the system type.
-            eq = GreenEquation(system_params=self._system_params)
+            eq = GreenEquation(system_params=self._model)
             eq.initialize_index_term()
             eq.initialize_terms()
             eq._populate_f_arg_terms()
@@ -240,12 +286,12 @@ class System:
 
         # Need to generalize this
         if self._n_boson_types == 1 and self._max_bosons_per_site is None:
-            assert len(self._system_params.M) == 1
-            assert len(self._system_params.N) == 1
+            assert len(self._model.M) == 1
+            assert len(self._model.N) == 1
 
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
-                self._system_params.M[0], self._system_params.N[0]
+                self._model.M[0], self._model.N[0]
             )
             self._logger.debug(
                 f"Predicted {T} generalized equations from combinatorics"

@@ -127,6 +127,7 @@ class Model:
         self.n_boson_types = 0
         self._boson_counter = 0
         self.models_vis = []  # For visualizing the initialized parameters
+        self._coupling_terms_vis = []
 
     def visualize(self):
         """Visualize the model you've initialized."""
@@ -238,11 +239,13 @@ class Model:
             self._logger.error(
                 "Hopping strength must be positive. Parameters remain unset."
             )
+            return
 
         if lattice_constant < 0.0:
             self._logger.error(
                 "Lattice constant must be positive. Parameters remain unset."
             )
+            return
 
         # List all of the parameters necessary for the run
         self.t = hopping
@@ -388,6 +391,7 @@ class Model:
         self.models_vis.append([
             coupling_type, M, self.N[-1], Omega, g * V_pf
         ])
+        self._coupling_terms_vis.append(coupling_type)
         self._boson_counter += 1
 
         # Finite temperature
@@ -401,6 +405,7 @@ class Model:
                 f"~{coupling_type}", M_tfd, self.N_tfd[-1], -Omega,
                 g * V_tilde_pf
             ])
+            self._coupling_terms_vis.append(coupling_type)
 
         self.n_boson_types = len(self.Omega)
         self._update_absolute_extent()

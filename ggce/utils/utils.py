@@ -1,8 +1,32 @@
 import numpy as np
+import os
 from pathlib import Path
 import pickle
 import uuid
 import time
+
+
+def get_GGCE_CONFIG_STORAGE(default_name=".GGCE/GGCE_config_storage"):
+    """Returns the user-set value for the location to store the basis
+    functions. If  is set as an environment variable,
+    that value is returned. Else, the default of /default_name is
+    returned.
+
+    Parameters
+    ----------
+    default_name : str, optional
+        The name of the directory [structure], relative to $HOME, where the
+        basis functions should be stored.
+
+    Returns
+    -------
+    Posix.Path
+    """
+
+    path = os.environ.get("GGCE_CONFIG_STORAGE", None)
+    if path is None:
+        path = Path.home() / Path(default_name)
+    return path
 
 
 class Buffer:
