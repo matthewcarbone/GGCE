@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
 from collections import namedtuple
 import numpy as np
 import math
