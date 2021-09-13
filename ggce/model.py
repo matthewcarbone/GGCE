@@ -146,8 +146,32 @@ class Model:
         self._Omega = []
         self._n_boson_types = 0
         self._boson_counter = 0
+        self._couplings = []
         self._models_vis = []  # For visualizing the initialized parameters
 
+    @property
+    def name(self):
+        """Gets a string representation of the model. Meant for being used
+        to save information such as the basis corresponding to this model
+        later on, this is not meant to be human-readable.
+        
+        Returns
+        -------
+        str
+            The string representation of the Model. Essentially consists of
+            the values for all the properties represented as a string, joined
+            by underscores.
+        """
+
+        entries = [
+            f"t{self._t:.08f}", f"{self._a:.08f}", f"{self._M}", f"{self._N}",
+            f"{self._M_tfd}", f"{self._N_tfd}", f"{self._temperature:.08f}",
+            f"{self._dimension}", f"{self._max_bosons_per_site}",
+            f"{self._absolute_extent}", f"{self._Omega}",
+            f"{self._couplings}"
+        ]
+        return "_".join(entries)
+    
     def visualize(self):
         """Visualize the model you've initialized."""
 
@@ -420,6 +444,7 @@ class Model:
 
         # Extend the terms list with the zero-temperature contribution
         klass = eval(f"DefaultHamiltonians.{coupling_type}")
+        self._couplings.append(coupling_type)
         self.terms.extend(klass(g * V_pf, self._boson_counter))
         self._Omega.append(Omega)
         self._M.append(M)
