@@ -105,40 +105,41 @@ class DefaultHamiltonians:
 class Model:
 
     def __init__(
-        self, name="model", default_console_logging_level="info", log_file=None
+        self, default_console_logging_level="info", log_file=None
     ):
         self._logger = Logger(log_file, mpi_rank=0)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameters_set = False
 
-        # Index uninitialized parameters
-        self.t = None
-        self.a = None
-        self.M = []
-        self.N = []
-        self.M_tfd = []
-        self.N_tfd = []
-        self.temperature = None
-        self.dimension = None
-        self.max_bosons_per_site = None
-        self.absolute_extent = None
-        self.Omega = []
         self.terms = []
-        self.n_boson_types = 0
+
+        # Index uninitialized parameters
+        self._t = None
+        self._a = None
+        self._M = []
+        self._N = []
+        self._M_tfd = []
+        self._N_tfd = []
+        self._temperature = None
+        self._dimension = None
+        self._max_bosons_per_site = None
+        self._absolute_extent = None
+        self._Omega = []
+        self._n_boson_types = 0
         self._boson_counter = 0
-        self.models_vis = []  # For visualizing the initialized parameters
+        self._models_vis = []  # For visualizing the initialized parameters
 
     def visualize(self, silent=False):
         """Visualize the model you've initialized."""
 
         print(f"Model parameters initialized: {self._parameters_set}")
         print("Model globals:")
-        print(f"\tt={self.t}, a={self.a}, T={self.temperature},", end=' ')
-        print(f"dim={self.dimension},", end=' ')
-        print(f"hard-core={self.max_bosons_per_site},", end=' ')
-        print(f"absolute-extent={self.absolute_extent}")
+        print(f"\tt={self._t}, a={self._a}, T={self._temperature},", end=' ')
+        print(f"dim={self._dimension},", end=' ')
+        print(f"hard-core={self._max_bosons_per_site},", end=' ')
+        print(f"absolute-extent={self._absolute_extent}")
         print("Model components:")
-        for ii, model in enumerate(self.models_vis):
+        for ii, model in enumerate(self._models_vis):
             model_type = model[0]
             M = model[1]
             N = model[2]
@@ -163,8 +164,8 @@ class Model:
             The modifying prefactor to the real and fictitious couplings.
         """
 
-        if self.temperature > 0.0:
-            beta = 1.0 / self.temperature
+        if self._temperature > 0.0:
+            beta = 1.0 / self._temperature
             theta_beta = np.arctanh(np.exp(-beta * Omega / 2.0))
             V_prefactor = np.cosh(theta_beta)
             V_tilde_prefactor = np.sinh(theta_beta)
@@ -173,7 +174,7 @@ class Model:
             return 1.0, None
 
     def _append_N(self, M, N, tfd=False):
-        """Appends the list self.N or self.N_tfd based on whether or not a
+        """Appends the list self._N or self._N_tfd based on whether or not a
         hard-core boson constraint was set.
 
         Parameters
@@ -181,23 +182,23 @@ class Model:
         N : int
         M : int
         tfd : bool, optional
-            If True, modifies the self.N_tfd list, else modifies self.N (the
+            If True, modifies the self._N_tfd list, else modifies self._N (the
             default is False).
         """
 
-        if self.max_bosons_per_site is None:
+        if self._max_bosons_per_site is None:
             if tfd:
-                self.N_tfd.append(N)
+                self._N_tfd.append(N)
             else:
-                self.N.append(N)
+                self._N.append(N)
         else:
             if tfd:
-                self.N_tfd.append(self.max_bosons_per_site * M)
+                self._N_tfd.append(self._max_bosons_per_site * M)
             else:
-                self.N.append(self.max_bosons_per_site * M)
+                self._N.append(self._max_bosons_per_site * M)
 
     def get_fFunctionInfo(self):
-        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
+        return fFunctionInfo(a=self._a, t=self._t, Omega=self._Omega)
 
     def set_parameters(
         self, hopping=1.0, dimension=1, lattice_constant=1.0, temperature=0.0,
@@ -245,23 +246,23 @@ class Model:
             )
 
         # List all of the parameters necessary for the run
-        self.t = hopping
-        self.dimension = dimension
-        self.temperature = temperature
-        self.a = lattice_constant
-        self.max_bosons_per_site = max_bosons_per_site
+        self._t = hopping
+        self._dimension = dimension
+        self._temperature = temperature
+        self._a = lattice_constant
+        self._max_bosons_per_site = max_bosons_per_site
         self._parameters_set = True
 
     def _update_absolute_extent(self):
 
-        ae1 = np.max(self.M)
-        if self.temperature > 0.0:
-            ae1 = max(np.max(self.M_tfd), ae1)
+        ae1 = np.max(self._M)
+        if self._temperature > 0.0:
+            ae1 = max(np.max(self._M_tfd), ae1)
 
-        if self.absolute_extent is None:
-            self.absolute_extent = ae1
+        if self._absolute_extent is None:
+            self._absolute_extent = ae1
         else:
-            self.absolute_extent = max(ae1, self.absolute_extent)
+            self._absolute_extent = max(ae1, self._absolute_extent)
 
     def set_absolute_extent(self, ae):
         """The absolute_extent defines how far away boson clouds of different
@@ -274,9 +275,9 @@ class Model:
         ae : int
         """
 
-        ae1 = np.max(self.M)
-        if self.temperature > 0.0:
-            ae1 = max(np.max(self.M_tfd), ae1)
+        ae1 = np.max(self._M)
+        if self._temperature > 0.0:
+            ae1 = max(np.max(self._M_tfd), ae1)
 
         if ae < ae1:
             self._logger.error(
@@ -285,7 +286,7 @@ class Model:
             )
             return
 
-        self.absolute_extent = ae
+        self._absolute_extent = ae
 
     def add_coupling(
         self, coupling_type, Omega, M, N, M_tfd=None, N_tfd=None,
@@ -326,13 +327,13 @@ class Model:
             )
             return
 
-        if self.temperature == 0 and (M_tfd is not None or N_tfd is not None):
+        if self._temperature == 0 and (M_tfd is not None or N_tfd is not None):
             self._logger.warning(
                 "Temperature is set to zero but M_tfd or N_tfd values were "
                 "provided and will be ignored."
             )
 
-        if self.temperature > 0.0 and (M_tfd is None or N_tfd is None):
+        if self._temperature > 0.0 and (M_tfd is None or N_tfd is None):
             self._logger.error(
                 "Temperature > 0 but M_tfd or N_tfd not set. No coupling "
                 "was added."
@@ -372,7 +373,7 @@ class Model:
         # Hamiltonian
         g = coupling if coupling is not None else \
             model_coupling_map(
-                coupling_type, self.t, Omega, dimensionless_coupling
+                coupling_type, self._t, Omega, dimensionless_coupling
             )
 
         # Get the TFD prefactors for the terms in the Hamiltonian. Note that
@@ -382,39 +383,39 @@ class Model:
         # Extend the terms list with the zero-temperature contribution
         klass = eval(f"DefaultHamiltonians.{coupling_type}")
         self.terms.extend(klass(g * V_pf, self._boson_counter))
-        self.Omega.append(Omega)
-        self.M.append(M)
+        self._Omega.append(Omega)
+        self._M.append(M)
         self._append_N(M, N, tfd=False)
-        self.models_vis.append([
-            coupling_type, M, self.N[-1], Omega, g * V_pf
+        self._models_vis.append([
+            coupling_type, M, self._N[-1], Omega, g * V_pf
         ])
         self._boson_counter += 1
 
         # Finite temperature
         if V_tilde_pf is not None:
-            assert self.temperature > 0.0  # Double check
+            assert self._temperature > 0.0  # Double check
             self.terms.extend(klass(g * V_tilde_pf, self._boson_counter))
-            self.Omega.append(-Omega)  # Omega get's a negative sign!!
-            self.M_tfd.append(M_tfd)
+            self._Omega.append(-Omega)  # Omega get's a negative sign!!
+            self._M_tfd.append(M_tfd)
             self._append_N(M_tfd, N_tfd, tfd=True)
-            self.models_vis.append([
-                f"~{coupling_type}", M_tfd, self.N_tfd[-1], -Omega,
+            self._models_vis.append([
+                f"~{coupling_type}", M_tfd, self._N_tfd[-1], -Omega,
                 g * V_tilde_pf
             ])
 
-        self.n_boson_types = len(self.Omega)
+        self._n_boson_types = len(self._Omega)
         self._update_absolute_extent()
 
     def finalize(self):
         """Completes the model initialization and locks the ability to make
         any modifications."""
 
-        if self.temperature > 0.0:
+        if self._temperature > 0.0:
             N_tmp = []
-            for N, N_tfd in zip(self.N, self.N_tfd):
+            for N, N_tfd in zip(self._N, self._N_tfd):
                 N_tmp.extend([N, N_tfd])
-            self.N = N_tmp
+            self._N = N_tmp
             M_tmp = []
-            for M, M_tfd in zip(self.M, self.M_tfd):
+            for M, M_tfd in zip(self._M, self._M_tfd):
                 M_tmp.extend([M, M_tfd])
-            self.M = M_tmp
+            self._M = M_tmp
