@@ -102,7 +102,7 @@ class ConfigurationSpaceGenerator:
 
     Parameters
     ----------
-    system_params : SystemParams
+    model : ggce.model.Model
         The system parameters containing:
         * absolute_extent : int
             The maximum extent of the cloud. Note that this is NOT trivially
@@ -118,15 +118,15 @@ class ConfigurationSpaceGenerator:
             absolute maximum number of bosons is trivially sum(N).
     """
 
-    def __init__(self, system_params):
-        self.absolute_extent = system_params.absolute_extent
-        self.M = system_params.M
+    def __init__(self, model):
+        self.absolute_extent = model._absolute_extent
+        self.M = model._M
         assert self.absolute_extent >= max(self.M)
-        self.N = system_params.N
+        self.N = model._N
         self.N_2d = np.atleast_2d(self.N).T
         self.n_boson_types = len(self.M)
         assert len(self.N) == self.n_boson_types
-        self.max_bosons_per_site = system_params.max_bosons_per_site
+        self.max_bosons_per_site = model._max_bosons_per_site
 
     def extent_of_1d(self, config1d):
         """Gets the extent of a 1d vector."""

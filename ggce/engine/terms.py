@@ -194,13 +194,13 @@ class Term:
         The parameters of the term itself. (Single Hamiltonian Term)
     """
 
-    def __init__(self, boson_config, hterm=None, system_params=None):
+    def __init__(self, boson_config, hterm=None, model=None):
         self.config = BosonConfig(boson_config)
 
         # If hterm is none, we know this is an index term which carries with
         # it no system-dependent prefactors or anything like that.
         self.hterm = hterm
-        self.system_params = system_params
+        self.model = model
         self.constant_prefactor = 1.0
 
         # Determines the argument of f and prefactors
@@ -333,8 +333,8 @@ class EOMTerm(Term):
         AnnihilationTerm and CreationTerm classes."""
 
         return self.constant_prefactor * physics.G0_k_omega(
-            k, w, self.system_params.a, eta, self.system_params.t
-        ) * cmath.exp(1j * k * self.system_params.a * self.exp_shift)
+            k, w, self.model.a, eta, self.model.t
+        ) * cmath.exp(1j * k * self.model.a * self.exp_shift)
 
     def increment_g_arg(self, delta):
         return
@@ -342,8 +342,8 @@ class EOMTerm(Term):
 
 class NonIndexTerm(Term):
 
-    def __init__(self, boson_config, hterm, system_params, constant_prefactor):
-        super().__init__(boson_config, hterm, system_params)
+    def __init__(self, boson_config, hterm, model, constant_prefactor):
+        super().__init__(boson_config, hterm, model)
         assert self.hterm is not None
 
         # This is entirely general now
@@ -351,7 +351,7 @@ class NonIndexTerm(Term):
         self.g_arg = self.hterm.x - self.hterm.y
         self.constant_prefactor = constant_prefactor
         self.freq_shift = sum([
-            self.system_params.Omega[ii] * bpt
+            self.model.Omega[ii] * bpt
             for ii, bpt in enumerate(self.config.total_bosons_per_type)
         ])
 
@@ -367,14 +367,14 @@ class NonIndexTerm(Term):
     def coefficient(self, k, w, eta):
 
         exp_term = cmath.exp(
-            1j * k * self.system_params.a * self.exp_shift
+            1j * k * self.model.a * self.exp_shift
         )
 
         w_freq_shift = w - self.freq_shift
 
         g_contrib = physics.g0_delta_omega(
-            self.g_arg, w_freq_shift, self.system_params.a,
-            eta, self.system_params.t
+            self.g_arg, w_freq_shift, self.model.a,
+            eta, self.model.t
         )
 
         return self.constant_prefactor * exp_term * g_contrib

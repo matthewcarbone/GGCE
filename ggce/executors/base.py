@@ -30,7 +30,8 @@ class BaseExecutor:
 
     def __init__(
         self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None, log_every=1
+        log_file=None, mpi_comm=None, log_every=1,
+        ggce_config_storage=None
     ):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
@@ -48,6 +49,7 @@ class BaseExecutor:
         self._basis = None
         self._log_every = log_every
         self._total_jobs_on_this_rank = 1
+        self._ggce_config_storage = ggce_config_storage
 
     def get_jobs_on_this_rank(self, jobs):
         """Get's the jobs assigned to this rank. Note this method silently
@@ -101,7 +103,8 @@ class BaseExecutor:
 
     def _prime_system(self):
 
-        self._system = System(self._model, self._logger)
+        storage = self._ggce_config_storage
+        self._system = System(self._model, self._logger, storage)
         self._system.initialize_generalized_equations()
         self._system.initialize_equations()
         self._system.generate_unique_terms()

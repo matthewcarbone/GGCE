@@ -1,6 +1,6 @@
 from collections import OrderedDict
 import copy
-
+from pathlib import Path
 import time
 
 from ggce.engine.equations import Equation, GreenEquation
@@ -12,42 +12,50 @@ from ggce.utils.utils import Metadata
 
 class System:
     """Defines a list of Equations (a system of equations, so to speak) and
-    operations on that system.
+    operations on that system."""
 
-    Attributes
-    ----------
-    generalized_equations : List[Equation]
-        A list of equations constituting the system; in general form, meaning
-        all except for the Green's function are not defined for specific
-        delta values.
-    """
-
-    def __init__(self, model, logger=Logger(dummy=True)):
+    def __init__(
+        self, model, logger=Logger(dummy=True), ggce_config_storage=None
+    ):
         """Initializer.
-
+        
         Parameters
         ----------
-        model : SystemParameters
+        model : ggce.model.Model
             Container for the full set of parameters.
+        logger : ggce.utils.logger.Logger, optional
+            The logger to use.
+        ggce_config_storage : str, optional
+            The path to the directory where to save the basis/equations.
         """
 
         self._logger = logger
 
         self._model = copy.deepcopy(model)
 
-        # The number of unique boson types has already been evaluated upon
-        # initializing the configuration class
-        self.n_boson_types = self._model._n_boson_types
-        self.max_bosons_per_site = self._model._max_bosons_per_site
-
-        # The equations are organized by the number of bosons contained
-        # in their configuration space.
-        self.generalized_equations = dict()
-        self.master_f_arg_list = None
-        self.equations = dict()
-
         # Config space generator
-        self.csg = ConfigurationSpaceGenerator(self._model)
+        self._csg = ConfigurationSpaceGenerator(self._model)
+
+        # Load in the other objects if they exist
+        if ggce_config_storage is None:
+            self._logger.warning("Storage not specified, recalculating basis")
+            self._generalized_equations = Metadata.load(None)
+            self._master_f_arg_list = Metadata.load(None)
+            self._equations = Metadata.load(None)
+        else:
+            self._logger.info(f"Storage specified at {ggce_config_storage}")
+            self._logger.info("Will reload from disk if basis exists")
+            Path(ggce_config_storage).mkdir(exist_ok=True, parents=True)
+            name = self._model.name
+            tmp = f"{name}_g_eq.pkl"
+            ge_path = Path(ggce_config_storage) / Path(tmp)
+            self._generalized_equations = Metadata.load(ge_path)
+            tmp = f"{name}_f_args.pkl"
+            f_path = Path(ggce_config_storage) / Path(tmp)
+            self._master_f_arg_list = Metadata.load(f_path)
+            tmp = f"{name}_eq.pkl"
+            e_path = Path(ggce_config_storage) / Path(tmp)
+            self._equations = Metadata.load(e_path)
 
     def _append_generalized_equation(self, n_bosons, config):
 
@@ -58,7 +66,7 @@ class System:
 
         # Initialize the specific terms which constitute the f_n(delta)
         # EOM, such as f_n'(1), f_n''(0), etc.
-        eq.initialize_terms(self.csg)
+        eq.initialize_terms(self._csg)
 
         # Initialize the required values for delta (arguments of f) as
         # derived from the terms themselves, used later when generating
@@ -73,9 +81,9 @@ class System:
         # Finally, append the equation to a master list of generalized
         # equations/
         try:
-            self.generalized_equations[n_bosons].append(eq)
+            self._generalized_equations[n_bosons].append(eq)
         except KeyError:
-            self.generalized_equations[n_bosons] = [eq]
+            self._generalized_equations[n_bosons] = [eq]
 
     def _extend_legal_configs(self, n_bosons, configs):
         """Appends a new configuration to the dictionary legal configs."""
@@ -92,7 +100,7 @@ class System:
 
         t0 = time.time()
 
-        allowed_configs = self.csg()
+        allowed_configs = self._csg()
 
         # Generate all possible numbers of bosons consistent with n_max.
         for n_bosons, configs in allowed_configs.items():
@@ -109,17 +117,19 @@ class System:
         self._append_master_dictionary(eq)
 
         # Only one Green's function, with "zero" bosons
-        self.generalized_equations[0] = [eq]
+        self._generalized_equations[0] = [eq]
 
         self._determine_unique_dictionary()
 
         dt = time.time() - t0
 
-        L = sum([len(val) for val in self.generalized_equations.values()])
+        L = sum([len(val) for val in self._generalized_equations.values()])
         self._logger.info(f"Generated {L} generalized equations", elapsed=dt)
 
         # Need to generalize this
-        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
+        n_boson_types = self._model._n_boson_types
+        max_bosons_per_site = self._model._max_bosons_per_site
+        if n_boson_types == 1 and max_bosons_per_site is None:
             assert len(self._model._M) == 1
             assert len(self._model._N) == 1
 
@@ -136,41 +146,45 @@ class System:
         totals = self._get_total_terms()
         self._logger.debug(f"Predicting {totals} total terms")
 
-        # Initialize the self.equations attribute's lists here since we know
+        # Initialize the self._equations attribute's lists here since we know
         # all the keys:
-        for key, _ in self.generalized_equations.items():
-            self.equations[key] = []
+        for key, _ in self._generalized_equations.items():
+            self._equations[key] = []
+
+        self._generalized_equations.save()
+        self._master_f_arg_list.save()
 
         return L
 
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
 
-        if self.master_f_arg_list is None:
-            self.master_f_arg_list = copy.deepcopy(eq.f_arg_terms)
+        if len(self._master_f_arg_list) == 0:
+            for key, value in eq.f_arg_terms.items():
+                self._master_f_arg_list[key] = value
             return
 
         # Else, we append the terms
         for n_mat_id, l_deltas in eq.f_arg_terms.items():
             for delta in l_deltas:
                 try:
-                    self.master_f_arg_list[n_mat_id].append(delta)
+                    self._master_f_arg_list[n_mat_id].append(delta)
                 except KeyError:
-                    self.master_f_arg_list[n_mat_id] = [delta]
+                    self._master_f_arg_list[n_mat_id] = [delta]
 
     def _determine_unique_dictionary(self):
         """Sorts the master delta terms for easier readability and takes
         only unique delta terms."""
 
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
-            self.master_f_arg_list[n_mat_id] = list(set(l_deltas))
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+            self._master_f_arg_list[n_mat_id] = list(set(l_deltas))
 
     def _get_total_terms(self):
         """Predicts the total number of required specific equations needed
         to close the system."""
 
         cc = 0
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
             cc += len(l_deltas)
         return cc
 
@@ -180,19 +194,21 @@ class System:
 
         t0 = time.time()
 
-        for n_bosons, l_eqs in self.generalized_equations.items():
+        for n_bosons, l_eqs in self._generalized_equations.items():
             for eq in l_eqs:
                 n_mat_id = eq.index_term._get_boson_config_identifier()
-                l_deltas = self.master_f_arg_list[n_mat_id]
+                l_deltas = self._master_f_arg_list[n_mat_id]
                 for true_delta in l_deltas:
                     eq_copy = copy.deepcopy(eq)
                     eq_copy.init_full(true_delta)
-                    self.equations[n_bosons].append(eq_copy)
+                    self._equations[n_bosons].append(eq_copy)
 
         dt = time.time() - t0
 
-        L = sum([len(val) for val in self.equations.values()])
+        L = sum([len(val) for val in self._equations.values()])
         self._logger.info(f"Generated {L} equations", elapsed=dt)
+
+        self._equations.save()
 
         return L
 
@@ -215,8 +231,8 @@ class System:
             (k, w) coefficient. Default is None.
         """
 
-        eqs_dict = self.generalized_equations if generalized \
-            else self.equations
+        eqs_dict = self._generalized_equations if generalized \
+            else self._equations
         od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
         for n_bosons, eqs in od.items():
             print(f"{n_bosons}")
@@ -234,7 +250,7 @@ class System:
         t0 = time.time()
         unique_short_identifiers = set()
         all_terms_rhs = set()
-        for n_bosons, equations in self.equations.items():
+        for n_bosons, equations in self._equations.items():
             for eq in equations:
                 unique_short_identifiers.add(eq.index_term.identifier())
                 for term in eq.terms_list:
@@ -285,7 +301,7 @@ class System:
 
             # Set the overall basis. Each unique identifier gets its own index.
             cc = 0
-            for _, equations in self.equations.items():
+            for _, equations in self._equations.items():
                 for eq in equations:
                     basis[eq.index_term.identifier()] = cc
                     cc += 1
@@ -294,7 +310,7 @@ class System:
 
             # Set the local basis, in which each identifier gets its own index
             # relative to the n-phonon manifold.
-            for n_phonons, list_of_equations in self.equations.items():
+            for n_phonons, list_of_equations in self._equations.items():
                 basis[n_phonons] = {
                     eq.index_term.identifier(): ii
                     for ii, eq in enumerate(list_of_equations)

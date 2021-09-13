@@ -56,9 +56,9 @@ class SerialSparseExecutor(BaseExecutor):
         col_ind = []
         dat = []
 
-        total_bosons = np.sum(self._model.N)
+        total_bosons = np.sum(self._model._N)
         for n_bosons in range(total_bosons + 1):
-            for eq in self._system.equations[n_bosons]:
+            for eq in self._system._equations[n_bosons]:
                 row_dict = dict()
                 index_term_id = eq.index_term.identifier()
                 ii_basis = self._basis[index_term_id]
@@ -123,7 +123,7 @@ class SerialSparseExecutor(BaseExecutor):
         col_ind = np.array([0])
         v = coo_matrix((
             np.array(
-                [self._system.equations[0][0].bias(k, w, eta)],
+                [self._system._equations[0][0].bias(k, w, eta)],
                 dtype=np.complex64
             ), (row_ind, col_ind)
         )).tocsr()
@@ -199,7 +199,7 @@ class SerialDenseExecutor(BaseExecutor):
 
         n_phonons_shift = n_phonons + shift
 
-        equations_n = self._system.equations[n_phonons]
+        equations_n = self._system._equations[n_phonons]
 
         # Initialize a matrix to fill
         d1 = len(self._basis[n_phonons])
@@ -267,7 +267,7 @@ class SerialDenseExecutor(BaseExecutor):
 
         finfo = self._model.get_fFunctionInfo()
 
-        total_phonons = np.sum(self._model.N)
+        total_phonons = np.sum(self._model._N)
 
         for n_phonons in range(total_phonons, 0, -1):
 

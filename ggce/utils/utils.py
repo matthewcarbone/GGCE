@@ -1,8 +1,32 @@
 import numpy as np
+import os
 from pathlib import Path
 import pickle
 import uuid
 import time
+
+
+def get_GGCE_CONFIG_STORAGE(default_name=".GGCE/GGCE_config_storage"):
+    """Returns the user-set value for the location to store the basis
+    functions. If  is set as an environment variable,
+    that value is returned. Else, the default of /default_name is
+    returned.
+
+    Parameters
+    ----------
+    default_name : str, optional
+        The name of the directory [structure], relative to $HOME, where the
+        basis functions should be stored.
+
+    Returns
+    -------
+    Posix.Path
+    """
+
+    path = os.environ.get("GGCE_CONFIG_STORAGE", None)
+    if path is None:
+        path = Path.home() / Path(default_name)
+    return path
 
 
 class Buffer:
@@ -30,19 +54,23 @@ class Buffer:
 class Metadata(dict):
 
     @classmethod
-    def load(cls, path):
-        """Loads in a metadata json object from disk.
+    def load(cls, path=None):
+        """Loads in a metadata json object from disk. If the path is None,
+        simply returns a standard Metadata object.
         
         Parameters
         ----------
-        path : str
+        path : str, optional
             Path to the json file in question.
-
+        
         Returns
         -------
         Metadata
             The metadata class.
         """
+
+        if path is None:
+            return cls(dict(), path=path)
 
         path = Path(path)
 
@@ -55,10 +83,14 @@ class Metadata(dict):
         return cls(d, path=path)
 
     def save(self):
-        """Saves the state of the dictionary to the user-provided path."""
+        """Saves the state of the dictionary to the user-provided path.
+        If the path is None, does nothing."""
 
         # with open(self._path, "w") as outfile:
         #     json.dump(dict(self), outfile, indent=4, sort_keys=True)
+
+        if self._path is None:
+            return
 
         pickle.dump(dict(self), open(self._path, "wb"), protocol=4)
 

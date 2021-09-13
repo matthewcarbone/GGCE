@@ -176,7 +176,7 @@ class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
     def __init__(self, model):
-        config = np.zeros((model.n_boson_types, 1))
+        config = np.zeros((model._n_boson_types, 1))
         super().__init__(config_index=config, model=model)
 
     def bias(self, k, w, eta=None):
