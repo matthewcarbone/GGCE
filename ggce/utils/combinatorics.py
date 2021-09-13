@@ -57,9 +57,9 @@ def total_generalized_equations(M, N):
     return int(np.prod(bosons))
 
 
-def config_space_gen(length, total_sum):
+def config_space_gen(lgth, total_sum):
     """Generator for yielding all possible combinations of integers of
-    length `length` that sum to total_sum. Note that cases such as
+    length `lgth` that sum to total_sum. Note that cases such as
     length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
     out, since these do not correspond to valid f-functions.
 
@@ -76,7 +76,7 @@ def config_space_gen(length, total_sum):
 
     Parameters
     ----------
-    length : int
+    lgth : int
         The size of the array to be produced (total number of distinguishable
         bins).
     total_sum : int
@@ -88,11 +88,11 @@ def config_space_gen(length, total_sum):
         The next configuration in the overall set of valid configurations.
     """
 
-    if length == 1:
+    if lgth == 1:
         yield (total_sum,)
     else:
         for value in range(total_sum + 1):
-            for permutation in config_space_gen(length - 1, total_sum - value):
+            for permutation in config_space_gen(lgth - 1, total_sum - value):
                 r = (value,) + permutation
                 yield r
 
