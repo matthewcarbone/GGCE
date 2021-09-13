@@ -4,11 +4,10 @@ import copy
 import time
 
 from ggce.engine.equations import Equation, GreenEquation
-from ggce.utils.logger import Logger
 from ggce.utils.combinatorics import ConfigurationSpaceGenerator, \
     total_generalized_equations
-
-BYTES_TO_MB = 1048576
+from ggce.utils.logger import Logger
+from ggce.utils.utils import Metadata
 
 
 class System:
@@ -23,37 +22,36 @@ class System:
         delta values.
     """
 
-    def __init__(self, system_params, logger=Logger(dummy=True)):
+    def __init__(self, model, logger=Logger(dummy=True)):
         """Initializer.
 
         Parameters
         ----------
-        system_params : SystemParameters
+        model : SystemParameters
             Container for the full set of parameters.
         """
 
-        self.logger = logger
+        self._logger = logger
 
-        self.system_params = copy.deepcopy(system_params)
+        self._model = copy.deepcopy(model)
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = self.system_params.n_boson_types
-        self.max_bosons_per_site = self.system_params.max_bosons_per_site
-
-        self.master_f_arg_list = None
+        self.n_boson_types = self._model._n_boson_types
+        self.max_bosons_per_site = self._model._max_bosons_per_site
 
         # The equations are organized by the number of bosons contained
         # in their configuration space.
         self.generalized_equations = dict()
+        self.master_f_arg_list = None
         self.equations = dict()
 
         # Config space generator
-        self.csg = ConfigurationSpaceGenerator(self.system_params)
+        self.csg = ConfigurationSpaceGenerator(self._model)
 
     def _append_generalized_equation(self, n_bosons, config):
 
-        eq = Equation(config, system_params=self.system_params)
+        eq = Equation(config, model=self._model)
 
         # Initialize the index term, basically the f_n(delta)
         eq.initialize_index_term()
@@ -104,7 +102,7 @@ class System:
         # for this special case. Note that no matter what this is always
         # neded, but the form of the GreenEquation EOM will differ depending
         # on the system type.
-        eq = GreenEquation(system_params=self.system_params)
+        eq = GreenEquation(model=self._model)
         eq.initialize_index_term()
         eq.initialize_terms()
         eq._populate_f_arg_terms()
@@ -118,25 +116,25 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.generalized_equations.values()])
-        self.logger.info(f"Generated {L} generalized equations", elapsed=dt)
+        self._logger.info(f"Generated {L} generalized equations", elapsed=dt)
 
         # Need to generalize this
         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
-            assert len(self.system_params.M) == 1
-            assert len(self.system_params.N) == 1
+            assert len(self._model._M) == 1
+            assert len(self._model._N) == 1
 
             # Plus one for the Green's function
             T = 1 + total_generalized_equations(
-                self.system_params.M[0], self.system_params.N[0]
+                self._model._M[0], self._model._N[0]
             )
-            self.logger.debug(
+            self._logger.debug(
                 f"Predicted {T} equations from combinatorics equations"
             )
 
             assert T == L, f"{T}, {L}"
 
         totals = self._get_total_terms()
-        self.logger.debug(f"Predicting {totals} total terms")
+        self._logger.debug(f"Predicting {totals} total terms")
 
         # Initialize the self.equations attribute's lists here since we know
         # all the keys:
@@ -194,7 +192,7 @@ class System:
         dt = time.time() - t0
 
         L = sum([len(val) for val in self.equations.values()])
-        self.logger.info(f"Generated {L} equations", elapsed=dt)
+        self._logger.info(f"Generated {L} equations", elapsed=dt)
 
         return L
 
@@ -244,12 +242,12 @@ class System:
         dt = time.time() - t0
 
         if unique_short_identifiers == all_terms_rhs:
-            self.logger.info("Closure checked and valid", elapsed=dt)
+            self._logger.info("Closure checked and valid", elapsed=dt)
         else:
-            self.logger.error("Invalid closure!")
+            self._logger.error("Invalid closure!")
             print(unique_short_identifiers - all_terms_rhs)
             print(all_terms_rhs - unique_short_identifiers)
-            self.logger.critical("Critical error due to invalid closure.")
+            self._logger.critical("Critical error due to invalid closure.")
 
     def get_basis(self, full_basis=False):
         """Prepares the solver-specific information.
@@ -303,6 +301,6 @@ class System:
                 }
 
         dt = time.time() - t0
-        self.logger.info("Basis has been constructed", elapsed=dt)
+        self._logger.info("Basis has been constructed", elapsed=dt)
 
         return basis

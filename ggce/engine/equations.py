@@ -31,7 +31,7 @@ class Equation:
         particular _n_mat_identifier.
     """
 
-    def __init__(self, config_index, system_params):
+    def __init__(self, config_index, model):
         """Initializer.
 
         Parameters
@@ -42,13 +42,13 @@ class Equation:
             one. These properties are asserted in the setter for this
             parameter. This means that only allowed f-function subscripts can
             be passed to this function.
-        system_params : SystemParams
+        model : Model
             Container for the full set of parameters.
         """
 
         self.config_index = config_index
         self.f_arg_terms = None
-        self.system_params = system_params
+        self.model = model
 
     def bias(self, k, w, eta=None):
         """The default value for the bias is 0, except in the case of the
@@ -118,13 +118,13 @@ class Equation:
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
-        ae = self.system_params.absolute_extent
+        ae = self.model._absolute_extent
 
         self.terms_list = []
         assert np.all(self.config_index >= 0)
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.system_params.terms:
+        for hterm in self.model.terms:
 
             # Boson type
             bt = hterm.bt
@@ -143,7 +143,7 @@ class Equation:
 
                     t = terms_module.AnnihilationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params.get_fFunctionInfo(),
+                        model=self.model.get_fFunctionInfo(),
                         constant_prefactor=hterm.g * nval
                     )
                     t.step(loc)
@@ -160,7 +160,7 @@ class Equation:
 
                     t = terms_module.CreationTerm(
                         copy.copy(self.config_index), hterm=hterm,
-                        system_params=self.system_params.get_fFunctionInfo(),
+                        model=self.model.get_fFunctionInfo(),
                         constant_prefactor=hterm.g
                     )
                     t.step(loc)
@@ -175,18 +175,15 @@ class Equation:
 class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
-    def __init__(self, system_params):
-        config = np.zeros((system_params.n_boson_types, 1))
-        super().__init__(config_index=config, system_params=system_params)
+    def __init__(self, model):
+        config = np.zeros((model.n_boson_types, 1))
+        super().__init__(config_index=config, model=model)
 
     def bias(self, k, w, eta=None):
         """Initializes the bias for the Green's function."""
 
-        if eta is None:
-            eta = self.system_params.eta
-
         return physics.G0_k_omega(
-            k, w, self.system_params.a, eta, self.system_params.t
+            k, w, self.model._a, eta, self.model._t
         )
 
     def initialize_terms(self):
@@ -196,15 +193,15 @@ class GreenEquation(Equation):
         self.terms_list = []
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.system_params.terms:
+        for hterm in self.model.terms:
 
             # Only boson creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
             if hterm.d == '+':
-                n = np.zeros((self.system_params.n_boson_types, 1)).astype(int)
+                n = np.zeros((self.model._n_boson_types, 1)).astype(int)
                 n[hterm.bt, :] = 1
                 t = terms_module.EOMTerm(
                     boson_config=n, hterm=hterm,
-                    system_params=self.system_params.get_fFunctionInfo()
+                    model=self.model.get_fFunctionInfo()
                 )
                 self.terms_list.append(t)
