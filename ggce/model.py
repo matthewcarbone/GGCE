@@ -104,9 +104,27 @@ class DefaultHamiltonians:
 
 class Model:
 
+    """A core class for containing all parameters for the Hamiltonian.
+    
+    Attributes
+    ----------
+    terms : list
+        A list of the Default Hamiltonian classes. This list defines the
+        model couplings used in the experiment.
+    """
+    
     def __init__(
         self, default_console_logging_level="info", log_file=None
     ):
+        """
+        Parameters
+        ----------
+        default_console_logging_level : str, optional
+        log_file : None, optional
+            Log file location if the user wishes to pipe the logging output
+            to disk.
+        """
+
         self._logger = Logger(log_file, mpi_rank=0)
         self._logger.adjust_logging_level(default_console_logging_level)
         self._parameters_set = False
@@ -129,7 +147,7 @@ class Model:
         self._boson_counter = 0
         self._models_vis = []  # For visualizing the initialized parameters
 
-    def visualize(self, silent=False):
+    def visualize(self):
         """Visualize the model you've initialized."""
 
         print(f"Model parameters initialized: {self._parameters_set}")
@@ -254,11 +272,9 @@ class Model:
         self._parameters_set = True
 
     def _update_absolute_extent(self):
-
         ae1 = np.max(self._M)
         if self._temperature > 0.0:
             ae1 = max(np.max(self._M_tfd), ae1)
-
         if self._absolute_extent is None:
             self._absolute_extent = ae1
         else:
@@ -290,34 +306,37 @@ class Model:
 
     def add_coupling(
         self, coupling_type, Omega, M, N, M_tfd=None, N_tfd=None,
-        coupling=None, dimensionless_coupling=None, boson_index_override=None
+        coupling=None, dimensionless_coupling=None
     ):
         """Adds an electron-phonon contribution to the Hamiltonian.
-
+        
         Note that the user can override the boson index manually to construct
         more complicated models, such as single phonon-mode Hamiltonians but
         with multiple contributions to the coupling term.
-
+        
         Parameters
         ----------
-        coupling_type : {[type]}
-            [description]
-        Omega : {[type]}
-            [description]
-        M : {[type]}
-            [description]
-        N : {[type]}
-            [description]
-        M_tfd : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        N_tfd : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        coupling : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        dimensionless_coupling : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        boson_index_override : {[type]}, optional
-            [description] (the default is None, which [default_description])
+        coupling_type : str
+            The coupling name, e.g. "H" for Holstein. Must match one of the
+            terms defined in the DefaultHamiltonians class.
+        Omega : float
+            The value of the phonon frequency.
+        M : int
+            The cloud extent.
+        N : int
+            The number of allowed phonons
+        M_tfd : int, optional
+            The fictitious cloud extent, required if temperature > 0.
+        N_tfd : int, optional
+            The number of allowed fictitious phonons, required if
+            temperature > 0.
+        coupling : float, optional
+            The precise value of the prefactor multiplying V in the
+            Hamiltonian.
+        dimensionless_coupling : float, optional
+            The value of the dimensionless coupling. The term multiplying V
+            in the Hamiltonian will be solved for and is a function of the
+            coupling type.
         """
 
         if not self._parameters_set:
