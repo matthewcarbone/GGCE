@@ -1,5 +1,4 @@
 import numpy as np
-import json
 from pathlib import Path
 import pickle
 import uuid
@@ -31,18 +30,14 @@ class Buffer:
 class Metadata(dict):
 
     @classmethod
-    def load(cls, path, ok_not_exist=True):
+    def load(cls, path):
         """Loads in a metadata json object from disk.
         
         Parameters
         ----------
         path : str
             Path to the json file in question.
-        ok_not_exist : bool, optional
-            If True, then if the file path does not exist, this fact will be
-            silently ignored and an "empty" metadata file will be returned.
-            Default is True.
-        
+
         Returns
         -------
         Metadata
@@ -54,15 +49,18 @@ class Metadata(dict):
         if not path.exists():
             return cls(dict(), path=path)
 
-        with open(path, "r") as infile:
-            d = json.load(infile)
+        # with open(path, "r") as infile:
+        #     d = json.load(infile)
+        d = pickle.load(open(path, "rb"))
         return cls(d, path=path)
 
     def save(self):
         """Saves the state of the dictionary to the user-provided path."""
 
-        with open(self._path, "w") as outfile:
-            json.dump(dict(self), outfile, indent=4, sort_keys=True)
+        # with open(self._path, "w") as outfile:
+        #     json.dump(dict(self), outfile, indent=4, sort_keys=True)
+
+        pickle.dump(dict(self), open(self._path, "wb"), protocol=4)
 
     def __init__(self, d=dict(), path=None):
         super().__init__(d)
