@@ -130,6 +130,7 @@ class Model:
         self._parameters_set = False
 
         self.terms = []
+        self._lock = False
 
         # Index uninitialized parameters
         self._t = None
@@ -165,6 +166,12 @@ class Model:
             g = model[4]
             print(f"\t({ii}) {model_type}")
             print(f"\t\tM={M}, N={N}, O={Omega:.05f}, g={g:.05f}")
+
+    def _log_lock_error(self):
+        self._logger.error(
+            "The finalize method has been run, afterwards no other changes "
+            "can be made to the model. Re-instantiate and try again!"
+        )
 
     def _get_coupling_prefactors(self, Omega):
         """Get's the TFD coupling prefactors.
@@ -244,6 +251,10 @@ class Model:
             default is None, indicating no restriction).
         """
 
+        if self._lock:
+            self._log_lock_error()
+            return
+
         if dimension > 1:
             raise NotImplementedError
 
@@ -290,6 +301,10 @@ class Model:
         ----------
         ae : int
         """
+
+        if self._lock:
+            self._log_lock_error()
+            return
 
         ae1 = np.max(self._M)
         if self._temperature > 0.0:
@@ -338,6 +353,10 @@ class Model:
             in the Hamiltonian will be solved for and is a function of the
             coupling type.
         """
+
+        if self._lock:
+            self._log_lock_error()
+            return
 
         if not self._parameters_set:
             self._logger.error(
@@ -438,3 +457,5 @@ class Model:
             for M, M_tfd in zip(self._M, self._M_tfd):
                 M_tmp.extend([M, M_tfd])
             self._M = M_tmp
+
+        self._lock = True
