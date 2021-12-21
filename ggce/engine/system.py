@@ -207,6 +207,7 @@ class System:
         for config in configs:
             self._append_generalized_equation(n_bosons, config)
 
+    # @profile
     def initialize_generalized_equations(self):
         """Starting with values for the order of the momentum approximation
         and the maximum allowed number of bosons, this method generates a list
@@ -295,6 +296,7 @@ class System:
             cc += len(l_deltas)
         return cc
 
+    # @profile
     def initialize_equations(self):
         """Generates the true equations on the rhs which have their explicit
         delta values provided."""

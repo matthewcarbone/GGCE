@@ -92,7 +92,8 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
                 f"Total MUMPS memory usage is {self.total_mem_used:.02f} GB"
             )
 
-    def solve(self, k, w, eta, rtol=1.0e-10):
+    # @profile
+    def solve(self, k, w, eta, rtol=1.0e-10, from_disk=None, **kwargs):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
         ranks will return None.
@@ -117,7 +118,10 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         """
 
         # Function call to construct the sparse matrix into self._mat_X
-        self._assemble_matrix(k, w, eta)
+        if from_disk is None:
+            self._assemble_matrix(k, w, eta)
+        else:
+            self._matrix_from_disk(k, w, eta, from_disk)
 
         t0 = time.time()
 
@@ -165,11 +169,19 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
 
         self.mpi_comm.barrier()
 
+        # for memory management, destroy the KSP context manually
+        ksp.destroy()
+
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
         # use a gather operation, called by all ranks, to construct the full
         # vector (currently not used but will be later)
         G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
+
+        # since we grabbed the Green's func value, destroy the data structs
+        # self._vector_x.destroy()
+        # self._vector_b.destroy()
+        # self._mat_X.destroy()
 
         # Now select only the final value from the array
         if self.mpi_rank == 0:
