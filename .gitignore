@@ -1,8 +1,10 @@
 *.pyc
 job_data/
+scripts/
 results/
 results2/
 *.sh
+*.png
 slurm_config.yaml
 .LIFO_queue.yaml
 .ipynb_checkpoints/

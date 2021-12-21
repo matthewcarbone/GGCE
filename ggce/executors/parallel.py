@@ -68,6 +68,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
 
         if self.mpi_rank == 0:
 
+            all_results = [xx[ii] for xx in all_results for ii in range(len(xx))]
             s = [xx[0] for xx in all_results]
             meta = [xx[1] for xx in all_results]
             if return_G:
