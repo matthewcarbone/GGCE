@@ -93,7 +93,7 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
             )
 
     # @profile
-    def solve(self, k, w, eta, rtol=1.0e-10, from_disk=None, **kwargs):
+    def solve(self, k, w, eta, rtol=1.0e-10, **kwargs):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
         ranks will return None.
@@ -118,10 +118,10 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         """
 
         # Function call to construct the sparse matrix into self._mat_X
-        if from_disk is None:
+        if self.basis_dir is None:
             self._assemble_matrix(k, w, eta)
         else:
-            self._matrix_from_disk(k, w, eta, from_disk)
+            self._matrix_from_disk(k, w, eta, basis_dir = self.basis_dir)
 
         t0 = time.time()
 
