@@ -5,6 +5,8 @@ from pathlib import Path
 import pickle
 import uuid
 import time
+import os
+import shutil
 
 
 class Buffer:
@@ -140,3 +142,38 @@ def peak_location_and_weight(w, A, Aprime, eta, eta_prime):
     loc = w - np.abs(numerator1 * numerator2 / np.sqrt(den1 * den2))
     area = np.pi * A * ((w - loc)**2 + eta**2) / eta
     return loc, area
+
+def setup_directory(dir):
+    """Helps set up output directory for computations.
+        If directory already exists, overwrites it."""
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
+        os.mkdir(dir)
+
+def get_grids_from_files(dir):
+    """When calculation runs on pre-computed matrices,
+       need to parse the directory filenames to generate the
+       kgrid and wgrid."""
+
+    all_files = os.listdir(dir)
+    kgrid = []
+    wgrid = []
+    for element in all_files:
+        # filter only the matrix files
+        if ".bss" in element:
+            # cut off the file extension
+            element = element[:-4]
+            name_bits = element.split("_")
+            k, w = np.float(name_bits[1]), np.float(name_bits[3])
+            eta = np.float(name_bits[5])
+            if k not in kgrid:
+                kgrid.append(k)
+            if w not in wgrid:
+                wgrid.append(w)
+
+    kgrid = np.array(sorted(kgrid))
+    wgrid = np.array(sorted(wgrid))
+
+    return kgrid, wgrid, eta
