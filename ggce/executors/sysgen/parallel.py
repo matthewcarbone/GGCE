@@ -9,12 +9,18 @@ from ggce.engine.system import System
 from ggce.utils.logger import Logger
 from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
     float_to_list
-from ggce.executors.serial import SerialSparseExecutor
+from ggce.executors.sysgen.serial import SerialSystemGenerator
 
 
-class SerialSystemGenerator(SerialSparseExecutor):
+class ParallelSystemGenerator(SerialSystemGenerator):
     """System generator class to make systems of equations and
-    dump them to disk for processing with PETSc."""
+    dump them to disk for running the calculation later.
+
+    This helps separate the memory-expensive basis generation
+    from the matrix solution and avoid clogging up the memory
+    with duplicates of the basis that each rank holds.
+
+    This particular class allows to do the preparation in parallel."""
 
     def set_output_dir(self, basis_dir):
 
@@ -53,10 +59,11 @@ class SerialSystemGenerator(SerialSparseExecutor):
                                         f"k_{k}_w_{w}_e_{eta}.bss")
         with open(basis_loc, "wb") as basis_file:
             pickle.dump(xx, basis_file)
-
+        ## this return statement is needed to avoid raising errors,
+        ## but made -1 to be clearly incorrect
         return np.array(-1), {"time": [dt]}
 
-    def prepare_spectrum(self, k, w, eta, **solve_kwargs):
+    def prepare_spectrum(self, k, w, eta, return_meta=False, **solve_kwargs):
         """Prepares matrices for the spectrum in serial.
 
         Parameters
@@ -80,19 +87,33 @@ class SerialSystemGenerator(SerialSparseExecutor):
         k = float_to_list(k)
         w = float_to_list(w)
 
-        self._total_jobs_on_this_rank = len(k) * len(w)
-
         # This orders the jobs such that when constructed into an array, the
         # k-points are the rows and the w-points are the columns after reshape
         jobs = [(_k, _w) for _k in k for _w in w]
 
+        jobs_on_rank = self.get_jobs_on_this_rank(jobs)
+        self._logger.debug(f"{len(jobs_on_rank)} jobs todo")
+        self._log_job_distribution_information(jobs_on_rank)
+        self._total_jobs_on_this_rank = len(jobs_on_rank)
+
         s = [
             self.prepare(_k, _w, eta, **solve_kwargs)
-            for ii, (_k, _w) in enumerate(jobs)
+            for ii, (_k, _w) in enumerate(jobs_on_rank)
         ]
 
-        # Separate meta information
-        res = [xx[0] for xx in s]
-        meta = [xx[1] for xx in s]
+        # Gather the results on rank 0 -- not that it matters since
+        # this is only basis preparation
+        all_results = self.mpi_comm.gather(s, root=0)
 
-        return (res, meta)
+        if self.mpi_rank == 0:
+
+            all_results = [xx[ii] for xx in all_results for ii in range(len(xx))]
+            s = [xx[0] for xx in all_results]
+            meta = [xx[1] for xx in all_results]
+            res = np.array(s)
+
+            # Ensure the returned array has the proper shape
+            res = res.reshape(len(k), len(w))
+            if return_meta:
+                return (res, meta)
+            return res
