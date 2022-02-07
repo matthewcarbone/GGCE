@@ -3,12 +3,14 @@ import time
 
 from petsc4py import PETSc
 
-from ggce.executors.petsc4py.base import BaseExecutorPETSC
+from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS
+from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
+    float_to_list
 
 BYTES_TO_GB = 1073741274
 
 
-class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
+class DoubleParallelExecutorMUMPS(ParallelSparseExecutorMUMPS):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
     calculate G(k,w) in parallel, using a one-shot sparse sovler MUMPS.
     This inherits the matrix construction strategies of the BaseExecutorPETSC
@@ -155,7 +157,7 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         self._vector_x.assemblyBegin()
         self._vector_x.assemblyEnd()
 
-        self.mpi_comm.barrier()
+        self.mpi_comm_brigadier.barrier()
 
         # call manual residual check, as well as check MUMPS INFO
         # if the MUMPS solver call was successful
@@ -167,7 +169,7 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         # now check memory usage
         self.check_mem_use(factored_mat)
 
-        self.mpi_comm.barrier()
+        self.mpi_comm_brigadier.barrier()
 
         # for memory management, destroy the KSP context manually
         ksp.destroy()
@@ -176,7 +178,7 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
         # G is the last entry aka "the last equation" of the matrix
         # use a gather operation, called by all ranks, to construct the full
         # vector (currently not used but will be later)
-        G_vec = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
+        G_vec = self.mpi_comm_brigadier.gather(self._vector_x.getArray(), root=0)
 
         # since we grabbed the Green's func value, destroy the data structs
         # self._vector_x.destroy()
@@ -185,12 +187,14 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
 
         # Now select only the final value from the array
         if self.mpi_rank == 0:
-            G_val = G_vec[self.mpi_world_size-1][-1]
+            G_val = G_vec[self.brigade_size-1][-1]
         else:
             G_val = None
 
         # and bcast to all processes
-        G_val = self.mpi_comm.bcast(G_val, root=0)
+        G_val = self.mpi_comm_brigadier.bcast(G_val, root=0)
+        # self._logger.debug(f"We solved {k:.2f} {w:.3f}")
+        # return np.array(G_val).round(decimals=3), {self.mpi_brigade: self.mpi_rank}
 
         return np.array(G_val), {
             'time': [dt],
@@ -199,176 +203,82 @@ class ParallelSparseExecutorMUMPS(BaseExecutorPETSC):
             'manual_tolerance_excess': [self.tol_excess]
         }
 
-
-class ParallelSparseExecutorGMRES(BaseExecutorPETSC):
-    """A class to connect to PETSc powerful parallel sparse solver tools, to
-    calculate G(k,w) in parallel, using an iterative solver GMRES.
-    This inherits the matrix construction strategies of the BaseExecutorPETSC
-    base class.
-
-    This is done because e.g. convergence and memory checks are often specific
-    to the particular solver used -- and so is the KSP context (i.e. solver)
-    setup."""
-
-    def check_conv(self, ksp, rtol, elapsed):
-        """This helper function checks GMRES convergence using built-in PETSc
-        error codes.
+    def spectrum(
+        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
+    ):
+        """Solves for the spectrum in parallel. Requires an initialized
+        communicator at instantiation.
 
         Parameters
         ----------
-        ksp : PETSc_KSP
-            The Krylov Subspace solution context that contains convergence
-            codes, convergence history (i.e. residuals from iterations)
-            and more.
-
-        Returns
-        -------
-        The residual check and PETSc convergence criterions are conducted
-        in place, nothing is returned.
-        """
-
-        # GMRES main convergence index
-        gmres_conv_ind = ksp.getConvergedReason()
-        if self.mpi_rank == 0:
-            if gmres_conv_ind > 0:
-                self._logger.debug(
-                    "According to PETSc diagnostics, call to GMRES was "
-                    f"successful. It exited with code {gmres_conv_ind}."
-                    "See the PETSc header in petsc/include/petscksp.h, "
-                    f"lines 518-680 for details. The calculation took "
-                    f"{elapsed:.2f} sec."
-                )
-            elif gmres_conv_ind < 0:
-                self._logger.error(
-                    "A PETSc calculation divergence was detected with error "
-                    f"code {gmres_conv_ind}. See include/petscksp.h, "
-                    "lines 518-680 for error  diagnostics. The calculation "
-                    f"took {elapsed:.2f} sec."
-                )
-
-        # now do a check using the final residual from getconvergenceHistory
-        res_hist = ksp.getConvergenceHistory()
-        its = ksp.getIterationNumber()
-        # if on head node, log the residual history for debugging
-        if self.mpi_rank == 0:
-            self._logger.debug(
-                f"Run ended after {its} iterations. "
-                f"Convergence history is \n {res_hist}."
-            )
-
-    def check_mem_use(self, factored_mat):
-        """This helper function checks PETSc sovler memory usage
-        access.
-
-        Parameters
-        ----------
-        factored_mat : PETSc_Mat
-            The factorized linear system matrix from the PETSc'
-            pre-condictioning context PC, obtained after the
-            solver has been called.
-
-        Returns
-        -------
-        The memory resuts are given to the logger, nothing is returned.
-
-        WARNING: unfortunately PETSc python wrapper does not have wrapping for
-        memory stuff.
-        """
-
-        raise NotImplementedError
-
-    def solve(self, k, w, eta, index=None, rtol=1.0e-10):
-        """Solve the sparse-represented system using PETSc's KSP context.
-        Note that this method only returns values on MPI rank = 0. All other
-        ranks will return None.
-
-        Parameters
-        ----------
-        k : float
+        k : float or array_like
             The momentum quantum number point of the calculation.
-        w : float
+        w : float or array_like
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
-        rtol : float, optional
-            PETSc's relative tolerance (the default is 1.0e-10).
+        return_G : bool
+            If True, returns the Green's function as opposed to the spectral
+            function.
+        return_meta : bool
+            If True, returns a tuple of the Green's function and the dictionary
+            containing meta information. If False, returns just the Green's
+            function (the default is False).
 
         Returns
         -------
-        np.ndarray, dict
-            The value of G and meta information, which in this case, is only
-            specifically the time elapsed to solve for this (k, w) point
-            using the PETSc KSP context.
+        np.ndarray
+            The resultant spectrum.
         """
 
-        # Function call to construct the sparse matrix into self._mat_X
-        self._assemble_matrix(k, w, eta)
+        k = float_to_list(k)
+        w = float_to_list(w)
 
-        t0 = time.time()
+        # Generate a list of tuples for the (k, w) points to calculate.
+        jobs = [(_k, _w) for _k in k for _w in w]
+        ## there are limitations: the number of jobs has to be evenly divisible by all the brigades
+        try:
+            assert (1-len(jobs) % self.brigades)
+        except AssertionError:
+            self._logger.error(f"Jobs ({len(jobs)}) cannot be equally divided"
+                            f" between brigades ({self.brigades}). Exiting.")
+            exit()
 
-        # Now construct the desired solver instance
-        ksp = PETSc.KSP().create()
+        # Chunk the jobs appropriately. Each of these lists look like the jobs
+        # list above.
+        jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
+        self._total_jobs_on_this_brigade = len(jobs_on_brigade)
 
-        # setting type of the solver to GMRES
-        ksp.setType('gmres')
+        # Get the results on this rank.
+        s = [
+            list(self.solve(_k, _w, eta, **solve_kwargs))
+            for ii, (_k, _w) in enumerate(jobs_on_brigade)
+        ]
 
-        # Define the linear system matrix and its preconditioner
-        ksp.setOperators(self._mat_X, self._mat_X)
+        # Gather the results from the sergeants to "the general" (global rank 0)
+        all_results = self.mpi_comm.gather(s, root=0)
 
-        # Set preconditioner options (see PETSc manual for details)
-        # is not required for GMRES, set by default to block Jacobi
-        # we still extract PC context for preconditioner access
-        pc = ksp.getPC()
+        ## need to get rid of duplicates, since each rank in a brigade sends
+        if self.mpi_rank == 0 and self.mpi_brigade == 0:
+            results = []
+            if self.brigade_size > 1:
+                for n in range(self.brigades):
+                    results.append(all_results[int(n*self.brigade_size)])
+            else:
+                results = all_results
 
-        # Set tolerance and remaining options from command line (if any)
-        ksp.setTolerances(rtol=rtol)
-        ksp.setFromOptions()
-        # Make a call to set up arrays for residual tracking
-        ksp.setConvergenceHistory()
+            results = [xx[ii] for xx in results for ii in range(len(xx))]
 
-        dt = time.time() - t0
-        self._logger.debug("KSP context initialized", elapsed=dt)
+            ## a copy of the results of the whole brigade
+            s = [xx[0] for xx in results]
+            meta = [xx[1] for xx in results]
+            if return_G:
+                res = np.array(s)
+            else:
+                res = -np.array(s).imag / np.pi
 
-        # Call the solve method
-        t0 = time.time()
-        ksp.solve(self._vector_b, self._vector_x)
-        dt = time.time() - t0
-
-        ## export some data from the solver and return on debug
-        # solver_info = ksp.view()
-        # if self.mpi_rank == 0:
-        #     self._logger.debug(solver_info)
-
-        # assemble the solution vector
-        self._vector_x.assemblyBegin()
-        self._vector_x.assemblyEnd()
-
-        self.mpi_comm.barrier()
-
-        # Implement manual residual check, as well as check PETSc output code
-        # in there we call for convergence history
-        self.check_conv_manual(pc, rtol=rtol)
-        self.check_conv(ksp, rtol=rtol, elapsed=dt)
-
-        # Now check memory usage
-        # memory check not wrapped in petsc4py for GMRES
-        # self.check_mem_use(factored_mat)
-
-        self.mpi_comm.barrier()
-
-        # The last rank has the end of the solution vector, which contains G
-        # G is the last entry aka "the last equation" of the matrix
-        # use a gather operation, called by all ranks, to construct the full
-
-        # vector
-        G = self.mpi_comm.gather(self._vector_x.getArray(), root=0)
-
-        if self.mpi_rank == 0:
-
-            # Now select only the final process list and final value
-            G = G[self.mpi_world_size - 1][-1]
-            A = -G.imag / np.pi
-            if A < 0.0:
-                self._log_spectral_error(k, w)
-            self._log_current_status(k, w, A, index, time.time() - t0)
-            return np.array(G), {'time': [dt]}
+            # Ensure the returned array has the proper shape
+            res = res.reshape(len(k), len(w))
+            if return_meta:
+                return (res, meta)
+            return res
