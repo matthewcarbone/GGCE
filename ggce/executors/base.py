@@ -4,8 +4,9 @@ import numpy as np
 
 from ggce.engine.system import System
 from ggce.utils.logger import Logger
-from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
-    float_to_list
+from ggce.utils.utils import peak_location_and_weight, \
+                        peak_location_and_weight_wstep, chunk_jobs, \
+                                                            float_to_list
 
 
 class BaseExecutor:
@@ -195,7 +196,7 @@ class BaseExecutor:
 
     def dispersion(
         self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0,
-        next_k_offset_factor=1.5, nmax=1000, **solve_kwargs
+        next_k_offset_factor=1.5, nmax=1000, peak_routine = "change_eta", **solve_kwargs
     ):
         """Computes the dispersion of the peak closest to the provided w0 by
         assuming that the peak is Lorentzian in nature. This allows us to
@@ -292,13 +293,18 @@ class BaseExecutor:
                     w_val += eta / eta_step_div
                     continue
 
-                # This is a maximum, run the calculation again using eta prime
-                eta_prime = eta / eta_div
-                G2, _ = self.solve(k_val, w_val, eta_prime, **solve_kwargs)
-                A2 = -G2.imag / np.pi
-                loc, weight = peak_location_and_weight(
-                    w_val, A, A2, eta, eta_prime
-                )
+                # This is a maximum, run the calculation again one dw step prior to this
+                if peak_routine == "change_eta":
+                    eta_prime = eta / eta_step_div
+                    G2, _ = self.solve(k_val, w_val, eta_prime, **solve_kwargs)
+                    A2 = -G2.imag / np.pi
+                    loc, weight = peak_location_and_weight(w_val, A, A2, eta, eta_prime)
+                elif peak_routine == "change_w":
+                    w_val_prime = w_val - 2.*eta / eta_step_div
+                    G2, _ = self.solve(k_val, w_val_prime, eta, **solve_kwargs)
+                    A2 = -G2.imag / np.pi
+                    loc, weight = peak_location_and_weight_wstep(w_val, \
+                                                    w_val_prime, A, A2, eta)
                 results[ii]['ground_state'] = loc
                 results[ii]['weight'] = weight
                 w_val = loc - eta * next_k_offset_factor
