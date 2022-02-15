@@ -143,6 +143,26 @@ def peak_location_and_weight(w, A, Aprime, eta, eta_prime):
     area = np.pi * A * ((w - loc)**2 + eta**2) / eta
     return loc, area
 
+def peak_location_and_weight_wstep(w, wprime, A, Aprime, eta):
+    """Takes two points (w, A) and (wprime, Aprime) from the same eta
+    calculation and assumes they lie on the same Lorentzian of the form
+    f(x) = C (eta/pi) / ( eta**2 + (x-loc)**2 ). Solves the equation to fit
+    a Lorentzian through those two points by determining C, x0."""
+
+    firstterm = A*Aprime * (w-wprime)**2 / (A-Aprime)**2
+    secondterm = eta**2
+    loc1 = (w*A - wprime*Aprime) / (A - Aprime) + np.sqrt( firstterm - secondterm )
+    loc2 = (w*A - wprime*Aprime) / (A - Aprime) - np.sqrt( firstterm - secondterm )
+    area1 = np.pi * A * ((w - loc1)**2 + eta**2) / eta
+    area2 = np.pi * A * ((w - loc2)**2 + eta**2) / eta
+    if area1 > 1.:
+        return loc2, area2
+    else:
+        return loc1, area1
+
+def lorentzian(w, loc, scale, eta):
+    return scale * (eta/np.pi) / ( (w-loc)**2 + eta**2 )
+
 def setup_directory(dir):
     """Helps set up output directory for computations.
         If directory already exists, overwrites it."""

@@ -1,6 +1,5 @@
 *.pyc
 job_data/
-scripts/
 results/
 results2/
 *.sh
