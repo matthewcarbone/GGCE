@@ -24,19 +24,22 @@ class BaseExecutorPETSC(SerialSparseExecutor):
 
     def __init__(
         self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None, brigade_size=1, log_every=1
+        log_file=None, mpi_comm=None, brigade_size="default", log_every=1
     ):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
         self.mpi_comm = None
         self.mpi_rank = 0
         self.mpi_brigade = 1
-        self.brigade_size = brigade_size
         self.mpi_world_size = 1
         if mpi_comm is not None:
             self.mpi_comm = mpi_comm
             self.mpi_rank = mpi_comm.Get_rank()
             self.mpi_world_size = mpi_comm.Get_size()
+            if brigade_size == "default":
+                self.brigade_size = self.mpi_world_size
+            else:
+                self.brigade_size = brigade_size
             self.brigades = int( self.mpi_world_size / self.brigade_size )
             self.mpi_brigade = int( self.mpi_rank / self.brigade_size )
         self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
