@@ -7,6 +7,7 @@ import uuid
 import time
 import os
 import shutil
+from scipy.optimize import curve_fit
 
 
 class Buffer:
@@ -159,6 +160,15 @@ def peak_location_and_weight_wstep(w, wprime, A, Aprime, eta):
         return loc2, area2
     else:
         return loc1, area1
+
+def peak_location_and_weight_scipy(wrange, Arange, eta):
+    """Takes a bunch of points lying on the Lorentzian and does scipy.minimize
+       fit of a Lorentzian function to it. Outputs fit parameters and error."""
+
+    fitparams, error = curve_fit(lorentzian, wrange, Arange, \
+                                                p0 = [wrange[-1], 1, eta] )
+
+    return fitparams, error
 
 def lorentzian(w, loc, scale, eta):
     return scale * (eta/np.pi) / ( (w-loc)**2 + eta**2 )
