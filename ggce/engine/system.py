@@ -19,7 +19,7 @@ BYTES_TO_MB = 1048576
 
 def config_space_gen(length, total_sum):
     """Generator for yielding all possible combinations of integers of
-    length `length` that sum to total_sum. Not that cases such as
+    length `length` that sum to total_sum. Note that cases such as
     length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
     out, since these do not correspond to valid f-functions.
 
@@ -94,7 +94,7 @@ class ConfigurationSpaceGenerator:
         if not np.all(config.sum(axis=1, keepdims=True) <= self.N_2d):
             return False
 
-        # Finally, check that each boson type satisifes its extent rule
+        # Finally, check that each boson type satisfies its extent rule
         if any([
             self.M[ii] < self.extent_of_1d(c1d)
             for ii, c1d in enumerate(config)
@@ -225,7 +225,7 @@ class System:
 
         # Manually append the Green's function (do the same as above except)
         # for this special case. Note that no matter what this is always
-        # neded, but the form of the GreenEquation EOM will differ depending
+        # needed, but the form of the GreenEquation EOM will differ depending
         # on the system type.
         eq = GreenEquation(system_params=self.system_params)
         eq.initialize_index_term()

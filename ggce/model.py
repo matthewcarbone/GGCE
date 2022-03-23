@@ -301,7 +301,7 @@ class Model:
         ----------
         coupling_type : {[type]}
             [description]
-        Omega : {[type]}
+        Omega : {[type]} 
             [description]
         M : {[type]}
             [description]
