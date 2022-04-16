@@ -47,7 +47,7 @@ DEBUG_FMT_WITHOUT_MPI_RANK = (
 
 
 def configure_loggers(
-    stdout_filter=["DEBUG", "INFO", "SUCCESS"],
+    stdout_filter=["INFO", "SUCCESS"],
     stdout_debug_fmt=DEBUG_FMT_WITH_MPI_RANK,
     stdout_fmt=DEBUG_FMT_WITHOUT_MPI_RANK,
     stderr_filter=["WARNING", "ERROR", "CRITICAL"],
@@ -104,6 +104,12 @@ def configure_loggers(
         logger.add(lambda _: sys.exit(1), level="CRITICAL")
     else:
         logger.add(lambda _: COMM.MPI_Abort(), level="CRITICAL")
+
+
+def DEBUG():
+    """Quick helper to enable DEBUG mode."""
+
+    configure_loggers(stdout_filter=["DEBUG", "INFO", "SUCCESS"])
 
 
 configure_loggers()
