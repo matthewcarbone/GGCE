@@ -72,3 +72,9 @@ For a Windows installation, we recommend using the Windows Subsystem for Linux
 6. Once the flags are passed, install PETSc and its Python binding petsc4py by `pip install petsc petsc4py`.
 
 After these steps, PETSc and the ParallelSparseExecutor class are ready to be used.
+
+
+# Acknowledgements
+
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research, Department of Energy Computational Science Graduate Fellowship under Award Number DE-FG02-97ER25308.
+
