@@ -14,7 +14,7 @@ def model_coupling_map(coupling_type, t, Omega, lam):
     ----------
     coupling_type : str
         The desired coupling type. Can be Holstein, Peierls, BondPeierls, or
-        EdwardsFermionBoson
+        EdwardsFermionBoson.
     t : float
         The hopping strength.
     Omega : float
@@ -151,7 +151,7 @@ class SingleTerm:
         phonon_index,
         phonon_frequency,
     ):
-        """Initializer for the SingleTerm class."""
+        """Initializes the SingleTerm class."""
 
         self.coupling_type = coupling_type
         self.psi = psi
@@ -502,27 +502,25 @@ class Model:
 
     Attributes
     ----------
-    a : TYPE
-        Description
-    absolute_extent : TYPE
-        Description
-    hopping : float, optional
+    hamiltonian : Hamiltonian
+        The Hamiltonian object for this model.
+    hopping : float
         The nearest-neighbor hopping term (the default is 1.0).
-    lattice_constant : float, optional
+    lattice_constant : float
         The lattice constant (the default is 1.0).
-    M : TYPE
-        Description
-    max_bosons_per_site : int, optional
-        A hard core or partially hard core boson constraint: this is the
-        maximum number of boson excitations per site on the lattice (the
-        default is None, indicating no restriction).
-    N : TYPE
-        Description
-    n_boson_types : TYPE
-        Description
-    t : TYPE
-        Description
-    temperature : float, optional
+    n_phonon_types : int
+        A counter which keeps track of the number of phonon types that are
+        contained in the model
+    phonon_absolute_extent : int
+        The absolute extent value. Controls how much the clouds can overlap.
+    phonon_extent : list of int
+        The list of phonon extents. Commonly referred to as `M`.
+    phonon_max_per_site : int
+        Controls the hard-boson constraint. Essentially restrains the number
+        of phonons that can be on each site. If None, there is no restriction.
+    phonon_number : list of int
+        The list of max phonons. Commonly referred to as `N`.
+    temperature : float
         The temperature for a TFD simulation, if requested (the default is
         0.0).
     """
@@ -589,13 +587,46 @@ class Model:
     def n_phonon_types(self):
         return self._n_phonon_types
 
+    @n_phonon_types.setter
+    def n_phonon_types(self, x):
+        assert isinstance(x, int)
+        self._n_phonon_types = x
+
     @property
     def phonon_max_per_site(self):
         return self._phonon_max_per_site
 
+    @phonon_max_per_site.setter
+    def phonon_max_per_site(self, x):
+        assert isinstance(x, int)
+        self._phonon_max_per_site = x
+
     @property
     def hamiltonian(self):
         return self._hamiltonian
+
+    @hamiltonian.setter
+    def hamiltonian(self, x):
+        assert isinstance(x, Hamiltonian)
+        self._hamiltonian = x
+
+    @property
+    def phonon_extent(self):
+        return self._phonon_extent
+
+    @phonon_extent.setter
+    def phonon_extent(self, x):
+        assert x == []
+        self._phonon_extent = []
+
+    @property
+    def phonon_number(self):
+        return self._phonon_number
+
+    @phonon_number.setter
+    def phonon_number(self, x):
+        assert x == []
+        self._phonon_number = []
 
     def visualize(self):
         """Visualize the model you've initialized. Note, some values are
@@ -625,16 +656,16 @@ class Model:
         self.hopping = hopping
         self.lattice_constant = lattice_constant
         self.temperature = temperature
-        self._hamiltonian = Hamiltonian()
+        self.hamiltonian = Hamiltonian()
 
         # Parameters corresponding to the phonons
-        self._phonon_absolute_extent = None
-        self._phonon_max_per_site = None
-        self._phonon_extent = []  # M
-        self._phonon_number = []  # N
+        self.phonon_absolute_extent = None
+        self.phonon_max_per_site = None
+        self.phonon_extent = []  # M
+        self.phonon_number = []  # N
 
         # Current phonon counter
-        self._n_phonon_types = 0
+        self.n_phonon_types = 0
 
     def _get_TFD_coupling_prefactors(self, Omega):
         """Gets the TFD coupling prefactors.
