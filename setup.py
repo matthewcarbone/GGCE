@@ -48,16 +48,13 @@ setup(
     name="ggce",
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
-    description="Simple utility for controlling linux jobs and handling error tracking in scientific code.",
+    description="The Generalized Green's Function Cluster Expansion software",
     long_description=readme,
-    author="Brookhaven National Laboratory",
-    author_email="mcarbone@bnl.gov",
+    author="Matthew R. Carbone",
+    author_email="x94carbone@gmail.com",
     url="https://github.com/x94carbone/ggce",
     python_requires=">={}".format(".".join(str(n) for n in min_version)),
-    packages=find_packages(exclude=["docs", "tests"]),
-    entry_points={
-        "console_scripts": ["aj = ggce.entrypoint:entrypoint"],
-    },
+    packages=find_packages(exclude=["docs", "ggce/_tests"]),
     include_package_data=True,
     package_data={
         "ggce": [
