@@ -1,6 +1,8 @@
 import numpy as np
 import math
 
+from monty.json import MSONable
+
 from ggce import logger
 
 
@@ -45,7 +47,7 @@ def model_coupling_map(coupling_type, t, Omega, lam):
         raise RuntimeError
 
 
-class SingleTerm:
+class SingleTerm(MSONable):
     """Contains the shift indexes, dagger status, coupling strength and boson
     type of a single term. Particularly, this single term corresponds to
     a single element of the sum in equation (10) in this
@@ -172,7 +174,7 @@ class SingleTerm:
         return self.__str__()
 
 
-class Hamiltonian:
+class Hamiltonian(MSONable):
     """Container for all relevant parameters for defining the Hamiltonian.
     Current available are `Holstein`, `EdwardsFermionBoson`, `BondPeierls`,
     and `Peierls`."""
@@ -182,6 +184,10 @@ class Hamiltonian:
     # Old d is now dag
     # Old g is now sign; g must be provided elsewhere
     # Same as the PRB!
+
+    @property
+    def terms(self):
+        return self._terms
 
     def get_dict_rep(self):
         """Provides a dictionary representation of the Hamiltonian. Packages
@@ -387,10 +393,10 @@ class Hamiltonian:
 
         raise RuntimeError(f"Unknown coupling type {coupling_type}")
 
-    def __init__(self):
+    def __init__(self, terms=[]):
         """Sets the list of terms as an empty list"""
 
-        self._terms = []
+        self._terms = terms
 
     def _add_(
         self,
@@ -496,7 +502,7 @@ class Hamiltonian:
         print(self.__str__())
 
 
-class Model:
+class Model(MSONable):
     """The Model object. Contains all information to be fed to the System
     class for solving for the Green's function.
 
@@ -578,8 +584,8 @@ class Model:
     @phonon_absolute_extent.setter
     def phonon_absolute_extent(self, x):
         L = len(self._phonon_extent)
-        if L < 2:
-            logger.error(f"{L} < 2 unique phonons, absolute extent not set")
+        if L > 1:
+            logger.error(f"{L} > 2 unique phonons, absolute extent not set")
             return
         self._phonon_absolute_extent = x
 
@@ -598,7 +604,8 @@ class Model:
 
     @phonon_max_per_site.setter
     def phonon_max_per_site(self, x):
-        assert isinstance(x, int)
+        if x is not None:
+            assert isinstance(x, int)
         self._phonon_max_per_site = x
 
     @property
@@ -647,25 +654,27 @@ class Model:
             for term in term_list:
                 print(f"    {term}")
 
-    def __init__(self, hopping=1.0, lattice_constant=1.0, temperature=0.0):
+    def __init__(
+        self,
+        hopping=1.0,
+        lattice_constant=1.0,
+        temperature=0.0,
+        hamiltonian=Hamiltonian(),
+        phonon_max_per_site=None,
+        phonon_extent=[],
+        phonon_number=[],
+        phonon_absolute_extent=None,
+        n_phonon_types=0,
+    ):
 
         args = {key: value for key, value in locals().items() if key != "self"}
         logger.debug(f"Model initialized {args}")
 
-        # Core parameters
-        self.hopping = hopping
-        self.lattice_constant = lattice_constant
-        self.temperature = temperature
-        self.hamiltonian = Hamiltonian()
-
-        # Parameters corresponding to the phonons
-        self.phonon_absolute_extent = None
-        self.phonon_max_per_site = None
-        self.phonon_extent = []  # M
-        self.phonon_number = []  # N
-
-        # Current phonon counter
-        self.n_phonon_types = 0
+        # Easy hack for setting all input variables as attributes.
+        for key, value in locals().items():
+            if key == "self":
+                continue
+            setattr(self, key, value)
 
     def _get_TFD_coupling_prefactors(self, Omega):
         """Gets the TFD coupling prefactors.

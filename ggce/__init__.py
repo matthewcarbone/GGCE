@@ -105,6 +105,8 @@ def configure_loggers(
     else:
         logger.add(lambda _: COMM.MPI_Abort(), level="CRITICAL")
 
+    logger.debug(f"Initializing GGCE v{__version__}")
+
 
 def DEBUG():
     """Quick helper to enable DEBUG mode."""
