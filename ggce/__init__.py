@@ -57,20 +57,26 @@ def configure_loggers(
     """Configures the loguru loggers. Note that the loggers are initialized
     using the default values by default.
 
+    .. important::
+
+        logger.critical _always_ terminates the program, either through
+        `COMM.MPI_Abort()` if `run_as_mpi` is True, or `sys.exit(1)` otherwise.
+
     Parameters
     ----------
-    stdout_filter : list, optional
-        Description
-    stdout_debug_fmt : TYPE, optional
-        Description
-    stdout_fmt : TYPE, optional
-        Description
+    stdout_filter : list of str, optional
+        List of logging levels to include in the standard output stream.
+    stdout_debug_fmt : str, optional
+        Loguru format for the special debug stream.
+    stdout_fmt : str, optional
+        Loguru format for the rest of the standard output stream.
     stderr_filter : list, optional
-        Description
-    stderr_fmt : TYPE, optional
-        Description
+        List of logging levels to include in the standard error stream.
+    stderr_fmt : str, optional
+        Loguru format for the rest of the standard error stream.
     run_as_mpi : bool, optional
-        Description
+        If True, critical errors will run COMM.MPI_Abort(). Otherwise,
+        sys.exit(1) is called.
     """
 
     logger.remove(None)  # Remove ALL handlers
