@@ -34,13 +34,13 @@ def model_coupling_map(coupling_type, t, Omega, lam):
     """
 
     if coupling_type == "Holstein":
-        return math.sqrt(2.0 * t * Omega * lam)
+        return math.sqrt(2.0 * t * np.abs(Omega) * lam)
     elif coupling_type == "EdwardsFermionBoson":
         return lam
     elif coupling_type == "Peierls":
-        return math.sqrt(t * Omega * lam / 2.0)
+        return math.sqrt(t * np.abs(Omega) * lam / 2.0)
     elif coupling_type == "BondPeierls":
-        return math.sqrt(t * Omega * lam)
+        return math.sqrt(t * np.abs(Omega) * lam)
     else:
         raise RuntimeError
 
@@ -60,6 +60,9 @@ class SingleTerm:
     coupling : float
         The coupling strength of the term. Directly multiplies the operators
         in the Hamiltonian. This is g.
+    coupling_type : str
+        The origin of the term. Not used in the computations but useful to
+        have for keeping track of where these terms came from.
     dag : {"+", "-"}
         The "dagger status" of the term. "+" for creation operator and "-" for
         annihilation operator.
@@ -122,16 +125,35 @@ class SingleTerm:
 
     @property
     def phonon_frequency(self):
-        return self.phonon_frequency
+        return self._phonon_frequency
 
     @phonon_frequency.setter
     def phonon_frequency(self, x):
         assert isinstance(x, (int, float))
         self._phonon_frequency = x
 
-    def __init__(self, psi, phi, dag, coupling, phonon_index, phonon_frequency):
+    @property
+    def coupling_type(self):
+        return self._coupling_type
+
+    @coupling_type.setter
+    def coupling_type(self, x):
+        assert isinstance(x, str)
+        self._coupling_type = x
+
+    def __init__(
+        self,
+        coupling_type,
+        psi,
+        phi,
+        dag,
+        coupling,
+        phonon_index,
+        phonon_frequency,
+    ):
         """Initializer for the SingleTerm class."""
 
+        self.coupling_type = coupling_type
         self.psi = psi
         self.phi = phi
         self.dag = dag
@@ -141,8 +163,9 @@ class SingleTerm:
 
     def __str__(self):
         return (
-            f"{self.coupling:.02f} x ({self.psi} {self.phi} {self.dag}) "
-            f"| {self.phonon_index}"
+            f"{self.coupling_type}: {self.coupling:.02f} x ({self.psi} "
+            f"{self.phi} {self.dag}) | {self.phonon_index} "
+            f"({self.phonon_frequency:.02f})"
         )
 
     def __repr__(self):
@@ -160,6 +183,23 @@ class Hamiltonian:
     # Old g is now sign; g must be provided elsewhere
     # Same as the PRB!
 
+    def get_dict_rep(self):
+        """Provides a dictionary representation of the Hamiltonian. Packages
+        terms by the phonon type.
+
+        Returns
+        -------
+        dict
+        """
+
+        d = dict()
+        for term in self._terms:
+            try:
+                d[term.phonon_index].append(term)
+            except KeyError:
+                d[term.phonon_index] = [term]
+        return d
+
     @staticmethod
     def _get_SingleTerm_objects(
         coupling_type, coupling_strength, phonon_index, phonon_frequency
@@ -170,6 +210,7 @@ class Hamiltonian:
         if coupling_type == "Holstein":
             return [
                 SingleTerm(
+                    coupling_type,
                     0,
                     0,
                     "+",
@@ -178,6 +219,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     0,
                     0,
                     "-",
@@ -190,9 +232,16 @@ class Hamiltonian:
         elif coupling_type == "EdwardsFermionBoson":
             return [
                 SingleTerm(
-                    1, 1, "+", coupling_strength, phonon_index, phonon_frequency
+                    coupling_type,
+                    1,
+                    1,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     -1,
                     "+",
@@ -201,9 +250,16 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
-                    1, 0, "-", coupling_strength, phonon_index, phonon_frequency
+                    coupling_type,
+                    1,
+                    0,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     0,
                     "-",
@@ -216,6 +272,7 @@ class Hamiltonian:
         elif coupling_type == "BondPeierls":
             return [
                 SingleTerm(
+                    coupling_type,
                     1,
                     0.5,
                     "+",
@@ -224,6 +281,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     1,
                     0.5,
                     "-",
@@ -232,6 +290,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     -0.5,
                     "+",
@@ -240,6 +299,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     -0.5,
                     "-",
@@ -252,12 +312,25 @@ class Hamiltonian:
         elif coupling_type == "Peierls":
             return [
                 SingleTerm(
-                    1, 0, "+", coupling_strength, phonon_index, phonon_frequency
+                    coupling_type,
+                    1,
+                    0,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
                 ),
                 SingleTerm(
-                    1, 0, "-", coupling_strength, phonon_index, phonon_frequency
+                    coupling_type,
+                    1,
+                    0,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     1,
                     1,
                     "+",
@@ -266,6 +339,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     1,
                     1,
                     "-",
@@ -274,6 +348,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     -1,
                     "+",
@@ -282,6 +357,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     -1,
                     "-",
@@ -290,6 +366,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     0,
                     "+",
@@ -298,6 +375,7 @@ class Hamiltonian:
                     phonon_frequency,
                 ),
                 SingleTerm(
+                    coupling_type,
                     -1,
                     0,
                     "-",
@@ -495,6 +573,8 @@ class Model:
 
     @property
     def phonon_absolute_extent(self):
+        if self._phonon_absolute_extent is None:
+            return np.max(self._phonon_extent).item()
         return self._phonon_absolute_extent
 
     @phonon_absolute_extent.setter
@@ -503,33 +583,38 @@ class Model:
         if L < 2:
             logger.error(f"{L} < 2 unique phonons, absolute extent not set")
             return
-        if x is None:
-            x = np.max(self._phonon_extent).item()
-            logger.warning(f"Absolute extent set to {x} == max(M) by default")
         self._phonon_absolute_extent = x
 
     @property
     def n_phonon_types(self):
         return self._n_phonon_types
 
-    def visualize(self, silent=False):
-        """Visualize the model you've initialized."""
+    @property
+    def phonon_max_per_site(self):
+        return self._phonon_max_per_site
 
-        print(f"Model parameters initialized: {self._parameters_set}")
-        print("Model globals:")
-        print(f"\tt={self.t}, a={self.a}, T={self.temperature},", end=" ")
-        print(f"dim={self.dimension},", end=" ")
-        print(f"hard-core={self.max_bosons_per_site},", end=" ")
-        print(f"absolute-extent={self.absolute_extent}")
-        print("Model components:")
-        for ii, model in enumerate(self.models_vis):
-            model_type = model[0]
-            M = model[1]
-            N = model[2]
-            Omega = model[3]
-            g = model[4]
-            print(f"\t({ii}) {model_type}")
-            print(f"\t\tM={M}, N={N}, O={Omega:.05f}, g={g:.05f}")
+    @property
+    def hamiltonian(self):
+        return self._hamiltonian
+
+    def visualize(self):
+        """Visualize the model you've initialized. Note, some values are
+        rounded."""
+
+        print("Hamiltonian parameters:")
+        print(f"  Hopping (t)          = {self.hopping:.02f}")
+        print(f"  Lattice constant (a) = {self.lattice_constant:.02f}")
+        print(f"  Temperature (T)      = {self.temperature:.02f}")
+        print(f"  Max bosons per site  = {self.phonon_max_per_site}")
+        print(f"  Absolute extent      = {self.phonon_absolute_extent}")
+        print("Terms:")
+        d1 = self.hamiltonian.get_dict_rep()
+        for ii, (phonon_index, term_list) in enumerate(d1.items()):
+            M = self._phonon_extent[ii]
+            N = self._phonon_number[ii]
+            print(f"  Phonon type = {phonon_index} (M = {M}; N = {N})")
+            for term in term_list:
+                print(f"    {term}")
 
     def __init__(self, hopping=1.0, lattice_constant=1.0, temperature=0.0):
 
@@ -581,7 +666,7 @@ class Model:
         else:
             return 1.0, 0.0
 
-    def add_coupling_(
+    def add_(
         self,
         coupling_type,
         phonon_frequency,
@@ -678,7 +763,7 @@ class Model:
 
         # Add the standard term to the Hamiltonian
         if phonon_index_override is None:
-            phonon_index = self._phonon_index
+            phonon_index = self._n_phonon_types
         else:
             phonon_index = phonon_index_override
         self._hamiltonian.add_(
