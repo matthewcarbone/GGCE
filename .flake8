@@ -6,6 +6,8 @@ exclude =
     dist,
     versioneer.py,
     ggce/_version.py,
+    setup.cfg,
+    setup.py,
     docs/source/conf.py
 max-line-length = 80
 ignore = E203, W503  # Ignore some style 'errors' produced while formatting by 'black'
