@@ -20,7 +20,8 @@ def model_coupling_map(coupling_type, t, Omega, lam):
     t : float
         The hopping strength.
     Omega : float
-        The (Einsten) boson frequency.
+        The (Einstein) phonon frequency. Absolute value is taken, since it will
+        be negative sometimes (in the case of TFD).
     lam : float
         The dimensionless coupling.
 
