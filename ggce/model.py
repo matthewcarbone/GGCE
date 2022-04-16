@@ -1,14 +1,7 @@
-#!/usr/bin/env python3
-
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
-from collections import namedtuple
 import numpy as np
 import math
 
-from ggce.utils.logger import Logger
+from ggce import logger
 
 
 def model_coupling_map(coupling_type, t, Omega, lam):
@@ -40,102 +33,493 @@ def model_coupling_map(coupling_type, t, Omega, lam):
         If an unknown coupling type is provided.
     """
 
-    if coupling_type == 'Holstein':
+    if coupling_type == "Holstein":
         return math.sqrt(2.0 * t * Omega * lam)
-    elif coupling_type == 'EdwardsFermionBoson':
+    elif coupling_type == "EdwardsFermionBoson":
         return lam
-    elif coupling_type == 'Peierls':
+    elif coupling_type == "Peierls":
         return math.sqrt(t * Omega * lam / 2.0)
-    elif coupling_type == 'BondPeierls':
+    elif coupling_type == "BondPeierls":
         return math.sqrt(t * Omega * lam)
     else:
-        raise RuntimeError(f"Unknown coupling_type type {coupling_type}")
+        raise RuntimeError
 
 
-# Define a namedtuple which contains the shift indexes, x and y, the dagger
-# status, d, the coupling term, g, and the boson frequency and type (index)
-SingleTerm = namedtuple("SingleTerm", ["x", "y", "d", "g", "bt"])
+class SingleTerm:
+    """Contains the shift indexes, dagger status, coupling strength and boson
+    type of a single term. Particularly, this single term corresponds to
+    a single element of the sum in equation (10) in this
+    [PRB](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106),
 
-# Define another namedtuple which contains only the terms that the f-functions
-# need to calculate their prefactors, thus saving space.
-fFunctionInfo = namedtuple("fFunctionInfo", ["a", "t", "Omega"])
+    .. math::
+
+        g \\sum_i c_i^\\dagger c_{i + \\psi} b^d_{i + \\phi}
+
+    Attributes
+    ----------
+    coupling : float
+        The coupling strength of the term. Directly multiplies the operators
+        in the Hamiltonian. This is g.
+    dag : {"+", "-"}
+        The "dagger status" of the term. "+" for creation operator and "-" for
+        annihilation operator.
+    phi : int or float
+        The shift term on :math:`b^d` above.
+    phonon_frequency : float
+        The frequency of the phonon provided. Note: this can be negative in the
+        TFD formalism.
+    phonon_index : int
+        The index of the phonon provided.
+    psi : int or float
+        The shift term on :math:`c` above.
+    """
+
+    @property
+    def psi(self):
+        return self._psi
+
+    @psi.setter
+    def psi(self, x):
+        assert isinstance(x, (float, int))
+        self._psi = x
+
+    @property
+    def phi(self):
+        return self._phi
+
+    @phi.setter
+    def phi(self, x):
+        assert isinstance(x, (float, int))
+        self._phi = x
+
+    @property
+    def dag(self):
+        return self._dag
+
+    @dag.setter
+    def dag(self, x):
+        assert x in ["+", "-"]
+        self._dag = x
+
+    @property
+    def coupling(self):
+        return self._coupling
+
+    @coupling.setter
+    def coupling(self, x):
+        assert isinstance(x, (int, float))
+        self._coupling = x
+
+    @property
+    def phonon_index(self):
+        return self._phonon_index
+
+    @phonon_index.setter
+    def phonon_index(self, x):
+        assert isinstance(x, int)
+        assert x > -1
+        self._phonon_index = x
+
+    @property
+    def phonon_frequency(self):
+        return self.phonon_frequency
+
+    @phonon_frequency.setter
+    def phonon_frequency(self, x):
+        assert isinstance(x, (int, float))
+        self._phonon_frequency = x
+
+    def __init__(self, psi, phi, dag, coupling, phonon_index, phonon_frequency):
+        """Initializer for the SingleTerm class."""
+
+        self.psi = psi
+        self.phi = phi
+        self.dag = dag
+        self.coupling = coupling
+        self.phonon_index = phonon_index
+        self.phonon_frequency = phonon_frequency
+
+    def __str__(self):
+        return (
+            f"{self.coupling:.02f} x ({self.psi} {self.phi} {self.dag}) "
+            f"| {self.phonon_index}"
+        )
+
+    def __repr__(self):
+        return self.__str__()
 
 
-class DefaultHamiltonians:
+class Hamiltonian:
+    """Container for all relevant parameters for defining the Hamiltonian.
+    Current available are `Holstein`, `EdwardsFermionBoson`, `BondPeierls`,
+    and `Peierls`."""
 
-    ALLOWED_TYPES = [
-        'Holstein', 'EdwardsFermionBoson', 'Peierls', 'BondPeierls'
-    ]
+    # Old x is now psi
+    # Old y is now phi
+    # Old d is now dag
+    # Old g is now sign; g must be provided elsewhere
+    # Same as the PRB!
 
-    def Holstein(g, bt):
-        return [
-            SingleTerm(x=0, y=0, d='+', g=-g, bt=bt),
-            SingleTerm(x=0, y=0, d='-', g=-g, bt=bt)
-        ]
+    @staticmethod
+    def _get_SingleTerm_objects(
+        coupling_type, coupling_strength, phonon_index, phonon_frequency
+    ):
+        """Gets the SingleTerm objects corresponding to some coupling_type,
+        coupling strength and phonon_index."""
 
-    def EdwardsFermionBoson(g, bt):
-        return [
-            SingleTerm(x=1, y=1, d='+', g=g, bt=bt),
-            SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
-            SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
-            SingleTerm(x=-1, y=0, d='-', g=g, bt=bt)
-        ]
+        if coupling_type == "Holstein":
+            return [
+                SingleTerm(
+                    0,
+                    0,
+                    "+",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    0,
+                    0,
+                    "-",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+            ]
 
-    def BondPeierls(g, bt):
-        return [
-            SingleTerm(x=1, y=0.5, d='+', g=g, bt=bt),
-            SingleTerm(x=1, y=0.5, d='-', g=g, bt=bt),
-            SingleTerm(x=-1, y=-0.5, d='+', g=g, bt=bt),
-            SingleTerm(x=-1, y=-0.5, d='-', g=g, bt=bt)
-        ]
+        elif coupling_type == "EdwardsFermionBoson":
+            return [
+                SingleTerm(
+                    1, 1, "+", coupling_strength, phonon_index, phonon_frequency
+                ),
+                SingleTerm(
+                    -1,
+                    -1,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    1, 0, "-", coupling_strength, phonon_index, phonon_frequency
+                ),
+                SingleTerm(
+                    -1,
+                    0,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+            ]
 
-    def Peierls(g, bt):
-        return [
-            SingleTerm(x=1, y=0, d='+', g=g, bt=bt),
-            SingleTerm(x=1, y=0, d='-', g=g, bt=bt),
-            SingleTerm(x=1, y=1, d='+', g=-g, bt=bt),
-            SingleTerm(x=1, y=1, d='-', g=-g, bt=bt),
-            SingleTerm(x=-1, y=-1, d='+', g=g, bt=bt),
-            SingleTerm(x=-1, y=-1, d='-', g=g, bt=bt),
-            SingleTerm(x=-1, y=0, d='+', g=-g, bt=bt),
-            SingleTerm(x=-1, y=0, d='-', g=-g, bt=bt)
-        ]
+        elif coupling_type == "BondPeierls":
+            return [
+                SingleTerm(
+                    1,
+                    0.5,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    1,
+                    0.5,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    -0.5,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    -0.5,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+            ]
+
+        elif coupling_type == "Peierls":
+            return [
+                SingleTerm(
+                    1, 0, "+", coupling_strength, phonon_index, phonon_frequency
+                ),
+                SingleTerm(
+                    1, 0, "-", coupling_strength, phonon_index, phonon_frequency
+                ),
+                SingleTerm(
+                    1,
+                    1,
+                    "+",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    1,
+                    1,
+                    "-",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    -1,
+                    "+",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    -1,
+                    "-",
+                    coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    0,
+                    "+",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+                SingleTerm(
+                    -1,
+                    0,
+                    "-",
+                    -coupling_strength,
+                    phonon_index,
+                    phonon_frequency,
+                ),
+            ]
+
+        raise RuntimeError(f"Unknown coupling type {coupling_type}")
+
+    def __init__(self):
+        """Sets the list of terms as an empty list"""
+
+        self._terms = []
+
+    def _add_(
+        self,
+        hopping,
+        coupling_type,
+        phonon_index,
+        phonon_frequency,
+        coupling_strength=None,
+        dimensionless_coupling_strength=None,
+        coupling_multiplier=1.0,
+    ):
+        """Helper method for adding a term to the attribute. See `add_` for
+        more details."""
+
+        c1 = coupling_strength is not None
+        c2 = dimensionless_coupling_strength is not None
+        assert c1 ^ c2  # XOR -- this should be taken care of outside this func
+
+        if c2:
+            try:
+                g = model_coupling_map(
+                    coupling_type,
+                    hopping,
+                    phonon_frequency,
+                    dimensionless_coupling_strength,
+                )
+            except RuntimeError:
+                logger.error(f"Unknown coupling type {coupling_type}")
+                return
+        else:
+            g = coupling_strength
+        assert g is not None
+
+        try:
+            terms = Hamiltonian._get_SingleTerm_objects(
+                coupling_type,
+                g * coupling_multiplier,
+                phonon_index,
+                phonon_frequency,
+            )
+        except RuntimeError:
+            logger.error(f"Unknown coupling type {coupling_type}")
+            return
+
+        self._terms.extend(terms)
+
+    def add_(
+        self,
+        hopping,
+        coupling_type,
+        phonon_index,
+        phonon_frequency,
+        coupling_strength=None,
+        dimensionless_coupling_strength=None,
+        coupling_multiplier=1.0,
+    ):
+        """Adds a set of terms to the list of terms, corresponding to the
+        provided coupling type, strength and index.
+
+        Parameters
+        ----------
+        hopping : float
+            The hopping strength :math:`t`.
+        coupling_type : str
+            The type of coupling to add to the Hamiltonian.
+        phonon_index : int
+            The index of the phonon to register.
+        phonon_frequency : float
+            The Einstein phonon frequency corresponding to the phonon creation
+            and annihilation operators. Traditionally denoted :math:`\\Omega`.
+        coupling_strength : float
+            The strength of the coupling to add. This is g. Default is None.
+            If None, requires `dimensionless_coupling_strength` to be set.
+        dimensionless_coupling_strength : float
+            The dimensionless coupling strength, which is a function of the
+            hopping, and phonon frequency, as well as the type of model.
+            Default is None. If None, requires `coupling_strength` to be set.
+        coupling_multiplier : float, optional
+            Extra term which will multiply the coupling. This could be a
+            prefactor from e.g. the TFD formalism. Default is 1.0
+        """
+
+        args = {key: value for key, value in locals().items() if key != "self"}
+        self._add_(
+            hopping,
+            coupling_type,
+            phonon_index,
+            phonon_frequency,
+            coupling_strength,
+            dimensionless_coupling_strength,
+            coupling_multiplier,
+        )
+        logger.debug(f"Added {args}")
+
+    def __str__(self):
+        xx = "\n".join([str(xx) for xx in self._terms])
+        return xx.replace(r"\n", "\n")
+
+    def __repr__(self):
+        return self.__str__()
+
+    def visualize(self):
+        print(self.__str__())
 
 
 class Model:
+    """The Model object. Contains all information to be fed to the System
+    class for solving for the Green's function.
 
-    def __init__(
-        self, name="model", default_console_logging_level="info", log_file=None
-    ):
-        self._logger = Logger(log_file, mpi_rank=0)
-        self._logger.adjust_logging_level(default_console_logging_level)
-        self._parameters_set = False
+    Attributes
+    ----------
+    a : TYPE
+        Description
+    absolute_extent : TYPE
+        Description
+    hopping : float, optional
+        The nearest-neighbor hopping term (the default is 1.0).
+    lattice_constant : float, optional
+        The lattice constant (the default is 1.0).
+    M : TYPE
+        Description
+    max_bosons_per_site : int, optional
+        A hard core or partially hard core boson constraint: this is the
+        maximum number of boson excitations per site on the lattice (the
+        default is None, indicating no restriction).
+    N : TYPE
+        Description
+    n_boson_types : TYPE
+        Description
+    t : TYPE
+        Description
+    temperature : float, optional
+        The temperature for a TFD simulation, if requested (the default is
+        0.0).
+    """
 
-        # Index uninitialized parameters
-        self.t = None
-        self.a = None
-        self.M = []
-        self.N = []
-        self.M_tfd = []
-        self.N_tfd = []
-        self.temperature = None
-        self.dimension = None
-        self.max_bosons_per_site = None
-        self.absolute_extent = None
-        self.Omega = []
-        self.terms = []
-        self.n_boson_types = 0
-        self._boson_counter = 0
-        self.models_vis = []  # For visualizing the initialized parameters
+    @property
+    def temperature(self):
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, x):
+        if not isinstance(x, (float, int)):
+            logger.error(f"Temperature {x} must be a number")
+            return
+        if x < 0.0:
+            logger.error(f"Temperature {x} must be non-negative")
+            return
+        self._temperature = x
+
+    @property
+    def hopping(self):
+        return self._hopping
+
+    @hopping.setter
+    def hopping(self, x):
+        if not isinstance(x, (float, int)):
+            logger.error(f"Hopping {x} must be a number")
+            return
+        if x < 0.0:
+            logger.error(f"Hopping {x} must be non-negative")
+            return
+        self._hopping = x
+
+    @property
+    def lattice_constant(self):
+        return self._lattice_constant
+
+    @lattice_constant.setter
+    def lattice_constant(self, x):
+        if not isinstance(x, (float, int)):
+            logger.error(f"Lattice constant {x} must be a number")
+            return
+        if x <= 0.0:
+            logger.error(f"Lattice constant {x} must be positive")
+            return
+        if x != 1.0:
+            logger.warning(f"Lattice constant {x}!=1, which is unusual")
+        self._lattice_constant = x
+
+    @property
+    def phonon_absolute_extent(self):
+        return self._phonon_absolute_extent
+
+    @phonon_absolute_extent.setter
+    def phonon_absolute_extent(self, x):
+        L = len(self._phonon_extent)
+        if L < 2:
+            logger.error(f"{L} < 2 unique phonons, absolute extent not set")
+            return
+        if x is None:
+            x = np.max(self._phonon_extent).item()
+            logger.warning(f"Absolute extent set to {x} == max(M) by default")
+        self._phonon_absolute_extent = x
+
+    @property
+    def n_phonon_types(self):
+        return self._n_phonon_types
 
     def visualize(self, silent=False):
         """Visualize the model you've initialized."""
 
         print(f"Model parameters initialized: {self._parameters_set}")
         print("Model globals:")
-        print(f"\tt={self.t}, a={self.a}, T={self.temperature},", end=' ')
-        print(f"dim={self.dimension},", end=' ')
-        print(f"hard-core={self.max_bosons_per_site},", end=' ')
+        print(f"\tt={self.t}, a={self.a}, T={self.temperature},", end=" ")
+        print(f"dim={self.dimension},", end=" ")
+        print(f"hard-core={self.max_bosons_per_site},", end=" ")
         print(f"absolute-extent={self.absolute_extent}")
         print("Model components:")
         for ii, model in enumerate(self.models_vis):
@@ -147,10 +531,34 @@ class Model:
             print(f"\t({ii}) {model_type}")
             print(f"\t\tM={M}, N={N}, O={Omega:.05f}, g={g:.05f}")
 
-    def _get_coupling_prefactors(self, Omega):
-        """Get's the TFD coupling prefactors.
+    def __init__(self, hopping=1.0, lattice_constant=1.0, temperature=0.0):
 
-        The TFD prefactors are defined clearly in e.g. JCP 145, 224101 (2016).
+        args = {key: value for key, value in locals().items() if key != "self"}
+        logger.debug(f"Model initialized {args}")
+
+        # Core parameters
+        self.hopping = hopping
+        self.lattice_constant = lattice_constant
+        self.temperature = temperature
+        self._hamiltonian = Hamiltonian()
+
+        # Parameters corresponding to the phonons
+        self._phonon_absolute_extent = None
+        self._phonon_max_per_site = None
+        self._phonon_extent = []  # M
+        self._phonon_number = []  # N
+
+        # Current phonon counter
+        self._n_phonon_types = 0
+
+    def _get_TFD_coupling_prefactors(self, Omega):
+        """Gets the TFD coupling prefactors.
+
+        .. important::
+
+            For reference, the TFD prefactors are defined in e.g.
+            [JCP 145, 224101 (2016)](https://aip.scitation.org/doi/10.1063/
+            1.4971211).
 
         Parameters
         ----------
@@ -159,8 +567,9 @@ class Model:
 
         Returns
         -------
-        float, float
-            The modifying prefactor to the real and fictitious couplings.
+        tuple of float
+            The modifying prefactor to the real and fictitious couplings. If
+            temperature is zero, then (1, 0) is returned.
         """
 
         if self.temperature > 0.0:
@@ -170,251 +579,135 @@ class Model:
             V_tilde_prefactor = np.sinh(theta_beta)
             return V_prefactor, V_tilde_prefactor
         else:
-            return 1.0, None
+            return 1.0, 0.0
 
-    def _append_N(self, M, N, tfd=False):
-        """Appends the list self.N or self.N_tfd based on whether or not a
-        hard-core boson constraint was set.
-
-        Parameters
-        ----------
-        N : int
-        M : int
-        tfd : bool, optional
-            If True, modifies the self.N_tfd list, else modifies self.N (the
-            default is False).
-        """
-
-        if self.max_bosons_per_site is None:
-            if tfd:
-                self.N_tfd.append(N)
-            else:
-                self.N.append(N)
-        else:
-            if tfd:
-                self.N_tfd.append(self.max_bosons_per_site * M)
-            else:
-                self.N.append(self.max_bosons_per_site * M)
-
-    def get_fFunctionInfo(self):
-        return fFunctionInfo(a=self.a, t=self.t, Omega=self.Omega)
-
-    def set_parameters(
-        self, hopping=1.0, dimension=1, lattice_constant=1.0, temperature=0.0,
-        max_bosons_per_site=None
+    def add_coupling_(
+        self,
+        coupling_type,
+        phonon_frequency,
+        phonon_extent,
+        phonon_number,
+        phonon_extent_tfd=None,
+        phonon_number_tfd=None,
+        coupling_strength=None,
+        dimensionless_coupling_strength=None,
+        phonon_index_override=None,
     ):
-        """Initializes the core, model-independent parameters of the
-        simulation. Note this also sets the temperature to 0 by default. Use
-        set_temperature to actually change the temperature to something
-        non-zero.
+        """Adds an electron-phonon contribution to the model. Note that the
+        user can override the boson index manually to construct more
+        complicated models, such as single phonon-mode Hamiltonians but with
+        multiple contributions to the coupling_strength term.
 
         Parameters
         ----------
-        hopping : float, optional
-            The nearest-neighbor hopping term (the default is 1.0).
-        dimension : int, optional
-            The dimensionality of the system (the default is 1).
-        lattice_constant : float, optional
-            The lattice constant (the default is 1.0).
-        temperature : float, optional
-            The temperature for a TFD simulation, if requested (the default is
-            0.0).
-        max_bosons_per_site : int, optional
-            A hard core or partially hard core boson constraint: this is the
-            maximum number of boson excitations per site on the lattice (the
-            default is None, indicating no restriction).
+        coupling_type : str
+            The type of coupling to add to the Hamiltonian.
+        phonon_frequency : float
+            The Einstein phonon frequency corresponding to the phonon creation
+            and annihilation operators. Traditionally denoted :math:`\\Omega`.
+        phonon_extent : int
+            Positive number for the max phonon extent for this term.
+        phonon_number : int
+            Positive number for the max number of phonons for this term.
+        phonon_extent_tfd : int, optional
+            Positive number for the max phonon extent for the TFD version of
+            the term. Default is None.
+        phonon_number_tfd : int, optional
+            Positive number for the max number of phonons for the TFD version
+            of this term. Default is None.
+        coupling_strength : float, optional
+            The strength of the coupling to add. This is g. Default is None.
+            If None, requires `dimensionless_coupling_strength` to be set.
+        dimensionless_coupling_strength : float, optional
+            The dimensionless coupling strength, which is a function of the
+            hopping, and phonon frequency, as well as the type of model.
+            Default is None. If None, requires `coupling_strength` to be set.
+        phonon_index_override : int, optional
+            Overrides the internal phonon counter. Use at your own risk.
+            Note that for finite-temperature simulations, these indexes should
+            always come in pairs. In other words, if the override 0, then
+            the TFD part of the terms will be 1. Throws an error if this number
+            is odd and temperature > 0. Default is None (no override).
         """
 
-        if dimension > 1:
-            raise NotImplementedError
+        # Make a few aliases for easier writing
+        M = phonon_extent
+        N = phonon_number
+        M_tfd = phonon_extent_tfd
+        N_tfd = phonon_number_tfd
 
-        if temperature < 0.0:
-            self._logger.error(
-                "Temperature must be non-negative. Parameters remain unset."
+        if self.temperature > 0.0 and (M_tfd is None or N_tfd is None):
+            logger.error("Temperature > 0 but phonon extent or number not set")
+            return
+
+        if N < 1 or M < 1:
+            logger.error(
+                f"Provided phonon extent={M} and number={N} must be > 1"
             )
             return
 
-        if hopping < 0.0:
-            self._logger.error(
-                "Hopping strength must be positive. Parameters remain unset."
-            )
+        c1 = M_tfd is not None and M_tfd < 1
+        c2 = N_tfd is not None and N_tfd < 1
+        if c1 or c2:
+            logger.error(f"Provided phonon M_tfd={M} and N_tfd={N} must be > 1")
+            return
 
-        if lattice_constant < 0.0:
-            self._logger.error(
-                "Lattice constant must be positive. Parameters remain unset."
-            )
-
-        # List all of the parameters necessary for the run
-        self.t = hopping
-        self.dimension = dimension
-        self.temperature = temperature
-        self.a = lattice_constant
-        self.max_bosons_per_site = max_bosons_per_site
-        self._parameters_set = True
-
-    def _update_absolute_extent(self):
-
-        ae1 = np.max(self.M)
-        if self.temperature > 0.0:
-            ae1 = max(np.max(self.M_tfd), ae1)
-
-        if self.absolute_extent is None:
-            self.absolute_extent = ae1
-        else:
-            self.absolute_extent = max(ae1, self.absolute_extent)
-
-    def set_absolute_extent(self, ae):
-        """The absolute_extent defines how far away boson clouds of different
-        modes can be apart from each other. For example, two phonon modes each
-        with M = 3 and absolute_extent = 4 can occupy a total length over the
-        lattice of at most 4.
-
-        Parameters
-        ----------
-        ae : int
-        """
-
-        ae1 = np.max(self.M)
-        if self.temperature > 0.0:
-            ae1 = max(np.max(self.M_tfd), ae1)
-
-        if ae < ae1:
-            self._logger.error(
-                "Cannot set an absolute_extent less than the maximum "
-                f"specified extent for any given cloud, {ae1}."
+        c1 = coupling_strength is None
+        c2 = dimensionless_coupling_strength is None
+        if not (c1 ^ c2):  # XOR
+            logger.error(
+                "One or the other of the coupling strength or dimensionless "
+                "coupling strength should be set: XOR should be True"
             )
             return
 
-        self.absolute_extent = ae
-
-    def add_coupling(
-        self, coupling_type, Omega, M, N, M_tfd=None, N_tfd=None,
-        coupling=None, dimensionless_coupling=None, boson_index_override=None
-    ):
-        """Adds an electron-phonon contribution to the Hamiltonian.
-
-        Note that the user can override the boson index manually to construct
-        more complicated models, such as single phonon-mode Hamiltonians but
-        with multiple contributions to the coupling term.
-
-        Parameters
-        ----------
-        coupling_type : {[type]}
-            [description]
-        Omega : {[type]}
-            [description]
-        M : {[type]}
-            [description]
-        N : {[type]}
-            [description]
-        M_tfd : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        N_tfd : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        coupling : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        dimensionless_coupling : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        boson_index_override : {[type]}, optional
-            [description] (the default is None, which [default_description])
-        """
-
-        if not self._parameters_set:
-            self._logger.error(
-                "Run set_parameters(...) before adding couplings. No coupling "
-                "was added."
-            )
-            return
+        if phonon_index_override is not None and self.temperature > 0.0:
+            if phonon_index_override % 2 != 0:
+                logger.error("Phonon override is odd and temperature > 0")
+                return
 
         if self.temperature == 0 and (M_tfd is not None or N_tfd is not None):
-            self._logger.warning(
+            logger.warning(
                 "Temperature is set to zero but M_tfd or N_tfd values were "
                 "provided and will be ignored."
             )
 
-        if self.temperature > 0.0 and (M_tfd is None or N_tfd is None):
-            self._logger.error(
-                "Temperature > 0 but M_tfd or N_tfd not set. No coupling "
-                "was added."
-            )
-            return
-
-        if coupling_type not in DefaultHamiltonians.ALLOWED_TYPES:
-            self._logger.error(
-                f"Provided coupling_type={coupling_type} must be part of the "
-                "list or pre-defined couplings: "
-                f"{DefaultHamiltonians.ALLOWED_TYPES}. No coupling was added."
-            )
-            return
-
-        if M < 1 or N < 1:
-            self._logger.error(
-                "Provided M and N values for the doubled cloud  must "
-                "both be > 1. No coupling was added."
-            )
-            return
-
-        if coupling is None and dimensionless_coupling is None:
-            self._logger.error(
-                "Provided coupling and dimensionless_coupling cannot both "
-                "be unset. No coupling was added."
-            )
-            return
-
-        if coupling is not None and dimensionless_coupling is not None:
-            self._logger.error(
-                "Provided coupling and dimensionless_coupling cannot both "
-                "be set. No coupling was added."
-            )
-            return
-
-        # Get the term that multiplies the electron-phonon part of the
-        # Hamiltonian
-        g = coupling if coupling is not None else \
-            model_coupling_map(
-                coupling_type, self.t, Omega, dimensionless_coupling
-            )
-
         # Get the TFD prefactors for the terms in the Hamiltonian. Note that
         # if temperature = 0, V_tilde_pf will be None.
-        V_pf, V_tilde_pf = self._get_coupling_prefactors(Omega)
+        V_pf, V_tilde_pf = self._get_TFD_coupling_prefactors(phonon_frequency)
 
-        # Extend the terms list with the zero-temperature contribution
-        klass = eval(f"DefaultHamiltonians.{coupling_type}")
-        self.terms.extend(klass(g * V_pf, self._boson_counter))
-        self.Omega.append(Omega)
-        self.M.append(M)
-        self._append_N(M, N, tfd=False)
-        self.models_vis.append([
-            coupling_type, M, self.N[-1], Omega, g * V_pf
-        ])
-        self._boson_counter += 1
+        # Add the standard term to the Hamiltonian
+        if phonon_index_override is None:
+            phonon_index = self._phonon_index
+        else:
+            phonon_index = phonon_index_override
+        self._hamiltonian.add_(
+            self.hopping,
+            coupling_type,
+            phonon_index,
+            phonon_frequency,
+            coupling_strength,
+            dimensionless_coupling_strength,
+            coupling_multiplier=V_pf,
+        )
+        self._phonon_extent.append(phonon_extent)
+        self._phonon_number.append(phonon_number)
+        self._n_phonon_types += 1
+        phonon_index += 1
 
-        # Finite temperature
-        if V_tilde_pf is not None:
-            assert self.temperature > 0.0  # Double check
-            self.terms.extend(klass(g * V_tilde_pf, self._boson_counter))
-            self.Omega.append(-Omega)  # Omega get's a negative sign!!
-            self.M_tfd.append(M_tfd)
-            self._append_N(M_tfd, N_tfd, tfd=True)
-            self.models_vis.append([
-                f"~{coupling_type}", M_tfd, self.N_tfd[-1], -Omega,
-                g * V_tilde_pf
-            ])
-
-        self.n_boson_types = len(self.Omega)
-        self._update_absolute_extent()
-
-    def finalize(self):
-        """Completes the model initialization and locks the ability to make
-        any modifications."""
-
-        if self.temperature > 0.0:
-            N_tmp = []
-            for N, N_tfd in zip(self.N, self.N_tfd):
-                N_tmp.extend([N, N_tfd])
-            self.N = N_tmp
-            M_tmp = []
-            for M, M_tfd in zip(self.M, self.M_tfd):
-                M_tmp.extend([M, M_tfd])
-            self.M = M_tmp
+        # Add the finite-temperature term to the Hamiltonian
+        if V_tilde_pf > 0.0:
+            self._hamiltonian.add_(
+                self.hopping,
+                coupling_type,
+                phonon_index,
+                -phonon_frequency,  # Negative phonon frequency!
+                coupling_strength,
+                dimensionless_coupling_strength,
+                coupling_multiplier=V_tilde_pf,
+            )
+            assert phonon_extent_tfd is not None
+            assert phonon_number_tfd is not None
+            self._phonon_extent.append(phonon_extent_tfd)
+            self._phonon_number.append(phonon_number_tfd)
+            self._n_phonon_types += 1
