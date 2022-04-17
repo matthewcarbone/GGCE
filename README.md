@@ -80,7 +80,7 @@ This material is based upon work supported by the U.S. Department of Energy, Off
 
 # Citation
 
-If you use this code for your own work, we ask that you please cite the following m[anuscript](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106):
+If you use this code for your own work, we ask that you please cite the following [manuscript](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106):
 
 ```
 @article{carbone2021,

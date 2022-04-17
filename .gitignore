@@ -5,6 +5,7 @@ job_data/
 results/
 results2/
 *.sh
+!build_sphinx.sh
 *.png
 slurm_config.yaml
 .LIFO_queue.yaml
