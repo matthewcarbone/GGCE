@@ -1,14 +1,12 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
-name: Python package
+name: CI pipeline
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - 'master'
   pull_request:
-    branches: [ master ]
-  workflow_dispatch:
+    branches:
+      - 'master'
 
 jobs:
   build:
@@ -16,54 +14,42 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: [3.7.3]
+        python-version: [3.6, 3.7.3, 3.8, 3.9]
 
     steps:
+
     - uses: actions/checkout@v2
 
-    - name: Setup Conda
-      uses: s-weigand/setup-conda@v1
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
       with:
-          update-conda: true
-          python-version: ${{ matrix.python-version }}
-          conda-channels: anaconda, conda-forge
-          
-    - name: Log info
-      run: |
-        conda --version
-        which python
-        python -V
+        python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies on ${{ matrix.os }}
+    - name: Setup and install standard requirements
+      shell: bash -l {0}
       run: |
-        conda config --set always_yes yes
-        conda install -q -c anaconda pyyaml
-        conda install -q -c anaconda numpy
-        conda install -q -c anaconda scipy
-        conda install -q -c anaconda pytest
-        conda install -q -c conda-forge pytest-cov
-        conda install -q -c anaconda flake8
+        set -vxeuo pipefail
+        python3 -m pip install --upgrade pip setuptools wheel
+        python3 -m pip install .
+        python3 -m pip list
 
-    - name: Lint with flake8
+    - name: Install dev requirements
+      shell: bash -l {0}
       run: |
-        # stop the build if there are Python syntax errors or undefined names
-        # flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        # flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
-        flake8 ggce
-    
-    - name: Unit tests
-      if: ${{ always() }}
-      # Coverage + pytest will automatically find the tests in the tests directory
-      run: coverage run --source=ggce -m pytest tests
+        set -vxeuo pipefail
+        python3 -m pip install '.[dev]'
+        python3 -m pip list
 
-    - name: Code coverage
-      if: ${{ always() }}
-      uses: codecov/codecov-action@v1.0.11
+    - name: Run tests
+      shell: bash -l {0}
+      run: |
+        set -vxeuo pipefail
+        pytest -v --cov --cov-report xml ggce/_tests
+
+    - name: Upload code coverage
+      uses: codecov/codecov-action@v2
       timeout-minutes: 10
       with:
-        # Repository upload token - get it from codecov.io. Required only for private repositories
-        token: 06a43383-7621-4259-906c-75967a8be621
-        # Specify whether or not CI build should fail if Codecov runs into an error during upload
+        token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
         threshold: 0%
