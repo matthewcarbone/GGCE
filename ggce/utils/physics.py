@@ -7,8 +7,8 @@ from scipy.special import comb
 def g0_delta_omega(
     delta, omega, lattice_constant, broadening, hopping, sgn=1.0, e0=0.0
 ):
-    """Free Green's function in position/frequency space. Note that the
-    frequency is a complex variable, corresponding to
+    """The free particle Green's function in position/frequency space. Note
+    that the frequency is a complex variable, corresponding to
     :math:`\\omega + i \\eta`. This function is equation 21 in this
     `PRB <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`_.
     The equation is
@@ -27,18 +27,22 @@ def g0_delta_omega(
         are explained in E. N. Economou, Green’s Functions in Quantum Physics
         (Springer-Verlag, Berlin, 1983).
 
+    Additionally, when :math:`t=0`, there are two cases. If
+    :math:`\\delta = 0`, then the result is analytically 0. Otherwise, the
+    result ends up being :math:`(\\omega + i\\eta)^{-1}`.
+
     Parameters
     ----------
     delta : float
-        The site index variable.
-    omega : float
+        The site index variable
+    omega : complex
         The complex frequency variable
     lattice_constant : float
-        The lattice constant: distance between neighboring sites.
+        The lattice constant: distance between neighboring sites
     broadening : float
-        The artificial broadening term.
+        The artificial broadening term
     hopping : float
-        The hopping strength.
+        The hopping strength
     sgn : float, optional
         Optional sign parameter. It is recommended that this remain unchanged
         from the default. Default is 1.
@@ -48,8 +52,8 @@ def g0_delta_omega(
 
     Returns
     -------
-    float
-        Complex value of :math:`g_0`.
+    complex
+        Value of :math:`g_0`.
     """
 
     a = lattice_constant
@@ -67,8 +71,38 @@ def g0_delta_omega(
     return t1 * prefactor
 
 
-def G0_k_omega(k, omega, a, eta, tf):
-    return 1.0 / (omega + 1j * eta + 2.0 * tf * np.cos(k * a))
+def G0_k_omega(k, omega, lattice_constant, eta, hopping):
+    """The free particle Green's function on a 1D lattice in standard
+    momentum-frequency space. The equation is
+
+    .. math::
+
+        G_0(k, \\omega) = \\frac{1}{\\omega + i\\eta - \\varepsilon_k}
+
+    where :math:`\\varepsilon_k = -2t \\cos(ka)`.
+
+    Parameters
+    ----------
+    k : float
+        The momentum variable
+    omega : complex
+        The complex frequency variable.
+    lattice_constant : float
+        The lattice constant: distance between neighboring sites
+    broadening : float
+        The artificial broadening term
+    hopping : float
+        The hopping strength
+
+    Returns
+    -------
+    complex
+        Value of :math:`G_0`.
+    """
+
+    return 1.0 / (
+        omega + 1j * eta + 2.0 * hopping * np.cos(k * lattice_constant)
+    )
 
 
 def generalized_equations_combinatorics_term(m, n):
