@@ -1,27 +1,69 @@
-#!/usr/bin/env python3
-
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
+"""Utilities corresponding to physical quantities."""
 
 import numpy as np
 from scipy.special import comb
 
 
-def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
+def g0_delta_omega(
+    delta, omega, lattice_constant, broadening, hopping, sgn=1.0, e0=0.0
+):
     """Free Green's function in position/frequency space. Note that the
-    frequency is generally a complex variable, corresponding to w + i * eta."""
+    frequency is a complex variable, corresponding to
+    :math:`\\omega + i \\eta`. This function is equation 21 in this
+    `PRB <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`_.
+    The equation is
 
-    if tf == 0.0:
+    .. math::
+
+        g_0(\\delta, \\omega) = -i \\frac{\\left[-\\omega_\\eta / 2t + i
+        \\sqrt{1 - (\\omega_\\eta/2t)^2}\\right]^{|\\delta|}}{\\sqrt{4t^2 -
+        \\omega_\\eta^2}}
+
+    where :math:`\\omega_\\eta = \\omega + i \\eta`. The broadening is
+    :math:`\\eta`, the hopping :math:`t`, and the lattice constant :math:`a`.
+
+    .. warning::
+        The parameters `sgn` and `e0` are not used in the GGCE formalism, but
+        are explained in E. N. Economou, Green’s Functions in Quantum Physics
+        (Springer-Verlag, Berlin, 1983).
+
+    Parameters
+    ----------
+    delta : float
+        The site index variable.
+    omega : float
+        The complex frequency variable
+    lattice_constant : float
+        The lattice constant: distance between neighboring sites.
+    broadening : float
+        The artificial broadening term.
+    hopping : float
+        The hopping strength.
+    sgn : float, optional
+        Optional sign parameter. It is recommended that this remain unchanged
+        from the default. Default is 1.
+    e0 : float, optional
+        Optional E0 parameter. It is recommended that this remain unchanged
+        from the default. Default is 1.
+
+    Returns
+    -------
+    float
+        Complex value of :math:`g_0`.
+    """
+
+    a = lattice_constant
+
+    if hopping == 0.0:
         if delta != 0:
             return 0.0
-        return 1.0 / (omega + eta * 1j)
+        return 1.0 / (omega + broadening * 1j)
 
-    omega = omega + eta * 1j
-    B = 2.0 * np.abs(tf)
+    omega = omega + broadening * 1j
+    B = 2.0 * np.abs(hopping)
     x = (omega - e0) / B
-    prefactor = -sgn * 1j / np.sqrt(B**2 - (omega - e0)**2)
-    t1 = (-x + sgn * 1j * np.sqrt(1.0 - x**2))**np.abs(delta * a)
+    prefactor = -sgn * 1j / np.sqrt(B**2 - (omega - e0) ** 2)
+    t1 = (-x + sgn * 1j * np.sqrt(1.0 - x**2)) ** np.abs(delta * a)
     return t1 * prefactor
 
 
@@ -53,12 +95,20 @@ def total_generalized_equations(M, N, nbt):
     generalized_equations_combinatorics_term.
     """
 
-    bosons = [sum([
-        sum([
-            generalized_equations_combinatorics_term(m, n)
-            for n in range(1, N[bt] + 1)
-        ]) for m in range(1, M[bt] + 1)
-    ]) for bt in range(nbt)]
+    bosons = [
+        sum(
+            [
+                sum(
+                    [
+                        generalized_equations_combinatorics_term(m, n)
+                        for n in range(1, N[bt] + 1)
+                    ]
+                )
+                for m in range(1, M[bt] + 1)
+            ]
+        )
+        for bt in range(nbt)
+    ]
     return int(np.prod(bosons))
 
     # total = 0
@@ -77,7 +127,7 @@ def total_generalized_equations(M, N, nbt):
 
 
 def mgf_sum_rule(w, s, order):
-    return np.sum(s[1:] * w[1:]**order * np.diff(w))
+    return np.sum(s[1:] * w[1:] ** order * np.diff(w))
 
 
 def holstein_sum_rule_check(w, s, config):
