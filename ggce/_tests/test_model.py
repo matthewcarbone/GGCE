@@ -1,9 +1,10 @@
+from copy import deepcopy
 import math
 import pytest
 
 import numpy as np
 
-from ..model import model_coupling_map, SingleTerm
+from ..model import model_coupling_map, SingleTerm, Hamiltonian
 
 
 @pytest.mark.parametrize(
@@ -74,5 +75,120 @@ class TestSingleTerm:
     )
     def test_setters_raises(attribute, value):
         st = SingleTerm("Holstein", 1, -1, "+", 1.23, 0, 4.56)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             setattr(st, attribute, value)
+
+
+class TestHamiltonian:
+    @staticmethod
+    def test_initializer():
+        Hamiltonian()
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "coupling_type",
+        ["Holstein", "Peierls", "EdwardsFermionBoson", "BondPeierls"],
+    )
+    @pytest.mark.parametrize("phonon_index", [0, 1, 2, -1])
+    def test_add_(coupling_type, phonon_index):
+        h = deepcopy(Hamiltonian())
+        if phonon_index < 0:
+            with pytest.raises(ValueError):
+                h.add_(1.0, coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
+        else:
+            h.add_(1.0, coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
+
+            if coupling_type == "Holstein":
+                assert len(h.terms) == 2
+            elif coupling_type == "EdwardsFermionBoson":
+                assert len(h.terms) == 4
+            elif coupling_type == "BondPeierls":
+                assert len(h.terms) == 4
+            elif coupling_type == "Peierls":
+                assert len(h.terms) == 8
+
+    @staticmethod
+    def test_invalid_add():
+        h = deepcopy(Hamiltonian())
+        h.add_(1.0, "InvalidCoupling", 0, 2.0, 1.0, None, 1.0)
+        assert len(h.terms) == 0
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "coupling,dimensionless_coupling",
+        [(1.0, 1.0), (None, None)],
+    )
+    def test_XOR_add_(coupling, dimensionless_coupling):
+        h = deepcopy(Hamiltonian())
+        with pytest.raises(ValueError):
+            h.add_(
+                hopping=1.0,
+                coupling_type="Holstein",
+                phonon_index=0,
+                phonon_frequency=1.0,
+                coupling_strength=coupling,
+                dimensionless_coupling_strength=dimensionless_coupling,
+                coupling_multiplier=1.0,
+            )
+
+
+class TestModel:
+    @staticmethod
+    def test_visualize(ZeroTemperatureModel):
+        ZeroTemperatureModel.visualize()
+
+    @staticmethod
+    def test_visualize_after_add(ZeroTemperatureModel):
+        ZeroTemperatureModel.add_("Holstein", 1.0, 2, 3)
+        ZeroTemperatureModel.visualize()
+
+    @staticmethod
+    def test_finite_T_no_M_no_N_1(FiniteTemperatureModel):
+        FiniteTemperatureModel.add_(
+            coupling_type="Holstein",
+            phonon_frequency=2.5,
+            phonon_extent=3,
+            phonon_number=2,
+            phonon_extent_tfd=2,
+            phonon_number_tfd=None,
+            coupling_strength=1.0,
+            dimensionless_coupling_strength=None,
+            phonon_index_override=None,
+        )
+        assert len(FiniteTemperatureModel.phonon_number) == 0
+        assert len(FiniteTemperatureModel.phonon_extent) == 0
+        assert len(FiniteTemperatureModel.hamiltonian.terms) == 0
+
+    @staticmethod
+    def test_finite_T_no_M_no_N_2(FiniteTemperatureModel):
+        FiniteTemperatureModel.add_(
+            coupling_type="Holstein",
+            phonon_frequency=2.5,
+            phonon_extent=3,
+            phonon_number=2,
+            phonon_extent_tfd=None,
+            phonon_number_tfd=3,
+            coupling_strength=1.0,
+            dimensionless_coupling_strength=None,
+            phonon_index_override=None,
+        )
+        assert len(FiniteTemperatureModel.phonon_number) == 0
+        assert len(FiniteTemperatureModel.phonon_extent) == 0
+        assert len(FiniteTemperatureModel.hamiltonian.terms) == 0
+
+    @staticmethod
+    def test_finite_T_no_M_no_N_3(FiniteTemperatureModel):
+        FiniteTemperatureModel.add_(
+            coupling_type="Holstein",
+            phonon_frequency=2.5,
+            phonon_extent=3,
+            phonon_number=2,
+            phonon_extent_tfd=None,
+            phonon_number_tfd=None,
+            coupling_strength=1.0,
+            dimensionless_coupling_strength=None,
+            phonon_index_override=None,
+        )
+        assert len(FiniteTemperatureModel.phonon_number) == 0
+        assert len(FiniteTemperatureModel.phonon_extent) == 0
+        assert len(FiniteTemperatureModel.hamiltonian.terms) == 0

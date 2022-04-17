@@ -86,7 +86,8 @@ class SingleTerm(MSONable):
 
     @psi.setter
     def psi(self, x):
-        assert isinstance(x, (float, int))
+        if not isinstance(x, (float, int)):
+            raise ValueError
         self._psi = x
 
     @property
@@ -95,7 +96,8 @@ class SingleTerm(MSONable):
 
     @phi.setter
     def phi(self, x):
-        assert isinstance(x, (float, int))
+        if not isinstance(x, (float, int)):
+            raise ValueError
         self._phi = x
 
     @property
@@ -104,7 +106,8 @@ class SingleTerm(MSONable):
 
     @dag.setter
     def dag(self, x):
-        assert x in ["+", "-"]
+        if x not in ["+", "-"]:
+            raise ValueError
         self._dag = x
 
     @property
@@ -113,7 +116,8 @@ class SingleTerm(MSONable):
 
     @coupling.setter
     def coupling(self, x):
-        assert isinstance(x, (int, float))
+        if not isinstance(x, (int, float)):
+            raise ValueError
         self._coupling = x
 
     @property
@@ -122,8 +126,8 @@ class SingleTerm(MSONable):
 
     @phonon_index.setter
     def phonon_index(self, x):
-        assert isinstance(x, int)
-        assert x > -1
+        if not isinstance(x, int) or x < 0:
+            raise ValueError
         self._phonon_index = x
 
     @property
@@ -132,7 +136,8 @@ class SingleTerm(MSONable):
 
     @phonon_frequency.setter
     def phonon_frequency(self, x):
-        assert isinstance(x, (int, float))
+        if not isinstance(x, (int, float)):
+            raise ValueError
         self._phonon_frequency = x
 
     @property
@@ -141,7 +146,8 @@ class SingleTerm(MSONable):
 
     @coupling_type.setter
     def coupling_type(self, x):
-        assert isinstance(x, str)
+        if not isinstance(x, str):
+            raise ValueError
         self._coupling_type = x
 
     def __init__(
@@ -412,9 +418,11 @@ class Hamiltonian(MSONable):
         """Helper method for adding a term to the attribute. See `add_` for
         more details."""
 
+        # XOR -- this should be taken care of outside this func
         c1 = coupling_strength is not None
         c2 = dimensionless_coupling_strength is not None
-        assert c1 ^ c2  # XOR -- this should be taken care of outside this func
+        if not c1 ^ c2:
+            raise ValueError("Coupling strength errors")
 
         if c2:
             try:
@@ -579,7 +587,10 @@ class Model(MSONable):
     @property
     def phonon_absolute_extent(self):
         if self._phonon_absolute_extent is None:
-            return np.max(self._phonon_extent).item()
+            if len(self._phonon_extent) > 0:
+                return np.max(self._phonon_extent).item()
+            else:
+                return None
         return self._phonon_absolute_extent
 
     @phonon_absolute_extent.setter
@@ -646,6 +657,9 @@ class Model(MSONable):
         print(f"  Temperature (T)      = {self.temperature:.02f}")
         print(f"  Max bosons per site  = {self.phonon_max_per_site}")
         print(f"  Absolute extent      = {self.phonon_absolute_extent}")
+        if len(self._phonon_extent) == 0:
+            print("Terms not initialized...")
+            return
         print("Terms:")
         d1 = self.hamiltonian.get_dict_rep()
         for ii, (phonon_index, term_list) in enumerate(d1.items()):
