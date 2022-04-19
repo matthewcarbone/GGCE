@@ -9,21 +9,10 @@ from ggce.utils import physics
 
 class Config(MSONable):
     """A class for holding phonon occupations and defining operations on the
-    cloud.
+    cloud."""
 
-    Attributes
-    ----------
-    config : numpy.ndarray
-        An array of the shape (n_boson_types, cloud length axis 1, 2, ...).
-        The array should only contain integers. spatial
-    """
-
-    @property
-    def config(self):
-        return self._config
-
-    @config.setter
-    def config(self, x):
+    @staticmethod
+    def _check_config(x):
         if len(x.shape) < 2:
             logger.critical(f"Provided config {x} has <2 dimensions")
         if np.any(np.array(x.shape[1:]) == 1):
@@ -34,6 +23,24 @@ class Config(MSONable):
                 "indicating more than 3 spatial dimensions. This type of case "
                 "is untested and the user should proceed with caution."
             )
+
+    @property
+    def config(self):
+        """An array of the shape (n_boson_types, cloud length axis 1, 2, ...).
+        The array should only contain integers. Spatial information is
+        contained in the indexes 1 and greater. The 0th index contains the
+        information about the phonon type.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+
+        return self._config
+
+    @config.setter
+    def config(self, x):
+        Config._check_config(x)
         self._config = x
 
     @property
@@ -46,7 +53,7 @@ class Config(MSONable):
         int
         """
 
-        return self.config.shape[0]
+        return self._config.shape[0]
 
     @property
     def phonon_cloud_shape(self):
@@ -58,7 +65,7 @@ class Config(MSONable):
         tuple
         """
 
-        return self.config.shape[1:]
+        return self._config.shape[1:]
 
     @property
     def total_phonons_per_type(self):
@@ -69,8 +76,8 @@ class Config(MSONable):
         -------
         numpy.ndarray
         """
-        axes = [ii + 1 for ii in range(len(self.config.shape))]
-        return np.sum(self.config, axis=tuple(axes))
+        axes = [ii + 1 for ii in range(len(self._config.shape))]
+        return np.sum(self._config, axis=tuple(axes))
 
     @property
     def total_phonons(self):
@@ -82,7 +89,7 @@ class Config(MSONable):
         int
         """
 
-        return int(np.sum(self.config))
+        return int(np.sum(self._config))
 
     def assert_valid(self):
         """Checks the config for validity and throws a logger.critical, which
@@ -98,15 +105,17 @@ class Config(MSONable):
             phonons on the cloud, will not raise any critical.
         """
 
-        if np.any(self.config < 0):
-            logger.critical(f"Invalid config {self.config}: some < 0")
+        Config._check_config(self._config)
+
+        if np.any(self._config < 0):
+            logger.critical(f"Invalid config {self._config}: some < 0")
 
         if self.total_phonons == 0:
             return
 
         # First, sum up over all of the phonon types. This produces the
         # "anchor" config.
-        _config = self.config.sum(axis=0)
+        _config = self._config.sum(axis=0)
 
         # For every dimension, we need to check the "edge". This amounts to
         # swapping the axes and summing
@@ -132,7 +141,7 @@ class Config(MSONable):
             The current number of modifications. Default is 0.
         """
 
-        self.config = np.array(config).astype(int)
+        self._config = np.array(config).astype(int)
         self._max_modifications = max_modifications
         self._modifications = modifications
         self.assert_valid()
@@ -140,8 +149,8 @@ class Config(MSONable):
     def __str__(self):
         if self.total_phonons == 0:
             return "G"
-        rep = str(list(self.config.flatten()))
-        shape = str(self.config.shape)
+        rep = str(list(self._config.flatten()))
+        shape = str(self._config.shape)
         return f"{rep} {shape}"
 
     def id(self):
@@ -164,7 +173,7 @@ class Config(MSONable):
         if self.total_phonons == 0:
             return 0
 
-        _config = self.config.sum(axis=0)
+        _config = self._config.sum(axis=0)
 
         shifts = []
         n_dimensions = len(_config.shape)  # The number of dimensions
@@ -226,7 +235,7 @@ class Config(MSONable):
                 f"Max modifications {self.max_modifications} exceeded"
             )
 
-        if len(indexes) != len(self.config.shape):
+        if len(indexes) != len(self._config.shape):
             logger.critical(
                 f"Dimension mismatch between config and indexes {indexes}"
             )
@@ -235,14 +244,14 @@ class Config(MSONable):
             self._config[indexes] -= 1
         except IndexError:
             logger.critical(
-                f"Index does not exist for {self.config} of shape "
-                f"{self.config.shape} at {indexes}"
+                f"Index does not exist for {self._config} of shape "
+                f"{self._config.shape} at {indexes}"
             )
 
         if self._config[indexes] < 0:
             logger.critical(
-                f"Removal error: negative site occupancy for\n {self.config} "
-                f"\nof shape {self.config.shape} at {indexes}"
+                f"Removal error: negative site occupancy for\n {self._config} "
+                f"\nof shape {self._config.shape} at {indexes}"
             )
 
         # Actually modify the config object
@@ -279,15 +288,15 @@ class Config(MSONable):
             )
 
         # Check that the phonon index is valid
-        if indexes[0] < 0 or indexes[0] > self.config.shape[0] - 1:
+        if indexes[0] < 0 or indexes[0] > self._config.shape[0] - 1:
             logger.critical(
                 f"Phonon index {indexes[0]} invalid for config with "
-                f"{self.config.shape[0]} unique phonon types"
+                f"{self._config.shape[0]} unique phonon types"
             )
 
         spatial_indexes = np.array(indexes)[1:]
         zeros = np.array([0 for _ in range(len(spatial_indexes))])
-        cloud_shape = np.array(self.config.shape)[1:]
+        cloud_shape = np.array(self._config.shape)[1:]
         location_matrix = (zeros <= spatial_indexes) & (
             spatial_indexes < cloud_shape
         )
@@ -295,7 +304,7 @@ class Config(MSONable):
         # Easy case: the boson type to add is in the existing cloud.
         # Here, no padding is required.
         if np.all(location_matrix):
-            self.config[indexes] += 1
+            self._config[indexes] += 1
             return zeros  # Shift is all zeros in this case
 
         # Otherwise, we have to pad the array in various ways. First, it is
@@ -312,16 +321,16 @@ class Config(MSONable):
         # Now, for each of the spatial dimensions we determine the padding
         pad = pad + [
             (0, 0)
-            if 0 <= index < self.config.shape[ii]
+            if 0 <= index < self._config.shape[ii]
             else (-index, 0)
             if index < 0
-            else (0, index - self.config.shape[ii + 1] + 1)
+            else (0, index - self._config.shape[ii + 1] + 1)
             for ii, index in enumerate(spatial_indexes)
         ]
 
         # Update the config object accordingly
-        self.config = np.pad(self.config, pad, "constant", constant_values=0)
-        self.config[indexes] += 1
+        self._config = np.pad(self._config, pad, "constant", constant_values=0)
+        self._config[indexes] += 1
 
         self._modifications += 1
         return shift
@@ -378,6 +387,7 @@ class Term(MSONable):
 
     @property
     def config(self):
+
         return self._config
 
     @config.setter
