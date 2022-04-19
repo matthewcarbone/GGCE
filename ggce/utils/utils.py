@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-
 import numpy as np
 from pathlib import Path
 import pickle
 import uuid
 import time
-import os
-import shutil
 from scipy.optimize import curve_fit
 
 
@@ -77,25 +73,6 @@ def time_remaining(time_elapsed, percentage_complete):
     return (100.0 - percentage_complete) * time_elapsed / percentage_complete
 
 
-def mpi_required(func):
-    """Decorator that ensures a class has an MPI communicator defined.
-
-    [description]
-
-    Parameters
-    ----------
-    func : {[type]}
-        [description]
-
-    """
-
-    def wrapper(self, *args, **kwargs):
-        assert self.mpi_comm is not None
-        return func(self, *args, **kwargs)
-
-    return wrapper
-
-
 def peak_location_and_weight(w, A, Aprime, eta, eta_prime):
     """Assumes that the polaron peak is a Lorentzian has the same weight
     no matter the eta. With these assumptions, we can determine the
@@ -146,40 +123,3 @@ def peak_location_and_weight_scipy(wrange, Arange, eta):
 
 def lorentzian(w, loc, scale, eta):
     return scale * (eta / np.pi) / ((w - loc) ** 2 + eta**2)
-
-
-def setup_directory(dir):
-    """Helps set up output directory for computations.
-    If directory already exists, overwrites it."""
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    if os.path.exists(dir):
-        shutil.rmtree(dir)
-        os.mkdir(dir)
-
-
-def get_grids_from_files(dir):
-    """When calculation runs on pre-computed matrices,
-    need to parse the directory filenames to generate the
-    kgrid and wgrid."""
-
-    all_files = os.listdir(dir)
-    kgrid = []
-    wgrid = []
-    for element in all_files:
-        # filter only the matrix files
-        if ".bss" in element:
-            # cut off the file extension
-            element = element[:-4]
-            name_bits = element.split("_")
-            k, w = np.float(name_bits[1]), np.float(name_bits[3])
-            eta = np.float(name_bits[5])
-            if k not in kgrid:
-                kgrid.append(k)
-            if w not in wgrid:
-                wgrid.append(w)
-
-    kgrid = np.array(sorted(kgrid))
-    wgrid = np.array(sorted(wgrid))
-
-    return kgrid, wgrid, eta

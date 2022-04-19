@@ -5,6 +5,7 @@ from monty.json import MSONable
 
 from ggce import logger
 from ggce.utils import physics
+from ggce.model import SingleTerm
 
 
 class Config(MSONable):
@@ -91,10 +92,10 @@ class Config(MSONable):
 
         return int(np.sum(self._config))
 
-    def assert_valid(self):
-        """Checks the config for validity and throws a logger.critical, which
-        also kills the program if the validity checks fail. If any of the
-        following fail, a crtiical is raised:
+    def validate(self):
+        """Checks the config for validity and throws a ``logger.critical``,
+        which also kills the program if the validity checks fail. If any of the
+        following fail, a critical is raised:
 
         1. If any element in the config has less than 0 phonons.
         2. If any of the edges of the cloud has 0 phonons total.
@@ -144,7 +145,7 @@ class Config(MSONable):
         self._config = np.array(config).astype(int)
         self._max_modifications = max_modifications
         self._modifications = modifications
-        self.assert_valid()
+        self.validate()
 
     def __str__(self):
         if self.total_phonons == 0:
@@ -167,7 +168,8 @@ class Config(MSONable):
         return self.__str__()
 
     def _apply_phonon_reduction_rules_(self):
-        """Executes the reduction rules. See remove_phonon_ for more details."""
+        """Executes the reduction rules. See remove_phonon_ for more
+        details."""
 
         # No reduction necessary anymore, this is the Green's function
         if self.total_phonons == 0:
@@ -272,7 +274,7 @@ class Config(MSONable):
             A tuple that must be of the same dimension as the config itself.
             The first value is the phonon index, and the others correspond to
             the real-space location in the phonon to remove. These indexes
-            _can_ fall outside of the current config, since phonons can be
+            `can` fall outside of the current config, since phonons can be
             added anywhere on the chain.
 
         Returns
@@ -337,182 +339,325 @@ class Config(MSONable):
 
 
 class Term(MSONable):
-    """Base class for a single term like f_n(d).
-
-    Attributes
-    ----------
-    config : ggce.engine.terms.Config
-        Phonon configuration object.
-    constant_prefactor : float
-        The constant prefactor component. Usually consists of the coupling
-        strength, sign of the coupling and other prefactor terms such as
-        n_gamma. Default is 1.0.
-    exp_shift : int
-        Factor which multiplies the entire final prefactor term. It is given
-        by e^(1j*k*a*exp_shift). This term is determined by the relations
-        between the different f-functions.
-            1) f_{0, 0, ..., 0, n, m}(d) = f_{n, m, ...}(d + y) * e^{-ikay}
-               where y is the number of indexes equal to zero before the first
-               nonzero term, and is positive.
-            2) f_{n, ..., m, 0, ..., 0} = f_{n, ..., m}
-            3) b_gamma^dagger f_{n, m, ...}(d) =
-               f_{1, 0, ..., 0, n , m}(0) * e^{ikay}; gamma < 0
-               where y is equal to abs(gamma) and is positive.
-            4) b_gamma^dagger f_{n, m, ...}(d) =
-               f_{1, 0, ..., 0, n , m}(d - y) * e^{ikay}; gamma < 0
-    f_arg : int
-        The value of f_arg, where we have f_{boson_config}(f_arg). Note that if
-        None, this implies that the term for f_arg is left general. This
-        should only occur for an FDeltaTerm object that is an "index" for
-        the equation, i.e., it is a term that originally appears on the
-        lhs. During generation of the specific equations, this will be set
-        to a "true delta" value and that equation appended to the master
-        list. Default is None, implying the f-argument is a general delta.
-    g_arg : int
-        The same as for f_arg, but for the green's function delta term.
-    hterm : TYPE
-        Description
-    system_params : TYPE
-        Description
-
-    Parameters
-    ----------
-    boson_config : BosonConfig
-        The configuration of bosons. The BosonConfig class contains the
-        necessary methods for adding and removing bosons of various types
-        and in various locations.
-    hterm : SingleTerm
-        The parameters of the term itself. (Single Hamiltonian Term)
-    """
+    """Base class for a single term in an equation. This object contains all
+    information required for defining a term in the sum of equation 22 in the
+    `PRB <https://journals.aps.org/prb/abstract/10.1103/
+    PhysRevB.104.035106>`_. that this code is based on."""
 
     @property
     def config(self):
+        """The configuration of phonons. The Config class contains the
+        necessary methods for adding and removing bosons of various types
+        and in various locations. See :class:`.Config`.
+
+        Returns
+        -------
+        ggce.engine.terms.Config
+        """
 
         return self._config
 
     @config.setter
     def config(self, x):
         if not isinstance(x, Config):
-            logger.critical(f"{x} is not of type Config")
+            logger.critical(f"Invalid Config term of type {type(x)}")
         self._config = x
 
-    def __init__(self, config, hterm=None, system_params=None):
-        self.config = Config(config)
+    @property
+    def hamiltonian_term(self):
+        """A single term in the coupling of the Hamiltonian.
 
-        # If hterm is none, we know this is an index term which carries with
-        # it no system-dependent prefactors or anything like that.
-        self.hterm = hterm
-        self.system_params = system_params
-        self.constant_prefactor = 1.0
+        Returns
+        -------
+        ggce.model.SingleTerm
+        """
+
+        return self._hamiltonian_term
+
+    @hamiltonian_term.setter
+    def hamiltonian_term(self, x):
+        if not isinstance(x, SingleTerm):
+            logger.critical(f"Invalid Hamiltonian term of type {type(x)}")
+        self._hamiltonian_term = x
+
+    @property
+    def constant_prefactor(self):
+        """A constant prefactor that multiplies the evaluated value of the
+        entire term when constructing the eventual matrix to invert at the end
+        of the software pipeline.
+
+        Returns
+        -------
+        complex
+        """
+
+        return self._constant_prefactor
+
+    @constant_prefactor.setter
+    def constant_prefactor(self, x):
+        if not isinstance(x, (int, float)):
+            logger.critical(f"Invalid constant prefactor {x}")
+        self._constant_prefactor = x
+
+    @property
+    def exp_shift(self):
+        """Factor which multiplies the entire final prefactor term in addition
+        to :class:`Term.constant_prefactor`. It is given by
+
+        .. math::
+
+            e^{i \\mathbf{k} \\cdot \\boldsymbol{\\delta}
+            \\odot \\mathbf{a}}
+
+        where :math:`\\delta` is this ``exp_shift``. Furthermore, this term is
+        determined by the relations between the different f-functions. It is
+        modified during the reduction rules as noted in
+        :class:`Config.remove_phonon_` and :class:`Config.add_phonon_`.
+
+        .. warning::
+
+            The shape of the ``exp_shift`` should be equal to the number of
+            spatial dimensions of the phonon configuration.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+
+        return self._exp_shift
+
+    def _assert_shape_equal_to_config(self, x):
+        if not isinstance(x, np.ndarray):
+            logger.critical(f"Wrong type {x}")
+        n_dims = len(self._config.config.shape) - 1
+        if x.shape != n_dims:
+            logger.critical(
+                "Dimension mismatch between config of shape "
+                f"{self.config.shape} and provided {x} of shape {x.shape}"
+            )
+
+    @exp_shift.setter
+    def exp_shift(self, x):
+        self._assert_shape_equal_to_config(x)
+        self._exp_shift = x
+
+    @property
+    def f_arg(self):
+        """This array corresponds to the value of the argument of the auxiliary
+        Green's function, :math:`f_n(x)`, where :math:`x` is the ``f_arg``.
+        If None, this implies that the ``f_arg`` value is left general. This
+        should occur if a derived class is ``Index``-like, meaning it indexes
+        an entire equation. This is a term that originally appears on the
+        "left hand side" of the equation of motion. During generation of the
+        specific equations, this will be set to a "true delta" value and that
+        equation appended to the master list.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+
+        return self._f_arg
+
+    @f_arg.setter
+    def f_arg(self, x):
+        if x is None:
+            self._f_arg = None
+            return
+        self._assert_shape_equal_to_config(x)
+        self._f_arg = x
+
+    @property
+    def g_arg(self):
+        """Identical to :class:`Term.f_arg`, but for the argument of the
+        lattice Green's function :math:`g_0(x)`, where :math:`x` is ``g_arg``.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+
+        return self._g_arg
+
+    @g_arg.setter
+    def g_arg(self, x):
+        if x is None:
+            self._g_arg = None
+            return
+        self._assert_shape_equal_to_config(x)
+        self._g_arg = x
+
+    def __init__(
+        self,
+        config,
+        hamiltonian_term=None,
+        constant_prefactor=1.0,
+        exp_shift=None,
+        f_arg=None,
+        g_arg=None,
+    ):
+        self._config = Config(config)
+        self._hamiltonian_term = hamiltonian_term  # None is the index term
+        self._constant_prefactor = constant_prefactor
 
         # Determines the argument of f and prefactors
-        self.exp_shift = 0.0  # exp(i*k*a*exp_shift)
-        self.f_arg = None  # Only None for the index term
-        self.g_arg = None  # => g(...) = 1
+        if exp_shift is None:
+            n_dims = len(self._config.config.shape) - 1
+            self._exp_shift = np.array([0.0 for _ in range(n_dims)])
+        else:
+            self._assert_shape_equal_to_config(exp_shift)
+            self._exp_shift = exp_shift  # exp(i*k*a*exp_shift)
+        self._assert_shape_equal_to_config(f_arg)
+        self._f_arg = f_arg  # Only None for the index term
+        self._assert_shape_equal_to_config(g_arg)
+        self._g_arg = g_arg  # => g(...) = 1
 
-    def get_total_bosons(self):
-        return self.config.total_bosons
+    def _get_phonon_config_id(self):
+        """Returns a string of the phonon config id."""
 
-    def _get_boson_config_identifier(self):
-        """Returns a string of the boson_config identifier."""
+        return "{" + self.config.id() + "}"
 
-        return "{" + self.config.identifier() + "}"
+    def _get_f_arg_id(self):
+        """Returns a string of the f_arg id."""
 
-    def _get_f_arg_identifier(self):
-        """Returns a string of the f_arg identifier."""
+        if self._f_arg is None:
+            return "(!)"
 
-        return "(%.01f)" % self.f_arg if self.f_arg is not None else "(!)"
+        return str(list(self._f_arg))
 
-    def _get_g_arg_identifier(self):
-        """Returns a string of the f_arg identifier."""
+    def _get_g_arg_id(self):
+        """Returns a string of the f_arg id."""
 
-        return "<%.01f>" % self.g_arg if self.g_arg is not None else "<!>"
+        if self._g_arg is None:
+            return "<!>"
 
-    def _get_c_exp_identifier(self):
+        return str(list(self._g_arg))
+
+    def _get_c_exp_id(self):
         """Returns a string of the current value of the exponential shift."""
 
-        return (
-            "[%.01f]" % self.exp_shift if self.exp_shift is not None else "[!]"
-        )
+        if self._exp_shift is None:
+            return "[!]"
 
-    def identifier(self, full=False):
-        """Returns a string with which one can index the term. The string takes
-        the form n0-n1-...-nL-1-(f_arg)-[exp_shift]. Also defines the
-        individual identifiers for the boson_config, f_arg and c_exp shift,
-        which will be utilized later.
+        return f"[{str(self._exp_shift)}]"
+
+    def id(self, full=False):
+        """Returns a string with which one can index the term. There are two
+        types of identifiers the user can request. First is the full=False
+        version, which produces a string of the form ``X(f_arg)``, where
+        ``X`` is the configuration and ``f_arg`` is the argument of the
+        auxiliary Green's function. Second is full=True, which returns the same
+        string as full=False, but with ``g_arg`` and ``c_exp`` appended to the
+        end as well. ``g_arg`` is the argument of :math:`g_0` and ``c_exp`` is
+        the exponential shift indexes.
 
         Parameters
         ----------
         full : bool
             If true, returns also the g and exp shift terms with the
-            identifier. This is purely for visualization and not for e.g.
+            id. This is purely for visualization and not for e.g.
             running any calculations, since those terms are pooled into the
             coefficient.
+
+        Returns
+        -------
+        str
         """
 
-        t1 = self._get_boson_config_identifier() + self._get_f_arg_identifier()
+        t1 = self._get_phonon_config_id() + self._get_f_arg_id()
         if not full:
             return t1
-        t2 = self._get_g_arg_identifier() + self._get_c_exp_identifier()
+        t2 = self._get_g_arg_id() + self._get_c_exp_id()
         return t1 + t2
 
-    def update_boson_config(self):
+    def update_boson_config_(self):
         """Specific update scheme needs to be run depending on whether we add
-        or remove a boson."""
+        or remove a phonon."""
 
         raise NotImplementedError
 
-    def modify_n_bosons(self):
+    def coefficient(self):
+        raise NotImplementedError
+
+    def modify_n_bosons_(self):
         """By default, does nothing, will only be defined for the terms
-        in which we add or subtract a boson."""
+        in which we add or subtract a phonon."""
 
         return
 
-    def coefficient(self, k, w, eta=None):
+    def increment_g_arg_(self, add_to_g_arg):
+        """Increments the ``g_arg`` object by the provided value.
+
+        Parameters
+        ----------
+        add_to_g_arg : numpy.ndarray
+            The array to add to the ``_g_arg`` attribute. If the provided value
+            is not of the same shape as the current ``_g_arg``, an error will
+            be logged, since while this will not necessarily lead to the
+            termination of the program, it is likely unintended.
+        """
+
+        if add_to_g_arg.shape != self._g_arg.shape:
+            logger.error(f"Shape of {add_to_g_arg} != shape of {self._g_arg}")
+        self._g_arg += add_to_g_arg
+
+    def _set_f_arg_(self, val):
         raise NotImplementedError
 
-    def increment_g_arg(self, delta):
-        self.g_arg += delta
-
-    def set_f_arg(self, val):
-        raise NotImplementedError
-
-    def check_if_green_and_simplify(self):
+    def check_if_green_and_simplify_(self):
         """There are cases when the algorithm produces results that look like
-        e.g. {G}(1)[0]. This corresponds to f_0(1), which is actually just
-        a Green's function times a phase factor. The precise relation is
-        f_0(delta) = e^{i * k * delta * a} G(k, w). We need to simplify this
-        back to a term like {G}(0)[0], as if we don't, when the specific
-        equations are generated, it will think there are multiple Greens
-        equations, of which of course there can be only one."""
+        e.g. ``G(1)[0]``. This corresponds to ``f_0(1)``, which is actually
+        just a Green's function times a phase factor. The precise relation is
 
-        if self._get_boson_config_identifier() == "{G}" and self.f_arg != 0.0:
-            self.exp_shift += self.f_arg
-            self.f_arg = 0.0
+        .. math::
+
+            f_0(\\boldsymbol{\\delta}) =
+            e^{i \\mathbf{k} \\cdot \\boldsymbol{\\delta}
+            \\odot \\mathbf{a}} G(k, w)
+
+        We need to simplify this back to a term like G(0)[0], as if we don't,
+        when the specific equations are generated, it will think there are
+        multiple Greens equations, of which of course there can be only one."""
+
+        if self._get_phonon_config_id() == "G" and np.any(self._f_arg != 0):
+            self._exp_shift += self._f_arg
+            self._f_arg = np.zeros_like(self._f_arg)
 
 
 class IndexTerm(Term):
     """A term that corresponds to an index of the equation. Critical
-    differences between this and the base class include that the f_arg object
-    is set to None by default, the gamma_idx is set to None (since we will
-    not be removing or adding bosons to this term) and the constant_prefactor
-    is set to 1, with the lambdafy_prefactor method disabled, and the
-    default, unchangeable prefactor being equal to the constant prefactor,
-    independent of k and w."""
+    differences between this and the base class include that the ``f_arg``
+    object is set to None by default and the constant_prefactor is set to 1.
+    """
 
-    def __init__(self, boson_config):
-        super().__init__(boson_config=boson_config)
+    def __init__(self, config):
+        super().__init__(config=config)
 
-    def set_f_arg(self, val):
+    def _set_f_arg_(self, f_arg):
         """Overrides the set value of f_arg."""
 
-        assert self.hterm is None
-        self.f_arg = val
+        if self._hamiltonian_term is not None:
+            logger.critical("Cannot set f_arg in an IndexTerm")
+        self.f_arg = f_arg
 
-    def increment_g_arg(self, delta):
+    def increment_g_arg_(self):
         raise NotImplementedError
 
-    def coefficient(self, k, w, eta=None):
+    def coefficient(self, k, w, eta):
+        """Coefficient of the IndexTerm (which is always 1).
+
+        Parameters
+        ----------
+        k : float
+        w : complex
+        eta : float, optional
+
+        Returns
+        -------
+        float
+            The ``coefficient`` method in :class:`.IndexTerm` always returns 1.
+        """
+
         return 1.0
 
 
@@ -543,7 +688,7 @@ class EOMTerm(Term):
             * cmath.exp(1j * k * self.system_params.a * self.exp_shift)
         )
 
-    def increment_g_arg(self, delta):
+    def increment_g_arg_(self, delta):
         return
 
 
@@ -570,7 +715,7 @@ class NonIndexTerm(Term):
 
         self.g_arg += location
         self.f_arg -= location
-        self.modify_n_bosons(self.hterm.bt, location)
+        self.modify_n_bosons_(self.hterm.bt, location)
 
     def coefficient(self, k, w, eta):
 
@@ -593,7 +738,7 @@ class AnnihilationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
     a boson from a specified site."""
 
-    def modify_n_bosons(self, boson_type, location):
+    def modify_n_bosons_(self, boson_type, location):
         """Removes a boson from the specified site corresponding to the
         correct type. Note this step is independent of the reductions of the
         f-functions to other f-functions."""
@@ -607,8 +752,8 @@ class CreationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
     a boson from a specified site."""
 
-    def modify_n_bosons(self, boson_type, location):
-        """This is done for the user in update_boson_config. Handles
+    def modify_n_bosons_(self, boson_type, location):
+        """This is done for the user in update_boson_config_. Handles
         the boson creation cases, since these can be a bit
         confusing. Basically, we have the possibility of creating a boson on
         a site that is outside of the range of self.config. So we need methods

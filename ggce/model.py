@@ -681,7 +681,6 @@ class Model(MSONable):
         phonon_absolute_extent=None,
         n_phonon_types=0,
     ):
-
         args = {key: value for key, value in locals().items() if key != "self"}
         logger.debug(f"Model initialized {args}")
 
@@ -789,7 +788,9 @@ class Model(MSONable):
         c1 = M_tfd is not None and M_tfd < 1
         c2 = N_tfd is not None and N_tfd < 1
         if c1 or c2:
-            logger.error(f"Provided phonon M_tfd={M} and N_tfd={N} must be > 1")
+            logger.error(
+                f"Provided phonon M_tfd={M} and N_tfd={N} must be > 1"
+            )
             return
 
         c1 = coupling_strength is None
