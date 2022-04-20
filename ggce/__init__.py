@@ -1,6 +1,8 @@
 """Basic logging module."""
 
+from contextlib import contextmanager
 import sys
+from warnings import warn
 
 try:
     from mpi4py import MPI
@@ -53,6 +55,7 @@ def configure_loggers(
     stderr_filter=["WARNING", "ERROR", "CRITICAL"],
     stderr_fmt=DEBUG_FMT_WITHOUT_MPI_RANK,
     run_as_mpi=False,
+    enable_python_standard_warnings=False,
 ):
     """Configures the loguru loggers. Note that the loggers are initialized
     using the default values by default.
@@ -77,6 +80,8 @@ def configure_loggers(
     run_as_mpi : bool, optional
         If True, critical errors will run COMM.MPI_Abort(). Otherwise,
         sys.exit(1) is called.
+    enable_python_standard_warnings : bool, optional
+        Raises dummy warnings on logger.warning and logger.error.
     """
 
     logger.remove(None)  # Remove ALL handlers
@@ -111,6 +116,10 @@ def configure_loggers(
     else:
         logger.add(lambda _: COMM.MPI_Abort(), level="CRITICAL")
 
+    if enable_python_standard_warnings:
+        logger.add(lambda _: warn("DUMMY WARNING"), level="WARNING")
+        logger.add(lambda _: warn("DUMMY ERROR"), level="ERROR")
+
     logger.debug(f"Initializing GGCE v{__version__}")
 
 
@@ -120,10 +129,42 @@ def DEBUG():
     configure_loggers(stdout_filter=["DEBUG", "INFO", "SUCCESS"])
 
 
+def _TESTING_MODE():
+    """Enables a testing mode where loggers are configured as usual but where
+    the logger.warning and logger.error calls actually also raise a dummy
+    warning with the text "DUMMY WARNING" and "DUMMY ERROR", respectively.
+    Used for unit tests."""
+
+    configure_loggers(
+        stdout_filter=["DEBUG", "INFO", "SUCCESS"],
+        enable_python_standard_warnings=True,
+    )
+
+
 def DISABLE_DEBUG():
     """Quick helper to disable DEBUG mode."""
 
     configure_loggers(stdout_filter=["INFO", "SUCCESS"])
+
+
+@contextmanager
+def disable_logger():
+    """Context manager for disabling the logger."""
+
+    logger.disable("")
+    try:
+        yield None
+    finally:
+        logger.enable("")
+
+
+@contextmanager
+def _testing_mode():
+    _TESTING_MODE()
+    try:
+        yield None
+    finally:
+        DEBUG()
 
 
 DISABLE_DEBUG()
