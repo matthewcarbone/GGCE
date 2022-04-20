@@ -120,4 +120,10 @@ def DEBUG():
     configure_loggers(stdout_filter=["DEBUG", "INFO", "SUCCESS"])
 
 
-configure_loggers()
+def DISABLE_DEBUG():
+    """Quick helper to disable DEBUG mode."""
+
+    configure_loggers(stdout_filter=["INFO", "SUCCESS"])
+
+
+DISABLE_DEBUG()
