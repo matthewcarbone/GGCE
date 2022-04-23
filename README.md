@@ -1,20 +1,18 @@
----
-title: GGCE
----
+# GGCE
 
 [![codecov](https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/x94carbone/GGCE)
 
 Generalized Green's function Cluster Expansion
 
-# Installation
+## Installation
 Please see the [INSTALLATION.md](INSTALLATION.md) file for detailed instructions on installing the GGCE package.
 
 
-# Acknowledgements
+## Acknowledgements
 
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research, Department of Energy Computational Science Graduate Fellowship under Award Number DE-FG02-97ER25308.
 
-# Citation
+## Citation
 
 If you use this code for your own work, we ask that you please cite the following [manuscript](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106):
 

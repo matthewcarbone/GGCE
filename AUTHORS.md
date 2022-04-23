@@ -7,13 +7,13 @@
 
 ## Other code contributors
 
-None yet. Why not be the first? See: CONTRIBUTING.rst
+None yet. Why not be the first? See: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Collaborators
 Other collaborators to the software who have provided leadership, support and intellectual contributions.
 
-* John Sous
-* Noah Bright
-* David Reichman
 * Mona Berciu
-* Andrew Millis
+* Noah Bright
+* Andrew J. Millis
+* David R. Reichman
+* John Sous

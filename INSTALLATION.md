@@ -1,17 +1,16 @@
----
-title: GGCE Installation
----
+# GGCE Installation
+
 
 The following documents how one should install the GGCE package. Note that currently only support for Linux and Mac OS is supported, we cannot guarantee that the package works correctly on Windows operating systems.
 
-# Standard installation
+## Standard installation
 **Once the package is released on PyPI**, You can install GGCE via pip:
 
 ```bash
 pip install ggce
 ```
 
-# Standard development installation
+## Standard development installation
 If you wish to help develop GGCE, you can install a local version via
 
 ```bash
@@ -21,11 +20,11 @@ pip install e ".[dev]"
 which will also install all the optional development requirements in `requirements-dev.txt`. We generally recommend using a virtual environment via e.g. `conda` to ensure reproducibility and that there are no package conflicts.
 
 
-# Advanced installation
+## Advanced installation
 
 The GGCE code can be installed with advanced capabilities. There are two particular options: MPI and PETSc (which requires MPI). The following documents the installation procedure for each of these.
 
-## Necessary packages (MPI installation)
+### Necessary packages (MPI installation)
 We use `conda` for all package management except for `mpi4py`. The following process should generally explain how to install the `GGCE` repository and its dependencies in a way that should work on most clusters.
 
 1. [Create a fresh `conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) using `python=3.7`.
@@ -38,7 +37,7 @@ We use `conda` for all package management except for `mpi4py`. The following pro
 
 After these steps, everything should work properly.
 
-## Enable usage of PETSc for massively parallel computations
+### Enable usage of PETSc for massively parallel computations
 [PETSc](https://www.mcs.anl.gov/petsc/index.html) is a software library created and maintained at the Argonne National Laboratory for
 massively parallel solution of large linear systems of equations (e.g.
 finite-difference approaches to PDEs). It provides an interface to a long list
