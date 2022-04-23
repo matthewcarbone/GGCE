@@ -4,7 +4,7 @@ import pytest
 
 import numpy as np
 
-from ..model import model_coupling_map, SingleTerm, Hamiltonian
+from ggce.model import model_coupling_map, SingleTerm, Hamiltonian
 
 
 @pytest.mark.parametrize(

@@ -16,8 +16,8 @@ class Config(MSONable):
     def _check_config(x):
         if len(x.shape) < 2:
             logger.critical(f"Provided config {x} has <2 dimensions")
-        if np.any(np.array(x.shape[1:]) == 1):
-            logger.critical(f"Provided config {x} has extra dimensions")
+        if np.any(x < 0):
+            logger.critical(f"Invalid config {x}: some < 0")
         if len(x.shape) > 4:
             logger.warning(
                 f"Provided config of shape {x.shape} is greater than 4, "
@@ -77,7 +77,8 @@ class Config(MSONable):
         -------
         numpy.ndarray
         """
-        axes = [ii + 1 for ii in range(len(self._config.shape))]
+
+        axes = [ii + 1 for ii in range(len(self._config.shape) - 1)]
         return np.sum(self._config, axis=tuple(axes))
 
     @property
@@ -107,9 +108,6 @@ class Config(MSONable):
         """
 
         Config._check_config(self._config)
-
-        if np.any(self._config < 0):
-            logger.critical(f"Invalid config {self._config}: some < 0")
 
         if self.total_phonons == 0:
             return
@@ -234,7 +232,7 @@ class Config(MSONable):
 
         if self._modifications >= self._max_modifications:
             logger.critical(
-                f"Max modifications {self.max_modifications} exceeded"
+                f"Max modifications {self._max_modifications} exceeded"
             )
 
         if len(indexes) != len(self._config.shape):
@@ -307,6 +305,7 @@ class Config(MSONable):
         # Here, no padding is required.
         if np.all(location_matrix):
             self._config[indexes] += 1
+            self._modifications += 1
             return zeros  # Shift is all zeros in this case
 
         # Otherwise, we have to pad the array in various ways. First, it is

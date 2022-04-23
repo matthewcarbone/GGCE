@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 
-from ..utils import physics
+from ggce.utils import physics
 
 
 def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
