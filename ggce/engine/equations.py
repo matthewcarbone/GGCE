@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-
-import copy
+from copy import deepcopy, copy
 import numpy as np
 
-from ggce.engine import physics
+from ggce import logger
+from ggce.utils import physics
 from ggce.engine import terms as terms_module
 
 
@@ -19,57 +18,97 @@ class Equation:
 
     Attributes
     ----------
+    f_arg_terms : TYPE
+        Description
+    terms_list : list
+        Description
+
+    Deleted Attributes
+    ------------------
     bias : Callable
         Function of k and w, default is 0. Will be G0(k, w) in the case of the
         free Green's function.
+    terms : List[FDeltaTerm]
+        A list of the remainder of the FDeltaTerms.
+    config_index : TYPE
+        Description
+
     index_term : FDeltaTerm
         A "pointer", in a sense, to the equation. Allows us to label the
         equation. It contributes additively to the rest of the terms.
-    terms : List[FDeltaTerm]
-        A list of the remainder of the FDeltaTerms.
-    f_arg_terms : Dict[List[int]]
-        A dictionary indexed by the _n_mat_identifier containing lists of
-        integers highlighting the required values of delta for that
-        particular _n_mat_identifier.
+    system_params : TYPE
+        Description
     """
 
-    def __init__(self, config_index, system_params):
-        """Initializer.
+    @classmethod
+    def from_config(cls, config, model):
+        """Initializes the :class:`Equation` class from a numpy array and a
+        :class:`ggce.models.Model`.
 
         Parameters
         ----------
-        config_index : np.ndarray
-            The list of integers representing the f-subscript. In order to be
-            a valid f-function, the first and last indexes must be at least
-            one. These properties are asserted in the setter for this
-            parameter. This means that only allowed f-function subscripts can
-            be passed to this function.
-        system_params : SystemParams
-            Container for the full set of parameters.
+        config : numpy.array
+            The array representing the configuration of phonons.
+        model : ggce.models.Model
+            Container for the full set of parameters. Contains all Hamiltonian
+            and parameter information about the terms, phonons, couplings, etc.
+
+        Returns
+        -------
+        Equation
         """
 
-        self.config_index = config_index
-        self.f_arg_terms = None
-        self.system_params = system_params
+        index_term = terms_module.IndexTerm(config.copy())
+        return cls(index_term, model)
 
-    def bias(self, k, w, eta=None):
+    @property
+    def index_term(self):
+        """The index term/config referencing the lhs of the equation.
+
+        Returns
+        -------
+        ggce.engine.terms.IndexTerm
+        """
+
+        return self._index_term
+
+    @property
+    def model(self):
+        """Container for the full set of parameters. Contains all Hamiltonian
+        and parameter information about the terms, phonons, couplings, etc.
+
+        Returns
+        -------
+        ggce.model.Model
+            Description
+        """
+
+        return self._model
+
+    @property
+    def f_arg_terms(self):
+        """A dictionary of lists of ints indexed by the config string
+        representation containing lists of integers highlighting the required
+        values of delta for that particular config string representation.
+
+        Returns
+        -------
+        dict
+        """
+
+        return self._f_arg_terms
+
+    def __init__(self, index_term, model, f_arg_terms=None, terms_list=None):
+        self._index_term = deepcopy(index_term)
+        self._model = deepcopy(model)
+        self._f_arg_terms = deepcopy(f_arg_terms)
+        self._terms_list = deepcopy(terms_list)
+
+    def bias(self, k, w, eta):
         """The default value for the bias is 0, except in the case of the
         Green's function."""
 
         return 0.0
-
-    def initialize_index_term(self):
-        """Initializes the index which is used as a reference to the equation.
-        """
-
-        # Pass over the Green's function
-        if self.config_index.shape[1] == 1 and np.sum(self.config_index) == 0:
-            pass
-        else:
-            assert np.any(self.config_index[:, 0]) > 0
-            assert np.any(self.config_index[:, -1]) > 0
-
-        self.index_term = terms_module.IndexTerm(copy.copy(self.config_index))
 
     def visualize(self, full=True, coef=None):
         """Prints the representative strings of the terms for both the indexer
@@ -78,12 +117,12 @@ class Equation:
         If coef is not None, we assume we want to visualize the coefficient
         too, and coef is a 2-vector containing the k and w points."""
 
-        id1 = self.index_term.identifier(full=full)
+        id1 = self.index_term.id(full=full)
         if coef is not None:
             id1 += f" -> {self.index_term.coefficient(*coef)}"
         print(id1)
-        for term in self.terms_list:
-            id1 = term.identifier(full=full)
+        for term in self._terms_list:
+            id1 = term.id(full=full)
             if coef is not None:
                 c = term.coefficient(*coef)
                 if c.imag < 0:
@@ -93,50 +132,57 @@ class Equation:
             print("\t", id1)
 
     def _populate_f_arg_terms(self):
-        """Populates the required f_arg terms for the 'rhs' (in self.terms_list)
+        """Populates the required f_arg terms for the 'rhs' (in self._terms_list)
         that will be needed for the non-generalized equations later.
         Specifically, populates a dictionary all_delta_terms which maps the
         f_vec index string to a list of integers, which correspond to the
         needed delta values for that f_vec string. These dictionaries will be
         combined later during production of the non-generalized f-functions."""
 
-        self.f_arg_terms = dict()
-        for ii, term in enumerate(self.terms_list):
+        if self._f_arg_terms is not None:
+            logger.error("f_args_terms is already initialized")
+            return
+
+        self._f_arg_terms = dict()
+        for ii, term in enumerate(self._terms_list):
             n_mat_identifier = term._get_boson_config_identifier()
             try:
-                self.f_arg_terms[n_mat_identifier].append(term.f_arg)
+                self._f_arg_terms[n_mat_identifier].append(term.f_arg)
             except KeyError:
-                self.f_arg_terms[n_mat_identifier] = [term.f_arg]
+                self._f_arg_terms[n_mat_identifier] = [term.f_arg]
 
     def init_full(self, delta):
         """Increments every term in the term list's g-argument by the provided
         value. Also sets the f_arg to the proper value for the index term."""
 
         self.index_term.set_f_arg(delta)
-        for ii in range(len(self.terms_list)):
-            self.terms_list[ii].increment_g_arg(delta)
+        for ii in range(len(self._terms_list)):
+            self._terms_list[ii].increment_g_arg(delta)
 
     def initialize_terms(self, config_space_generator):
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
-        ae = self.system_params.absolute_extent
+        if self._terms_list is None:
+            logger.error("terms_list is already initialized")
+            return
 
-        self.terms_list = []
-        assert np.all(self.config_index >= 0)
+        ae = self._model.absolute_extent
+        self._terms_list = []
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.system_params.terms:
-
-            # Boson type
-            bt = hterm.bt
+        for hterm in self._model.hamiltonian.terms:
 
             # We separate the two cases for creation and annihilation operators
             # on the boson operator 'b'
-            if hterm.d == '-':
+            if hterm.dag == "-":
 
                 # Iterate over the site indexes for the term's alpha-index
-                for loc, nval in enumerate(self.config_index[bt, :]):
+                bt = hterm.phonon_index  # Phonon type
+                arr = self.config_index.config[bt, ...]
+                for loc, nval in np.ndenumerate(arr):
+
+                    # LEFT OFF HERE
 
                     # Do not annihilate the vacuum, this term comes to 0
                     # anyway.
@@ -144,34 +190,36 @@ class Equation:
                         continue
 
                     t = terms_module.AnnihilationTerm(
-                        copy.copy(self.config_index), hterm=hterm,
+                        copy.copy(self.config_index),
+                        hterm=hterm,
                         system_params=self.system_params.get_fFunctionInfo(),
-                        constant_prefactor=hterm.g * nval
+                        constant_prefactor=hterm.g * nval,
                     )
                     t.step(loc)
                     t.check_if_green_and_simplify()
                     if t.config.is_zero():
-                        self.terms_list.append(t)
+                        self._terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
-                        self.terms_list.append(t)
+                        self._terms_list.append(t)
 
             # Don't want to create an equation corresponding to more than
             # the maximum number of allowed bosons.
-            elif hterm.d == '+':
+            elif hterm.dag == "+":
                 for loc in range(self.config_index.shape[1] - ae, ae):
 
                     t = terms_module.CreationTerm(
-                        copy.copy(self.config_index), hterm=hterm,
+                        copy.copy(self.config_index),
+                        hterm=hterm,
                         system_params=self.system_params.get_fFunctionInfo(),
-                        constant_prefactor=hterm.g
+                        constant_prefactor=hterm.g,
                     )
                     t.step(loc)
                     t.check_if_green_and_simplify()
 
                     if t.config.is_zero():
-                        self.terms_list.append(t)
+                        self._terms_list.append(t)
                     elif config_space_generator.is_legal(t.config.config):
-                        self.terms_list.append(t)
+                        self._terms_list.append(t)
 
 
 class GreenEquation(Equation):
@@ -195,18 +243,19 @@ class GreenEquation(Equation):
         """Override for the Green's function other terms."""
 
         # Only instance where we actually use the base FDeltaTerm class
-        self.terms_list = []
+        self._terms_list = []
 
         # Iterate over all possible types of the coupling operators
         for hterm in self.system_params.terms:
 
             # Only boson creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
-            if hterm.d == '+':
+            if hterm.d == "+":
                 n = np.zeros((self.system_params.n_boson_types, 1)).astype(int)
                 n[hterm.bt, :] = 1
                 t = terms_module.EOMTerm(
-                    boson_config=n, hterm=hterm,
-                    system_params=self.system_params.get_fFunctionInfo()
+                    boson_config=n,
+                    hterm=hterm,
+                    system_params=self.system_params.get_fFunctionInfo(),
                 )
-                self.terms_list.append(t)
+                self._terms_list.append(t)
