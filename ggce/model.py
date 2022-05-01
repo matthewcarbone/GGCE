@@ -1,3 +1,4 @@
+from copy import deepcopy, copy
 import numpy as np
 import math
 
@@ -86,8 +87,8 @@ class SingleTerm(MSONable):
 
     @psi.setter
     def psi(self, x):
-        if not isinstance(x, (float, int)):
-            raise ValueError
+        if not isinstance(x, np.ndarray):
+            logger.critical(f"psi {x} must be of type numpy.array")
         self._psi = x
 
     @property
@@ -96,8 +97,8 @@ class SingleTerm(MSONable):
 
     @phi.setter
     def phi(self, x):
-        if not isinstance(x, (float, int)):
-            raise ValueError
+        if not isinstance(x, np.ndarray):
+            logger.critical(f"phi {x} must be of type numpy.array")
         self._phi = x
 
     @property
@@ -196,6 +197,10 @@ class Hamiltonian(MSONable):
     def terms(self):
         return self._terms
 
+    @property
+    def phonon_frequencies(self):
+        return self._phonon_frequencies
+
     def get_dict_rep(self):
         """Provides a dictionary representation of the Hamiltonian. Packages
         terms by the phonon type.
@@ -213,19 +218,19 @@ class Hamiltonian(MSONable):
                 d[term.phonon_index] = [term]
         return d
 
-    @staticmethod
     def _get_SingleTerm_objects(
-        coupling_type, coupling_strength, phonon_index, phonon_frequency
+        self, coupling_type, coupling_strength, phonon_index, phonon_frequency
     ):
         """Gets the SingleTerm objects corresponding to some coupling_type,
         coupling strength and phonon_index."""
 
+        # Holstein is easy. In all dimensions, it "looks" the same.
         if coupling_type == "Holstein":
             return [
                 SingleTerm(
                     coupling_type,
-                    0,
-                    0,
+                    np.array([0] * self._dimension),
+                    np.array([0] * self._dimension),
                     "+",
                     -coupling_strength,
                     phonon_index,
@@ -233,8 +238,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    0,
-                    0,
+                    np.array([0] * self._dimension),
+                    np.array([0] * self._dimension),
                     "-",
                     -coupling_strength,
                     phonon_index,
@@ -400,10 +405,12 @@ class Hamiltonian(MSONable):
 
         raise RuntimeError(f"Unknown coupling type {coupling_type}")
 
-    def __init__(self, terms=[]):
+    def __init__(self, terms=[], phonon_frequencies=[], dimension=1):
         """Sets the list of terms as an empty list"""
 
-        self._terms = terms
+        self._terms = deepcopy(terms)
+        self._phonon_frequencies = copy(phonon_frequencies)
+        self._dimension = dimension
 
     def _add_(
         self,
@@ -440,7 +447,7 @@ class Hamiltonian(MSONable):
         assert g is not None
 
         try:
-            terms = Hamiltonian._get_SingleTerm_objects(
+            terms = self._get_SingleTerm_objects(
                 coupling_type,
                 g * coupling_multiplier,
                 phonon_index,
@@ -449,6 +456,9 @@ class Hamiltonian(MSONable):
         except RuntimeError:
             logger.error(f"Unknown coupling type {coupling_type}")
             return
+
+        if phonon_frequency not in self._phonon_frequencies:
+            self._phonon_frequencies.append(phonon_frequency)
 
         self._terms.extend(terms)
 
@@ -674,21 +684,22 @@ class Model(MSONable):
         hopping=1.0,
         lattice_constant=1.0,
         temperature=0.0,
-        hamiltonian=Hamiltonian(),
+        hamiltonian=Hamiltonian([]),
         phonon_max_per_site=None,
         phonon_extent=[],
         phonon_number=[],
         phonon_absolute_extent=None,
         n_phonon_types=0,
     ):
-        args = {key: value for key, value in locals().items() if key != "self"}
-        logger.debug(f"Model initialized {args}")
-
-        # Easy hack for setting all input variables as attributes.
-        for key, value in locals().items():
-            if key == "self":
-                continue
-            setattr(self, key, value)
+        self._hopping = hopping
+        self._lattice_constant = lattice_constant
+        self._temperature = temperature
+        self._hamiltonian = deepcopy(hamiltonian)
+        self._phonon_max_per_site = phonon_max_per_site
+        self._phonon_extent = copy(phonon_extent)
+        self._phonon_number = copy(phonon_number)
+        self._phonon_absolute_extent = phonon_absolute_extent
+        self._n_phonon_types = n_phonon_types
 
     def _get_TFD_coupling_prefactors(self, Omega):
         """Gets the TFD coupling prefactors.

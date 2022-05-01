@@ -27,7 +27,7 @@ class Config(MSONable):
 
     @property
     def config(self):
-        """An array of the shape (n_boson_types, cloud length axis 1, 2, ...).
+        """An array of the shape (n_phonon_types, cloud length axis 1, 2, ...).
         The array should only contain integers. Spatial information is
         contained in the indexes 1 and greater. The 0th index contains the
         information about the phonon type.
@@ -38,6 +38,29 @@ class Config(MSONable):
         """
 
         return self._config
+
+    @property
+    def shape(self):
+        """The shape of the config array.
+
+        Returns
+        -------
+        tuple
+        """
+
+        return self.config.shape
+
+    @property
+    def n_spatial_dimensions(self):
+        """The number of spatial dimensions in the config. Explicitly excludes
+        counting the first dimension, which corresponds to the phonon index.
+
+        Returns
+        -------
+        int
+        """
+
+        return len(self.shape) - 1
 
     @config.setter
     def config(self, x):
@@ -150,7 +173,10 @@ class Config(MSONable):
             return "G"
         rep = str(list(self._config.flatten()))
         shape = str(self._config.shape)
-        return f"{rep} {shape}"
+        return f"{rep}{shape}"
+
+    def __repr__(self):
+        return self.__str__()
 
     def id(self):
         """Returns the string representation of the config. This is constructed
@@ -287,6 +313,11 @@ class Config(MSONable):
                 f"Max modifications {self._max_modifications} exceeded"
             )
 
+        if len(indexes) != len(self._config.shape):
+            logger.critical(
+                f"Dimension mismatch between config and indexes {indexes}"
+            )
+
         # Check that the phonon index is valid
         if indexes[0] < 0 or indexes[0] > self._config.shape[0] - 1:
             logger.critical(
@@ -301,7 +332,7 @@ class Config(MSONable):
             spatial_indexes < cloud_shape
         )
 
-        # Easy case: the boson type to add is in the existing cloud.
+        # Easy case: the phonon type to add is in the existing cloud.
         # Here, no padding is required.
         if np.all(location_matrix):
             self._config[indexes] += 1
@@ -331,6 +362,7 @@ class Config(MSONable):
 
         # Update the config object accordingly
         self._config = np.pad(self._config, pad, "constant", constant_values=0)
+        indexes = tuple([max(xx, 0) for xx in indexes])
         self._config[indexes] += 1
 
         self._modifications += 1
@@ -346,7 +378,7 @@ class Term(MSONable):
     @property
     def config(self):
         """The configuration of phonons. The Config class contains the
-        necessary methods for adding and removing bosons of various types
+        necessary methods for adding and removing phonons of various types
         and in various locations. See :class:`.Config`.
 
         Returns
@@ -355,6 +387,17 @@ class Term(MSONable):
         """
 
         return self._config
+
+    @property
+    def shape(self):
+        """The shape of the config array.
+
+        Returns
+        -------
+        tuple
+        """
+
+        return self.config.shape
 
     @config.setter
     def config(self, x):
@@ -375,6 +418,9 @@ class Term(MSONable):
 
     @hamiltonian_term.setter
     def hamiltonian_term(self, x):
+        if x is None:
+            self._hamiltonian_term = None
+            return
         if not isinstance(x, SingleTerm):
             logger.critical(f"Invalid Hamiltonian term of type {type(x)}")
         self._hamiltonian_term = x
@@ -425,19 +471,16 @@ class Term(MSONable):
 
         return self._exp_shift
 
-    def _assert_shape_equal_to_config(self, x):
-        if not isinstance(x, np.ndarray):
-            logger.critical(f"Wrong type {x}")
-        n_dims = len(self._config.config.shape) - 1
-        if x.shape != n_dims:
-            logger.critical(
-                "Dimension mismatch between config of shape "
-                f"{self.config.shape} and provided {x} of shape {x.shape}"
-            )
-
     @exp_shift.setter
     def exp_shift(self, x):
-        self._assert_shape_equal_to_config(x)
+        if x is None:
+            self._exp_shift = None
+            return
+        if len(x) != self.config.n_spatial_dimensions:
+            logger.critical(
+                f"exp_shift {x} != config spatial dimension "
+                f"{self.config.n_spatial_dimensions}"
+            )
         self._exp_shift = x
 
     @property
@@ -463,7 +506,11 @@ class Term(MSONable):
         if x is None:
             self._f_arg = None
             return
-        self._assert_shape_equal_to_config(x)
+        if len(x) != self.config.n_spatial_dimensions:
+            logger.critical(
+                f"f_arg {x} != config spatial dimension "
+                f"{self.config.n_spatial_dimensions}"
+            )
         self._f_arg = x
 
     @property
@@ -483,8 +530,18 @@ class Term(MSONable):
         if x is None:
             self._g_arg = None
             return
-        self._assert_shape_equal_to_config(x)
+        if len(x) != self.config.n_spatial_dimensions:
+            logger.critical(
+                f"g_arg {x} != config spatial dimension "
+                f"{self.config.n_spatial_dimensions}"
+            )
         self._g_arg = x
+
+    def __str__(self):
+        return str(self.config)
+
+    def __repr__(self):
+        return self.__str__()
 
     def __init__(
         self,
@@ -500,15 +557,12 @@ class Term(MSONable):
         self._constant_prefactor = constant_prefactor
 
         # Determines the argument of f and prefactors
+        n_dims = self.config.n_spatial_dimensions
         if exp_shift is None:
-            n_dims = len(self._config.config.shape) - 1
             self._exp_shift = np.array([0.0 for _ in range(n_dims)])
         else:
-            self._assert_shape_equal_to_config(exp_shift)
             self._exp_shift = exp_shift  # exp(i*k*a*exp_shift)
-        self._assert_shape_equal_to_config(f_arg)
         self._f_arg = f_arg  # Only None for the index term
-        self._assert_shape_equal_to_config(g_arg)
         self._g_arg = g_arg  # => g(...) = 1
 
     def _get_phonon_config_id(self):
@@ -538,7 +592,7 @@ class Term(MSONable):
         if self._exp_shift is None:
             return "[!]"
 
-        return f"[{str(self._exp_shift)}]"
+        return str(self._exp_shift)
 
     def id(self, full=False):
         """Returns a string with which one can index the term. There are two
@@ -569,7 +623,7 @@ class Term(MSONable):
         t2 = self._get_g_arg_id() + self._get_c_exp_id()
         return t1 + t2
 
-    def update_boson_config_(self):
+    def update_phonon_config_(self):
         """Specific update scheme needs to be run depending on whether we add
         or remove a phonon."""
 
@@ -578,7 +632,7 @@ class Term(MSONable):
     def coefficient(self):
         raise NotImplementedError
 
-    def modify_n_bosons_(self):
+    def _modify_n_phonons_(self):
         """By default, does nothing, will only be defined for the terms
         in which we add or subtract a phonon."""
 
@@ -590,9 +644,9 @@ class Term(MSONable):
         Parameters
         ----------
         add_to_g_arg : numpy.ndarray
-            The array to add to the ``_g_arg`` attribute. If the provided value
-            is not of the same shape as the current ``_g_arg``, an error will
-            be logged, since while this will not necessarily lead to the
+            The array to add to the ``g_arg`` attribute. If the provided value
+            is not of the same shape as the current ``g_arg``, an error will be
+            logged, since while this will not necessarily lead to the
             termination of the program, it is likely unintended.
         """
 
@@ -630,7 +684,14 @@ class IndexTerm(Term):
     """
 
     def __init__(self, config):
-        super().__init__(config=config)
+        super().__init__(
+            config=config,
+            hamiltonian_term=None,
+            constant_prefactor=1.0,
+            exp_shift=None,
+            f_arg=None,
+            g_arg=None,
+        )
 
     def _set_f_arg_(self, f_arg):
         """Overrides the set value of f_arg."""
@@ -664,12 +725,18 @@ class EOMTerm(Term):
     """A special instance of the base class that is part of the EOM of the
     Green's function."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        assert self.hterm is not None
-        self.exp_shift = self.hterm.x - self.hterm.y
-        self.f_arg = self.hterm.y
-        self.constant_prefactor = self.hterm.g
+    def __init__(self, config, hamiltonian_term, model):
+        super().__init__(config, hamiltonian_term)
+        if self.hamiltonian_term is None:
+            logger.critical(
+                "EOM term requires a Hamiltonian term passed in the "
+                "constructor"
+            )
+        self._exp_shift = self.hamiltonian_term.psi - self.hamiltonian_term.phi
+        self._f_arg = self.hamiltonian_term.phi
+        self._constant_prefactor = self.hamiltonian_term.coupling
+        self._lattice_constant = model.lattice_constant
+        self._hopping = model.hopping
 
     def coefficient(self, k, w, eta):
         """This will set the prefactor to G0, since we assume
@@ -680,11 +747,11 @@ class EOMTerm(Term):
         AnnihilationTerm and CreationTerm classes."""
 
         return (
-            self.constant_prefactor
+            self._constant_prefactor
             * physics.G0_k_omega(
-                k, w, self.system_params.a, eta, self.system_params.t
+                k, w, self._lattice_constant, eta, self._hopping
             )
-            * cmath.exp(1j * k * self.system_params.a * self.exp_shift)
+            * cmath.exp(1j * k * self._lattice_constant * self.exp_shift)
         )
 
     def increment_g_arg_(self, delta):
@@ -692,42 +759,44 @@ class EOMTerm(Term):
 
 
 class NonIndexTerm(Term):
-    def __init__(self, boson_config, hterm, system_params, constant_prefactor):
-        super().__init__(boson_config, hterm, system_params)
-        assert self.hterm is not None
+    def __init__(self, config, hamiltonian_term, model, constant_prefactor):
+        super().__init__(config, hamiltonian_term, model)
+        assert self.hamiltonian_term is not None
 
         # This is entirely general now
-        self.f_arg = self.hterm.y
-        self.g_arg = self.hterm.x - self.hterm.y
+        self.f_arg = self.hamiltonian_term.phi
+        self.g_arg = self.hamiltonian_term.psi - self.hamiltonian_term.phi
         self.constant_prefactor = constant_prefactor
         self.freq_shift = sum(
             [
-                self.system_params.Omega[ii] * bpt
-                for ii, bpt in enumerate(self.config.total_bosons_per_type)
+                model.hamiltonian.phonon_frequencies[ii] * bpt
+                for ii, bpt in enumerate(self.config.total_phonons_per_type)
             ]
         )
+        self._lattice_constant = model.lattice_constant
+        self._hopping = model.hopping
 
-    def step(self, location):
-        """Increments or decrements the bosons on the chain depending on the
-        class derived class type. The location is generally given by gamma
-        in my notation."""
+    def step_(self, *location):
+        """Increments or decrements the phonons on the chain depending on the
+        class derived class type."""
 
-        self.g_arg += location
-        self.f_arg -= location
-        self.modify_n_bosons_(self.hterm.bt, location)
+        self.g_arg += np.array(location)
+        self.f_arg -= np.array(location)
+        loc = [self.hamiltonian_term.phonon_index, *location]
+        self._modify_n_phonons_(*loc)
 
     def coefficient(self, k, w, eta):
 
-        exp_term = cmath.exp(1j * k * self.system_params.a * self.exp_shift)
+        exp_term = cmath.exp(1j * k * self._lattice_constant * self.exp_shift)
 
         w_freq_shift = w - self.freq_shift
 
         g_contrib = physics.g0_delta_omega(
             self.g_arg,
             w_freq_shift,
-            self.system_params.a,
+            self._lattice_constant,
             eta,
-            self.system_params.t,
+            self._hopping,
         )
 
         return self.constant_prefactor * exp_term * g_contrib
@@ -735,30 +804,30 @@ class NonIndexTerm(Term):
 
 class AnnihilationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
-    a boson from a specified site."""
+    a phonon from a specified site."""
 
-    def modify_n_bosons_(self, boson_type, location):
-        """Removes a boson from the specified site corresponding to the
+    def _modify_n_phonons_(self, *loc):
+        """Removes a phonon from the specified site corresponding to the
         correct type. Note this step is independent of the reductions of the
         f-functions to other f-functions."""
 
-        shift = self.config.remove_phonon_(boson_type, location)
+        shift = self.config.remove_phonon_(*loc)
         self.exp_shift -= shift
         self.f_arg += shift
 
 
 class CreationTerm(NonIndexTerm):
     """Specific object for containing f-terms in which we must subtract
-    a boson from a specified site."""
+    a phonon from a specified site."""
 
-    def modify_n_bosons_(self, boson_type, location):
-        """This is done for the user in update_boson_config_. Handles
-        the boson creation cases, since these can be a bit
-        confusing. Basically, we have the possibility of creating a boson on
+    def _modify_n_phonons_(self, *loc):
+        """This is done for the user in update_phonon_config_. Handles
+        the phonon creation cases, since these can be a bit
+        confusing. Basically, we have the possibility of creating a phonon on
         a site that is outside of the range of self.config. So we need methods
         of handling the case when an IndexError would've otherwise been raised
         during an attempt to increment an index that isn't there."""
 
-        shift = self.config.add_boson(boson_type, location)
+        shift = self.config.add_phonon_(*loc)
         self.exp_shift = shift
         self.f_arg -= shift
