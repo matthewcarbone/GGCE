@@ -53,7 +53,8 @@ class SingleTerm(MSONable):
     """Contains the shift indexes, dagger status, coupling strength and boson
     type of a single term. Particularly, this single term corresponds to
     a single element of the sum in equation (10) in this
-    [PRB](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106),
+    `PRB <https://journals.aps.org/prb/abstract/10.1103/
+        PhysRevB.104.035106>`_,
 
     .. math::
 

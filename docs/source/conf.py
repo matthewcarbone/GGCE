@@ -68,13 +68,20 @@ master_doc = "index"
 
 # General information about the project.
 project = "ggce"
-copyright = "2022, the respective contributors, as shown by the AUTHORS.md file"
+copyright = (
+    "2022, the respective contributors, as shown by the AUTHORS.md file"
+)
 author = "Matthew R. Carbone"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
+import os
+import sys
+
+basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, basedir)
 import ggce
 
 # The short X.Y version.

@@ -7,38 +7,23 @@ from ggce.engine import terms as terms_module
 
 
 class Equation:
-    """A single equation that describes f_n in terms of other f-functions,
-    plus a constant. Note that by definition f_0(0) is the full Green's
-    function within the MA.
-        The core attributes are the terms and the bias, such that the sum of
-    terms equals the bias, which is a simple constant number (really a function
-    depending on k and w). The terms will constitute the basis of populating
-    the matrix equation to solve, and the entries of that matrix will be the
-    callable prefactors, functions of k and w as well.
+    """A single equation that indexes a single Auxiliary Green's Function
+    (AGF). These functions can be loosely conceptualized in terms of the number
+    of phonons in each term, and can be written as
 
-    Attributes
-    ----------
-    f_arg_terms : TYPE
-        Description
-    terms_list : list
-        Description
+    .. math::
 
-    Deleted Attributes
-    ------------------
-    bias : Callable
-        Function of k and w, default is 0. Will be G0(k, w) in the case of the
-        free Green's function.
-    terms : List[FDeltaTerm]
-        A list of the remainder of the FDeltaTerms.
-    config_index : TYPE
-        Description
+        f(n) \\sim \\sum_i f_i(n-1) + \\sum_j f_j(n+1) + b
 
-    index_term : FDeltaTerm
-        A "pointer", in a sense, to the equation. Allows us to label the
-        equation. It contributes additively to the rest of the terms.
-    system_params : TYPE
-        Description
-    """
+    where :math:`n` is an in-exhaustive index/bad quantum number corresponding
+    to the total number of phonons on those sites. The :class:`Equation` class
+    contains an ``index_term``, which in this case represents :math:`f(n)`, and
+    a ``terms_list`` object, which corresponds to the right hand side.
+        There is also a bias term, :math:`b`, which represents possible
+    inhomogeneities. Only the Green's function itself contains
+    :math:`b\\neq 0`. All of these terms are implicitly functions of the
+    momentum, :math:`k`, the energy/frequency, :math:`\\omega`, and the
+    artificial broadening :math:`\\eta`."""
 
     @classmethod
     def from_config(cls, config, model):
