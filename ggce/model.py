@@ -83,7 +83,7 @@ class SingleTerm(MSONable):
 
     @property
     def psi(self):
-        return self._psi
+        return self._psi.copy()
 
     @psi.setter
     def psi(self, x):
@@ -93,7 +93,7 @@ class SingleTerm(MSONable):
 
     @property
     def phi(self):
-        return self._phi
+        return self._phi.copy()
 
     @phi.setter
     def phi(self, x):

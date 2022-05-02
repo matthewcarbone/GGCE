@@ -121,15 +121,16 @@ class Equation:
         if coef is not None:
             id1 += f" -> {self.index_term.coefficient(*coef)}"
         print(id1)
-        for term in self._terms_list:
-            id1 = term.id(full=full)
-            if coef is not None:
-                c = term.coefficient(*coef)
-                if c.imag < 0:
-                    id1 += f" -> {c.real:.02e} - {-c.imag:.02e}i"
-                else:
-                    id1 += f" -> {c.real:.02e} + {c.imag:.02e}i"
-            print("\t", id1)
+        if self._terms_list is not None:
+            for term in self._terms_list:
+                id1 = term.id(full=full)
+                if coef is not None:
+                    c = term.coefficient(*coef)
+                    if c.imag < 0:
+                        id1 += f" -> {c.real:.02e} - {-c.imag:.02e}i"
+                    else:
+                        id1 += f" -> {c.real:.02e} + {c.imag:.02e}i"
+                print("\t", id1)
 
     def _populate_f_arg_terms(self):
         """Populates the required f_arg terms for the 'rhs' (in self._terms_list)
@@ -159,30 +160,30 @@ class Equation:
         for ii in range(len(self._terms_list)):
             self._terms_list[ii].increment_g_arg(delta)
 
-    def initialize_terms(self, config_space_generator):
+    def initialize_terms(self):
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
-        if self._terms_list is None:
+        if self._terms_list is not None:
             logger.error("terms_list is already initialized")
             return
 
-        ae = self._model.absolute_extent
+        ae = self._model.phonon_absolute_extent
+        n_spatial_dimensions = self._index_term.config.n_spatial_dimensions
         self._terms_list = []
 
         # Iterate over all possible types of the coupling operators
         for hterm in self._model.hamiltonian.terms:
+
+            bt = hterm.phonon_index  # Phonon type
+            arr = self.index_term.config.config[bt, ...]
 
             # We separate the two cases for creation and annihilation operators
             # on the boson operator 'b'
             if hterm.dag == "-":
 
                 # Iterate over the site indexes for the term's alpha-index
-                bt = hterm.phonon_index  # Phonon type
-                arr = self.config_index.config[bt, ...]
                 for loc, nval in np.ndenumerate(arr):
-
-                    # LEFT OFF HERE
 
                     # Do not annihilate the vacuum, this term comes to 0
                     # anyway.
@@ -190,36 +191,55 @@ class Equation:
                         continue
 
                     t = terms_module.AnnihilationTerm(
-                        copy.copy(self.config_index),
-                        hterm=hterm,
-                        system_params=self.system_params.get_fFunctionInfo(),
-                        constant_prefactor=hterm.g * nval,
+                        copy(self._index_term.config.config),
+                        hamiltonian_term=hterm,
+                        model=deepcopy(self._model),
+                        constant_prefactor=hterm.coupling * nval,
                     )
-                    t.step(loc)
-                    t.check_if_green_and_simplify()
-                    if t.config.is_zero():
-                        self._terms_list.append(t)
-                    elif config_space_generator.is_legal(t.config.config):
-                        self._terms_list.append(t)
+                    t.step_(*loc)
+                    t.check_if_green_and_simplify_()
+                    t.config.validate()
+                    self._terms_list.append(t)
 
             # Don't want to create an equation corresponding to more than
-            # the maximum number of allowed bosons.
+            # the maximum number of allowed phonons.
             elif hterm.dag == "+":
-                for loc in range(self.config_index.shape[1] - ae, ae):
+
+                if any([xx - ae > 0 for xx in self._index_term.config.shape]):
+                    logger.critical(
+                        f"Absolute extent {ae} cannot be smaller than any "
+                        "config spatial dimension: "
+                        f"{self._index_term.config.shape[1:]}"
+                    )
+
+                # Create a dummy array to make iterating over indexes easier
+                dummy = np.empty(
+                    [
+                        2 * ae - self._index_term.config.shape[ii + 1]
+                        for ii in range(n_spatial_dimensions)
+                    ]
+                )
+
+                for ii, (index, _) in enumerate(np.ndenumerate(dummy)):
+                    loc = tuple(
+                        [
+                            index[jj]
+                            - ae
+                            + self._index_term.config.shape[jj + 1]
+                            for jj in range(n_spatial_dimensions)
+                        ]
+                    )
 
                     t = terms_module.CreationTerm(
-                        copy.copy(self.config_index),
-                        hterm=hterm,
-                        system_params=self.system_params.get_fFunctionInfo(),
-                        constant_prefactor=hterm.g,
+                        copy(self._index_term.config.config),
+                        hamiltonian_term=hterm,
+                        model=deepcopy(self._model),
+                        constant_prefactor=hterm.coupling,
                     )
-                    t.step(loc)
-                    t.check_if_green_and_simplify()
-
-                    if t.config.is_zero():
-                        self._terms_list.append(t)
-                    elif config_space_generator.is_legal(t.config.config):
-                        self._terms_list.append(t)
+                    t.step_(*loc)
+                    t.check_if_green_and_simplify_()
+                    t.config.validate()
+                    self._terms_list.append(t)
 
 
 class GreenEquation(Equation):
