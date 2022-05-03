@@ -638,7 +638,7 @@ class Term(MSONable):
 
         return
 
-    def increment_g_arg_(self, add_to_g_arg):
+    def _increment_g_arg_(self, add_to_g_arg):
         """Increments the ``g_arg`` object by the provided value.
 
         Parameters
@@ -700,7 +700,7 @@ class IndexTerm(Term):
             logger.critical("Cannot set f_arg in an IndexTerm")
         self.f_arg = f_arg
 
-    def increment_g_arg_(self):
+    def _increment_g_arg_(self):
         raise NotImplementedError
 
     def coefficient(self, k, w, eta):
@@ -746,15 +746,17 @@ class EOMTerm(Term):
         constant prefactor), and this method will be overridden by
         AnnihilationTerm and CreationTerm classes."""
 
+        exp_arg = 1j * np.dot(k, self._lattice_constant * self.exp_shift)
+
         return (
             self._constant_prefactor
             * physics.G0_k_omega(
                 k, w, self._lattice_constant, eta, self._hopping
             )
-            * cmath.exp(1j * k * self._lattice_constant * self.exp_shift)
+            * cmath.exp(exp_arg)
         )
 
-    def increment_g_arg_(self, delta):
+    def _increment_g_arg_(self, delta):
         return
 
 
@@ -787,7 +789,8 @@ class NonIndexTerm(Term):
 
     def coefficient(self, k, w, eta):
 
-        exp_term = cmath.exp(1j * k * self._lattice_constant * self.exp_shift)
+        exp_arg = 1j * np.dot(k, self._lattice_constant * self.exp_shift)
+        exp_term = cmath.exp(exp_arg)
 
         w_freq_shift = w - self.freq_shift
 

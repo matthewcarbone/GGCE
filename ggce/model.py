@@ -54,7 +54,7 @@ class SingleTerm(MSONable):
     type of a single term. Particularly, this single term corresponds to
     a single element of the sum in equation (10) in this
     `PRB <https://journals.aps.org/prb/abstract/10.1103/
-        PhysRevB.104.035106>`_,
+    PhysRevB.104.035106>`_,
 
     .. math::
 
@@ -201,6 +201,10 @@ class Hamiltonian(MSONable):
     @property
     def phonon_frequencies(self):
         return self._phonon_frequencies
+
+    @property
+    def dimension(self):
+        return self._dimension
 
     def get_dict_rep(self):
         """Provides a dictionary representation of the Hamiltonian. Packages
@@ -406,16 +410,18 @@ class Hamiltonian(MSONable):
 
         raise RuntimeError(f"Unknown coupling type {coupling_type}")
 
-    def __init__(self, terms=[], phonon_frequencies=[], dimension=1):
+    def __init__(
+        self, terms=[], phonon_frequencies=[], dimension=1, hopping=1.0
+    ):
         """Sets the list of terms as an empty list"""
 
         self._terms = deepcopy(terms)
         self._phonon_frequencies = copy(phonon_frequencies)
         self._dimension = dimension
+        self._hopping = hopping
 
     def _add_(
         self,
-        hopping,
         coupling_type,
         phonon_index,
         phonon_frequency,
@@ -436,7 +442,7 @@ class Hamiltonian(MSONable):
             try:
                 g = model_coupling_map(
                     coupling_type,
-                    hopping,
+                    self._hopping,
                     phonon_frequency,
                     dimensionless_coupling_strength,
                 )
@@ -465,7 +471,6 @@ class Hamiltonian(MSONable):
 
     def add_(
         self,
-        hopping,
         coupling_type,
         phonon_index,
         phonon_frequency,
@@ -478,8 +483,6 @@ class Hamiltonian(MSONable):
 
         Parameters
         ----------
-        hopping : float
-            The hopping strength :math:`t`.
         coupling_type : str
             The type of coupling to add to the Hamiltonian.
         phonon_index : int
@@ -501,7 +504,6 @@ class Hamiltonian(MSONable):
 
         args = {key: value for key, value in locals().items() if key != "self"}
         self._add_(
-            hopping,
             coupling_type,
             phonon_index,
             phonon_frequency,
@@ -525,6 +527,13 @@ class Hamiltonian(MSONable):
 class Model(MSONable):
     """The Model object. Contains all information to be fed to the System
     class for solving for the Green's function.
+
+    .. warning::
+
+        Note it is highly recommended to use the
+        :class:`from_parameters` classmethod instead, since the constructor is
+        primarily designed to be used with MSONable and not all parameters are
+        intended to be manually modified.
 
     Attributes
     ----------
@@ -567,17 +576,7 @@ class Model(MSONable):
 
     @property
     def hopping(self):
-        return self._hopping
-
-    @hopping.setter
-    def hopping(self, x):
-        if not isinstance(x, (float, int)):
-            logger.error(f"Hopping {x} must be a number")
-            return
-        if x < 0.0:
-            logger.error(f"Hopping {x} must be non-negative")
-            return
-        self._hopping = x
+        return self._hamiltonian._hopping
 
     @property
     def lattice_constant(self):
@@ -680,19 +679,57 @@ class Model(MSONable):
             for term in term_list:
                 print(f"    {term}")
 
-    def __init__(
-        self,
+    @classmethod
+    def from_parameters(
+        cls,
         hopping=1.0,
         lattice_constant=1.0,
         temperature=0.0,
-        hamiltonian=Hamiltonian([]),
+        phonon_max_per_site=None,
+        dimension=1,
+    ):
+        """Convenience method for initializing the Model object from intuitive
+        parameters. It is recommended that this classmethod is used over the
+        constructor.
+
+        Parameters
+        ----------
+        hopping : float
+            The hopping strength :math:`t`. Default is 1.0.
+        lattice_constant : float, optional
+            Default is 1.0.
+        temperature : float, optional
+            Note that setting this > 0 will engage the Thermofield Double
+            method. Default is 0.0.
+        phonon_max_per_site : None, optional
+            Used for hard phonon constraints. Default is None, indicating no
+            limitation on the number of phonons per site.
+        dimension : int, optional
+            The spatial dimension of the system to consider. Default is 1.
+        """
+
+        return cls(
+            lattice_constant=lattice_constant,
+            temperature=temperature,
+            hamiltonian=Hamiltonian(dimension=dimension, hopping=hopping),
+            phonon_max_per_site=phonon_max_per_site,
+            phonon_extent=[],
+            phonon_number=[],
+            phonon_absolute_extent=None,
+            n_phonon_types=0,
+        )
+
+    def __init__(
+        self,
+        lattice_constant=1.0,
+        temperature=0.0,
+        hamiltonian=Hamiltonian(),
         phonon_max_per_site=None,
         phonon_extent=[],
         phonon_number=[],
         phonon_absolute_extent=None,
         n_phonon_types=0,
     ):
-        self._hopping = hopping
         self._lattice_constant = lattice_constant
         self._temperature = temperature
         self._hamiltonian = deepcopy(hamiltonian)
@@ -835,7 +872,6 @@ class Model(MSONable):
         else:
             phonon_index = phonon_index_override
         self._hamiltonian.add_(
-            self.hopping,
             coupling_type,
             phonon_index,
             phonon_frequency,
@@ -851,7 +887,6 @@ class Model(MSONable):
         # Add the finite-temperature term to the Hamiltonian
         if V_tilde_pf > 0.0:
             self._hamiltonian.add_(
-                self.hopping,
                 coupling_type,
                 phonon_index,
                 -phonon_frequency,  # Negative phonon frequency!
@@ -859,6 +894,13 @@ class Model(MSONable):
                 dimensionless_coupling_strength,
                 coupling_multiplier=V_tilde_pf,
             )
+            # coupling_type,
+            # phonon_index,
+            # phonon_frequency,
+            # coupling_strength=None,
+            # dimensionless_coupling_strength=None,
+            # coupling_multiplier=1.0,
+
             assert phonon_extent_tfd is not None
             assert phonon_number_tfd is not None
             self._phonon_extent.append(phonon_extent_tfd)

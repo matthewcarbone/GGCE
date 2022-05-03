@@ -1,12 +1,40 @@
-from copy import deepcopy, copy
+"""The ``equations`` module constructs intermediate objects for dealing with
+individual equations in the overall closure.
+
+An :class:`.Equation` can be loosely thought of in the following
+pseudo-mathematical equation:
+
+.. math::
+
+    f(n) \\sim \\sum_i f_i(n-1) + \\sum_j f_j(n+1) + b
+
+where Auxiliary Green's functions, :math:`f`, are indexed by the total number
+of phonons, :math:`n`. Note that this is of course a "bad" quantum number and
+that much more information is required to represent the Auxiliary Green's
+function, and that this information is actually contained, but for the sake
+of explanation we suppress those parameters.
+
+For couplings of the forms compatible with the GGCE software package, only
+a single phonon is created or annihilated at a time. Thus, the equations in
+the closer couple Auxiliary Green's Functions with :math:`n` phonons to those
+with :math:`n \\pm 1` phonons. There is also a bias term, :math:`b`, which is
+generally 0 except in the case of the :class:`.GreenEquation`, which is a
+special instance of the :class:`.Equation` used only for the true Green's
+function.
+"""
+
+from copy import deepcopy
 import numpy as np
+
+from monty.json import MSONable
 
 from ggce import logger
 from ggce.utils import physics
+from ggce.utils.utils import timeit
 from ggce.engine import terms as terms_module
 
 
-class Equation:
+class Equation(MSONable):
     """A single equation that indexes a single Auxiliary Green's Function
     (AGF). These functions can be loosely conceptualized in terms of the number
     of phonons in each term, and can be written as
@@ -84,10 +112,15 @@ class Equation:
         return self._f_arg_terms
 
     def __init__(self, index_term, model, f_arg_terms=None, terms_list=None):
+        logger.debug(f"Initializing {self.__class__.__name__} {index_term}")
         self._index_term = deepcopy(index_term)
         self._model = deepcopy(model)
         self._f_arg_terms = deepcopy(f_arg_terms)
         self._terms_list = deepcopy(terms_list)
+        with timeit(logger.debug, "_initialize_terms"):
+            self._initialize_terms()
+        with timeit(logger.debug, "_populate_f_arg_terms"):
+            self._populate_f_arg_terms()
 
     def bias(self, k, w, eta):
         """The default value for the bias is 0, except in the case of the
@@ -130,22 +163,22 @@ class Equation:
             return
 
         self._f_arg_terms = dict()
-        for ii, term in enumerate(self._terms_list):
-            n_mat_identifier = term._get_boson_config_identifier()
+        for term in self._terms_list:
+            n_mat_identifier = term._get_phonon_config_id()
             try:
                 self._f_arg_terms[n_mat_identifier].append(term.f_arg)
             except KeyError:
                 self._f_arg_terms[n_mat_identifier] = [term.f_arg]
 
-    def init_full(self, delta):
+    def _init_full(self, delta):
         """Increments every term in the term list's g-argument by the provided
         value. Also sets the f_arg to the proper value for the index term."""
 
-        self.index_term.set_f_arg(delta)
+        self.index_term._set_f_arg_(delta)
         for ii in range(len(self._terms_list)):
-            self._terms_list[ii].increment_g_arg(delta)
+            self._terms_list[ii]._increment_g_arg_(delta)
 
-    def initialize_terms(self):
+    def _initialize_terms(self):
         """Systematically construct the generalized annihilation terms on the
         rhs of the equation."""
 
@@ -176,7 +209,7 @@ class Equation:
                         continue
 
                     t = terms_module.AnnihilationTerm(
-                        copy(self._index_term.config.config),
+                        self._index_term.config.config.copy(),
                         hamiltonian_term=hterm,
                         model=deepcopy(self._model),
                         constant_prefactor=hterm.coupling * nval,
@@ -216,7 +249,7 @@ class Equation:
                     )
 
                     t = terms_module.CreationTerm(
-                        copy(self._index_term.config.config),
+                        self._index_term.config.config.copy(),
                         hamiltonian_term=hterm,
                         model=deepcopy(self._model),
                         constant_prefactor=hterm.coupling,
@@ -230,37 +263,40 @@ class Equation:
 class GreenEquation(Equation):
     """Specific equation corresponding to the Green's function."""
 
-    def __init__(self, system_params):
-        config = np.zeros((system_params.n_boson_types, 1))
-        super().__init__(config_index=config, system_params=system_params)
+    def __init__(self, model):
+        config = np.zeros(
+            (
+                model.n_phonon_types,
+                *[1 for _ in range(model.hamiltonian.dimension)],
+            )
+        )
+        index_term = terms_module.IndexTerm(config.copy())
+        super().__init__(index_term=index_term, model=model)
 
-    def bias(self, k, w, eta=None):
+    def bias(self, k, w, eta):
         """Initializes the bias for the Green's function."""
 
-        if eta is None:
-            eta = self.system_params.eta
-
         return physics.G0_k_omega(
-            k, w, self.system_params.a, eta, self.system_params.t
+            k, w, self.model.lattice_constant, eta, self.model.hopping
         )
 
-    def initialize_terms(self):
+    def _initialize_terms(self):
         """Override for the Green's function other terms."""
 
         # Only instance where we actually use the base FDeltaTerm class
         self._terms_list = []
 
         # Iterate over all possible types of the coupling operators
-        for hterm in self.system_params.terms:
+        for hterm in self._model.hamiltonian.terms:
 
-            # Only boson creation terms contribute to the Green's function
+            # Only phonon creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
-            if hterm.d == "+":
-                n = np.zeros((self.system_params.n_boson_types, 1)).astype(int)
-                n[hterm.bt, :] = 1
+            if hterm.dag == "+":
+                n = self._index_term.config.config.copy()
+                n[hterm.phonon_index, ...] = 1
                 t = terms_module.EOMTerm(
-                    boson_config=n,
-                    hterm=hterm,
-                    system_params=self.system_params.get_fFunctionInfo(),
+                    n,
+                    hamiltonian_term=hterm,
+                    model=deepcopy(self._model),
                 )
                 self._terms_list.append(t)
