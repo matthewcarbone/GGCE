@@ -1,8 +1,10 @@
-import numpy as np
+from contextlib import contextmanager
 from pathlib import Path
-import pickle
-import uuid
 import time
+import uuid
+
+import numpy as np
+import pickle
 from scipy.optimize import curve_fit
 
 
@@ -71,6 +73,65 @@ def time_remaining(time_elapsed, percentage_complete):
     if percentage_complete == 100:
         return 0.0
     return (100.0 - percentage_complete) * time_elapsed / percentage_complete
+
+
+def _elapsed_time_str(dt):
+    """Returns the elapsed time in variable format depending on how long
+    the calculation took.
+    Parameters
+    ----------
+    dt : {float}
+        The elapsed time in seconds.
+    Returns
+    -------
+    float, str
+        The elapsed time in the format given by the second returned value.
+        Either seconds, minutes, hours or days.
+    """
+
+    if dt < 10.0:
+        return dt, "s"
+    elif 10.0 <= dt < 600.0:  # 10 s <= dt < 10 m
+        return dt / 60.0, "m"
+    elif 600.0 <= dt < 36000.0:  # 10 m <= dt < 10 h
+        return dt / 3600.0, "h"
+    else:
+        return dt / 86400.0, "d"
+
+
+def _adjust_log_msg_for_time(msg, elapsed):
+    if elapsed is None:
+        return msg
+    (elapsed, units) = _elapsed_time_str(elapsed)
+    return f"[{elapsed:.02f} {units}] {msg}"
+
+
+@contextmanager
+def timeit(stream, msg):
+    """A simple utility for timing how long a certain block of code will take.
+
+    .. hint::
+
+        Here's an example::
+
+            with timeit(logger.info, "Test foo"):
+                foo()
+
+    Parameters
+    ----------
+    stream : callable
+        The callable function/method which must take only a string as an
+        argument. Usually something like ``logger.info``.
+    msg : str
+        The message to pass to the ``stream``.
+    """
+
+    t0 = time.time()
+    try:
+        yield None
+    finally:
+        dt = time.time() - t0
+        stream(_adjust_log_msg_for_time(msg, dt))
 
 
 def peak_location_and_weight(w, A, Aprime, eta, eta_prime):

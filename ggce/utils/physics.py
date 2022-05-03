@@ -23,9 +23,10 @@ def g0_delta_omega(
     :math:`\\eta`, the hopping :math:`t`, and the lattice constant :math:`a`.
 
     .. warning::
-        The parameters `sgn` and `e0` are not used in the GGCE formalism, but
-        are explained in E. N. Economou, Green’s Functions in Quantum Physics
-        (Springer-Verlag, Berlin, 1983).
+
+        The parameters ``sgn`` and ``e0`` are not used in the GGCE formalism,
+        but are explained in `E. N. Economou, Green’s Functions in Quantum
+        Physics (Springer-Verlag, Berlin, 1983)`.
 
     Additionally, when :math:`t=0`, there are two cases. If
     :math:`\\delta = 0`, then the result is analytically 0. Otherwise, the
