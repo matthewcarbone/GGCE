@@ -1,4 +1,4 @@
-"""Basic logging module."""
+"""Basic logging and utility module."""
 
 from contextlib import contextmanager
 import sys
@@ -11,7 +11,6 @@ try:
 except ImportError:
     COMM = None
 
-# from loguru import logger as loguru_logger
 from loguru import logger
 from ._version import get_versions
 
@@ -57,13 +56,14 @@ def configure_loggers(
     run_as_mpi=False,
     enable_python_standard_warnings=False,
 ):
-    """Configures the loguru loggers. Note that the loggers are initialized
+    """Configures the ``loguru`` loggers. Note that the loggers are initialized
     using the default values by default.
 
     .. important::
 
-        logger.critical _always_ terminates the program, either through
-        `COMM.MPI_Abort()` if `run_as_mpi` is True, or `sys.exit(1)` otherwise.
+        ``logger.critical`` `always` terminates the program, either through
+        ``COMM.MPI_Abort()`` if ``run_as_mpi`` is True, or ``sys.exit(1)``
+        otherwise.
 
     Parameters
     ----------
@@ -78,10 +78,10 @@ def configure_loggers(
     stderr_fmt : str, optional
         Loguru format for the rest of the standard error stream.
     run_as_mpi : bool, optional
-        If True, critical errors will run COMM.MPI_Abort(). Otherwise,
-        sys.exit(1) is called.
+        If True, critical errors will run ``COMM.MPI_Abort()``. Otherwise,
+        ``sys.exit(1)`` is called.
     enable_python_standard_warnings : bool, optional
-        Raises dummy warnings on logger.warning and logger.error.
+        Raises dummy warnings on ``logger.warning`` and ``logger.error``.
     """
 
     logger.remove(None)  # Remove ALL handlers

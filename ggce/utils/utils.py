@@ -43,28 +43,6 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-def time_func(arg1=None):
-    """source: http://scottlobdell.me/2015/04/decorators-arguments-python/"""
-
-    def real_decorator(function):
-        def wrapper(*args, **kwargs):
-
-            aa = arg1
-            if aa is None:
-                aa = function.__name__
-
-            t1 = time.time()
-            x = function(*args, **kwargs)
-            t2 = time.time()
-            elapsed = (t2 - t1) / 60.0
-            print(f"\t{aa} done {elapsed:.02f} m")
-            return x
-
-        return wrapper
-
-    return real_decorator
-
-
 def time_remaining(time_elapsed, percentage_complete):
     """Returns the time remaining."""
 
