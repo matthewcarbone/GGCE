@@ -21,6 +21,18 @@ with :math:`n \\pm 1` phonons. There is also a bias term, :math:`b`, which is
 generally 0 except in the case of the :class:`.GreenEquation`, which is a
 special instance of the :class:`.Equation` used only for the true Green's
 function.
+
+.. tip::
+
+    During the operation of the GGCE code, it is unlikely you will need to
+    actually manipulate the :class:`.Equation` and :class:`.GreenEquation`
+    objects at all, so for the pure user, this module is likely not so
+    necessary to understand.
+
+.. note::
+
+    See the :class:`.Equation` and :class:`.GreenEquation` for more details on
+    these two important objects.
 """
 
 from copy import deepcopy
@@ -34,6 +46,7 @@ from ggce.utils.utils import timeit
 from ggce.engine import terms as terms_module
 
 
+# TODO: MSONable is broken for this class and its children
 class Equation(MSONable):
     """A single equation that indexes a single Auxiliary Green's Function
     (AGF). These functions can be loosely conceptualized in terms of the number
@@ -47,11 +60,27 @@ class Equation(MSONable):
     to the total number of phonons on those sites. The :class:`Equation` class
     contains an ``index_term``, which in this case represents :math:`f(n)`, and
     a ``terms_list`` object, which corresponds to the right hand side.
-        There is also a bias term, :math:`b`, which represents possible
+
+    There is also a bias term, :math:`b`, which represents possible
     inhomogeneities. Only the Green's function itself contains
     :math:`b\\neq 0`. All of these terms are implicitly functions of the
     momentum, :math:`k`, the energy/frequency, :math:`\\omega`, and the
-    artificial broadening :math:`\\eta`."""
+    artificial broadening :math:`\\eta`. For the base :class:`.Equation`, the
+    ``bias`` is zero.
+
+    Formally, this class is the representation of equation 22 in
+    `PRB <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`_.
+    In one dimension, it is
+
+    .. math::
+
+        f_\\mathbf{n} = \\sum_{(g, \\psi, \\phi, \\xi)} g
+        \\sum_{\\gamma \\in \\Gamma_L^\\xi} n^{(\\xi, \\gamma)}
+        g_0(\\delta + \\gamma - \\phi + \\psi, \\tilde{\\omega})
+        f_{\\mathbf{n}}^{(\\xi, \\gamma)}(\\phi - \\gamma)
+
+    (see the manuscript for a detailed explanation of all of these terms).
+    """
 
     @classmethod
     def from_config(cls, config, model):
@@ -133,7 +162,20 @@ class Equation(MSONable):
         and terms. This allows the user to at a high level, and
         without coefficients, visualize all the terms in the equation.
         If coef is not None, we assume we want to visualize the coefficient
-        too, and coef is a 2-vector containing the k and w points."""
+        too, and coef is a 2-vector containing the k and w points.
+
+        Parameters
+        ----------
+        full : bool, optional
+            If True, prints out not only the configuration, its shape and the
+            ``f_arg`` terms, but also the ``g_arg`` and ``shift`` components
+            of the :class:`ggce.engine.terms.Term` object. Default is True.
+        coef : None, optional
+            Optional coefficients for :math:`k`, :math:`\\omega` and
+            :math:`\\eta` to pass to the terms and output their coefficients.
+            This is primarily used for debugging. Default is None (indicating
+            no coefficient information will be printed).
+        """
 
         id1 = self.index_term.id(full=full)
         if coef is not None:
@@ -261,7 +303,20 @@ class Equation(MSONable):
 
 
 class GreenEquation(Equation):
-    """Specific equation corresponding to the Green's function."""
+    """Equation object corresponding to the Green's function. In one dimension,
+    this corresponds directly with equation 13 in this
+    `PRB <https://journals.aps.org/prb/abstract/10.1103/
+    PhysRevB.104.035106>`_,
+
+    .. math::
+
+        f_0(0) - \\sum_{(g,\\psi,\\phi)} g e^{ik R_{\\psi - \\phi}} f_1(\\phi)
+        = G_0(k, \\omega)
+
+    The primary way in which this object differs from :class:`.Equation` is
+    that it has a non-zero :class:`.GreenEquation.bias`.
+
+    """
 
     def __init__(self, model):
         config = np.zeros(
@@ -274,7 +329,24 @@ class GreenEquation(Equation):
         super().__init__(index_term=index_term, model=model)
 
     def bias(self, k, w, eta):
-        """Initializes the bias for the Green's function."""
+        """The bias term for the Green's function equation of motion.
+
+        Parameters
+        ----------
+        k : float
+            The momentum index.
+        w : complex
+            The complex frequency.
+        eta : float
+            The artificial broadening term.
+
+        Returns
+        -------
+        complex
+            This is :math:`G_0(k, \\omega; a, \\eta, t)`, where for the
+            free particle Green's function on a lattice, :math:`G_0` is
+            parameterized by the lattice constant, broadening and hopping.
+        """
 
         return physics.G0_k_omega(
             k, w, self.model.lattice_constant, eta, self.model.hopping
@@ -293,6 +365,10 @@ class GreenEquation(Equation):
             # EOM since annihilation terms hit the vacuum and yield zero.
             if hterm.dag == "+":
                 n = self._index_term.config.config.copy()
+
+                # This operation below is safe because the config for the
+                # Green's function equation of motion will always have a shape
+                # of (1, 1, ...).
                 n[hterm.phonon_index, ...] = 1
                 t = terms_module.EOMTerm(
                     n,
