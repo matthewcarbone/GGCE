@@ -59,31 +59,17 @@ class SingleTerm(MSONable):
     .. math::
 
         g \\sum_i c_i^\\dagger c_{i + \\psi} b^d_{i + \\phi}
-
-    Attributes
-    ----------
-    coupling : float
-        The coupling strength of the term. Directly multiplies the operators
-        in the Hamiltonian. This is g.
-    coupling_type : str
-        The origin of the term. Not used in the computations but useful to
-        have for keeping track of where these terms came from.
-    dag : {"+", "-"}
-        The "dagger status" of the term. "+" for creation operator and "-" for
-        annihilation operator.
-    phi : int or float
-        The shift term on :math:`b^d` above.
-    phonon_frequency : float
-        The frequency of the phonon provided. Note: this can be negative in the
-        TFD formalism.
-    phonon_index : int
-        The index of the phonon provided.
-    psi : int or float
-        The shift term on :math:`c` above.
     """
 
     @property
     def psi(self):
+        """The shift term on :math:`c`.
+
+        Returns
+        -------
+        numpy.array
+        """
+
         return self._psi.copy()
 
     @psi.setter
@@ -94,6 +80,13 @@ class SingleTerm(MSONable):
 
     @property
     def phi(self):
+        """The shift term on :math:`b^d`.
+
+        Returns
+        -------
+        numpy.array
+        """
+
         return self._phi.copy()
 
     @phi.setter
@@ -104,53 +97,80 @@ class SingleTerm(MSONable):
 
     @property
     def dag(self):
+        """The "dagger status" of the term. "+" for creation operator and "-"
+        for annihilation operator. Must be either "+" or "-".
+
+        Returns
+        -------
+        str
+        """
+
         return self._dag
 
     @dag.setter
     def dag(self, x):
         if x not in ["+", "-"]:
-            raise ValueError
+            raise logger.critical(f"Invalid choice for dag: {x}")
         self._dag = x
 
     @property
     def coupling(self):
+        """The coupling strength of the term. Directly multiplies the operators
+        in the Hamiltonian. This is :math:`g`.
+
+        Returns
+        -------
+        float
+        """
+
         return self._coupling
 
     @coupling.setter
     def coupling(self, x):
         if not isinstance(x, (int, float)):
-            raise ValueError
+            raise logger.critical(f"Coupling {x} must be int or float")
         self._coupling = x
 
     @property
     def phonon_index(self):
+        """The index of the phonon provided.
+
+        Returns
+        -------
+        int
+        """
+
         return self._phonon_index
 
     @phonon_index.setter
     def phonon_index(self, x):
-        if not isinstance(x, int) or x < 0:
-            raise ValueError
+        if not isinstance(x, int):
+            raise logger.critical(f"Phonon index {x} must be of type int")
+        if x < 0:
+            raise logger.critical(f"Phonon index {x} must be >= 0")
         self._phonon_index = x
 
     @property
     def phonon_frequency(self):
+        """The frequency of the phonon provided.
+
+        .. note::
+
+            The ``phonon_frequency`` can be negative in the TFD formalism.
+
+        Returns
+        -------
+        float
+            Description
+        """
+
         return self._phonon_frequency
 
     @phonon_frequency.setter
     def phonon_frequency(self, x):
         if not isinstance(x, (int, float)):
-            raise ValueError
+            raise logger.critical(f"Phonon frequency {x} must be int or float")
         self._phonon_frequency = x
-
-    @property
-    def coupling_type(self):
-        return self._coupling_type
-
-    @coupling_type.setter
-    def coupling_type(self, x):
-        if not isinstance(x, str):
-            raise ValueError
-        self._coupling_type = x
 
     def __init__(
         self,
@@ -164,7 +184,7 @@ class SingleTerm(MSONable):
     ):
         """Initializes the SingleTerm class."""
 
-        self.coupling_type = coupling_type
+        self._coupling_type = coupling_type
         self.psi = psi
         self.phi = phi
         self.dag = dag
@@ -174,7 +194,7 @@ class SingleTerm(MSONable):
 
     def __str__(self):
         return (
-            f"{self.coupling_type}: {self.coupling:.02f} x ({self.psi} "
+            f"{self._coupling_type}: {self.coupling:.02f} x ({self.psi} "
             f"{self.phi} {self.dag}) | {self.phonon_index} "
             f"({self.phonon_frequency:.02f})"
         )
@@ -256,8 +276,8 @@ class Hamiltonian(MSONable):
             return [
                 SingleTerm(
                     coupling_type,
-                    1,
-                    1,
+                    np.array([1]),
+                    np.array([1]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -265,8 +285,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    -1,
+                    np.array([-1]),
+                    np.array([-1]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -274,8 +294,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    1,
-                    0,
+                    np.array([1]),
+                    np.array([0]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -283,8 +303,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    0,
+                    np.array([-1]),
+                    np.array([0]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -296,8 +316,8 @@ class Hamiltonian(MSONable):
             return [
                 SingleTerm(
                     coupling_type,
-                    1,
-                    0.5,
+                    np.array([1]),
+                    np.array([0.5]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -305,8 +325,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    1,
-                    0.5,
+                    np.array([1]),
+                    np.array([0.5]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -314,8 +334,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    -0.5,
+                    np.array([-1]),
+                    np.array([-0.5]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -323,8 +343,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    -0.5,
+                    np.array([-1]),
+                    np.array([-0.5]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -336,8 +356,8 @@ class Hamiltonian(MSONable):
             return [
                 SingleTerm(
                     coupling_type,
-                    1,
-                    0,
+                    np.array([1]),
+                    np.array([0]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -345,8 +365,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    1,
-                    0,
+                    np.array([1]),
+                    np.array([0]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -354,8 +374,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    1,
-                    1,
+                    np.array([1]),
+                    np.array([1]),
                     "+",
                     -coupling_strength,
                     phonon_index,
@@ -363,8 +383,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    1,
-                    1,
+                    np.array([1]),
+                    np.array([1]),
                     "-",
                     -coupling_strength,
                     phonon_index,
@@ -372,8 +392,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    -1,
+                    np.array([-1]),
+                    np.array([-1]),
                     "+",
                     coupling_strength,
                     phonon_index,
@@ -381,8 +401,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    -1,
+                    np.array([-1]),
+                    np.array([-1]),
                     "-",
                     coupling_strength,
                     phonon_index,
@@ -390,8 +410,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    0,
+                    np.array([-1]),
+                    np.array([0]),
                     "+",
                     -coupling_strength,
                     phonon_index,
@@ -399,8 +419,8 @@ class Hamiltonian(MSONable):
                 ),
                 SingleTerm(
                     coupling_type,
-                    -1,
-                    0,
+                    np.array([-1]),
+                    np.array([0]),
                     "-",
                     -coupling_strength,
                     phonon_index,

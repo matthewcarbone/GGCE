@@ -23,10 +23,10 @@ def g0_delta_omega(delta, omega, a, eta, tf, sgn=1.0, e0=0.0):
     return t1 * prefactor
 
 
-@pytest.mark.parametrize("d", [-1, -2, 0, -10, 100])
-@pytest.mark.parametrize("o", [-0.5, 0.5, 0.0, -50.0, 50.0])
-@pytest.mark.parametrize("e", [0.1, 0.01, 1e-5, 1e-8])
-@pytest.mark.parametrize("t", [0.0, 1.0, 5.0, 50.0])
+@pytest.mark.parametrize("d", [-1, 100])
+@pytest.mark.parametrize("o", [-0.5, -50.0, 50.0])
+@pytest.mark.parametrize("e", [0.1, 1e-8])
+@pytest.mark.parametrize("t", [0.0, 50.0])
 def test_g0_delta_omega(d, o, e, t):
     assert g0_delta_omega(d, o, 1.0, e, t) == physics.g0_delta_omega(
         d, o, 1.0, e, t
@@ -43,8 +43,8 @@ def G0_k_omega(k, omega, a, eta, tf):
 
 
 @pytest.mark.parametrize("k", [0.0, 0.5 * np.pi, np.pi])
-@pytest.mark.parametrize("o", [-0.5, 0.5, 0.0, -50.0, 50.0])
-@pytest.mark.parametrize("e", [0.1, 0.01, 1e-8])
-@pytest.mark.parametrize("t", [0.0, 1.0, 50.0])
+@pytest.mark.parametrize("o", [-0.5, -50.0, 50.0])
+@pytest.mark.parametrize("e", [0.1, 1e-8])
+@pytest.mark.parametrize("t", [0.0, 50.0])
 def test_G0_k_omega(k, o, e, t):
     assert G0_k_omega(k, o, 1.0, e, t) == physics.G0_k_omega(k, o, 1.0, e, t)

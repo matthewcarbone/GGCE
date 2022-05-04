@@ -43,13 +43,29 @@ class TestSingleTerm:
     @pytest.mark.parametrize(
         "coupling_type,psi,phi,dag,coupling,phonon_index,phonon_frequency",
         [
-            ("Holstein", 1, -1, "+", 1.23, 0, 4.56),
-            ("Holstein", 1, -1, "+", 1.23, 1, -4.56),
-            ("Holstein", 1, -1, "-", 1.23, 2, 4.56),
-            ("Holstein", 1, -1, "-", 1.23, 3, -4.56),
-            ("Peierls", 1, -1, "+", 1.23, 0, 4.56),
-            ("BondPeierls", 1, -1, "+", 1.23, 1, -4.56),
-            ("EdwardsFermionBoson", 1, -1, "-", 1.23, 2, 4.56),
+            ("Holstein", np.array([1]), np.array([-1]), "+", 1.23, 0, 4.56),
+            ("Holstein", np.array([1]), np.array([-1]), "+", 1.23, 1, -4.56),
+            ("Holstein", np.array([1]), np.array([-1]), "-", 1.23, 2, 4.56),
+            ("Holstein", np.array([1]), np.array([-1]), "-", 1.23, 3, -4.56),
+            ("Peierls", np.array([1]), np.array([-1]), "+", 1.23, 0, 4.56),
+            (
+                "BondPeierls",
+                np.array([1]),
+                np.array([-1]),
+                "+",
+                1.23,
+                1,
+                -4.56,
+            ),
+            (
+                "EdwardsFermionBoson",
+                np.array([1]),
+                np.array([-1]),
+                "-",
+                1.23,
+                2,
+                4.56,
+            ),
         ],
     )
     def test_initializer(
@@ -74,8 +90,10 @@ class TestSingleTerm:
         ],
     )
     def test_setters_raises(attribute, value):
-        st = SingleTerm("Holstein", 1, -1, "+", 1.23, 0, 4.56)
-        with pytest.raises(ValueError):
+        st = SingleTerm(
+            "Holstein", np.array([1]), np.array([-1]), "+", 1.23, 0, 4.56
+        )
+        with pytest.raises(SystemExit):
             setattr(st, attribute, value)
 
 
@@ -93,10 +111,10 @@ class TestHamiltonian:
     def test_add_(coupling_type, phonon_index):
         h = deepcopy(Hamiltonian())
         if phonon_index < 0:
-            with pytest.raises(ValueError):
-                h.add_(1.0, coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
+            with pytest.raises(SystemExit):
+                h.add_(coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
         else:
-            h.add_(1.0, coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
+            h.add_(coupling_type, phonon_index, 1.0, 1.0, None, 1.0)
 
             if coupling_type == "Holstein":
                 assert len(h.terms) == 2
@@ -108,9 +126,9 @@ class TestHamiltonian:
                 assert len(h.terms) == 8
 
     @staticmethod
-    def test_invalid_add():
+    def test_invalid_coupling_add():
         h = deepcopy(Hamiltonian())
-        h.add_(1.0, "InvalidCoupling", 0, 2.0, 1.0, None, 1.0)
+        h.add_("InvalidCoupling", 0, 2.0, 1.0, None, 1.0)
         assert len(h.terms) == 0
 
     @staticmethod
@@ -122,7 +140,6 @@ class TestHamiltonian:
         h = deepcopy(Hamiltonian())
         with pytest.raises(ValueError):
             h.add_(
-                hopping=1.0,
                 coupling_type="Holstein",
                 phonon_index=0,
                 phonon_frequency=1.0,

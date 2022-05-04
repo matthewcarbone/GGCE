@@ -74,7 +74,7 @@ class Equation(MSONable):
 
     .. math::
 
-        f_\\mathbf{n} = \\sum_{(g, \\psi, \\phi, \\xi)} g
+        f_\\mathbf{n}(\\delta) = \\sum_{(g, \\psi, \\phi, \\xi)} g
         \\sum_{\\gamma \\in \\Gamma_L^\\xi} n^{(\\xi, \\gamma)}
         g_0(\\delta + \\gamma - \\phi + \\psi, \\tilde{\\omega})
         f_{\\mathbf{n}}^{(\\xi, \\gamma)}(\\phi - \\gamma)

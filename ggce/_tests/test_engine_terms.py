@@ -227,3 +227,78 @@ class TestConfig:
         config.remove_phonon_(0, 1)
         with pytest.raises(SystemExit):
             config.remove_phonon_(1, 2)
+
+    @staticmethod
+    def test_add_remove_dimension_mismatch(Random3dPhononArray):
+        config = Config(Random3dPhononArray.copy())
+        with pytest.raises(SystemExit):
+            config.add_phonon_(1, 0, 0, 0, 0)
+        config = Config(Random3dPhononArray.copy())
+        with pytest.raises(SystemExit):
+            config.remove_phonon_(1, 0, 0, 0, 0)
+
+    @staticmethod
+    def test_remove_phonon_index_dne(Random3dPhononArray):
+        config = Config(Random3dPhononArray.copy())
+        with pytest.raises(SystemExit):
+            config.remove_phonon_(1, 0, 0, 20)
+
+    @staticmethod
+    def test_remove_phonon_negative_occupancy_after_removal(
+        Random3dPhononArray,
+    ):
+        arr = Random3dPhononArray.copy()
+        arr[0, 2, 3, 3] = 0
+        config = Config(arr)
+        with pytest.raises(SystemExit):
+            config.remove_phonon_(0, 2, 3, 3)
+
+    @staticmethod
+    def test_remove_phonon_shift_1d_right():
+        arr = np.array([[1, 2, 3, 0, 0, 0, 1], [4, 5, 6, 0, 0, 0, 0]])
+        config = Config(arr.copy())
+        shift = config.remove_phonon_(0, 6)
+        assert np.all(shift == np.array([0]))
+        assert np.all(config.config == np.array([[1, 2, 3], [4, 5, 6]]))
+
+    @staticmethod
+    def test_remove_phonon_shift_1d_left():
+        arr = np.array([[0, 0, 0, 0, 1, 2, 3], [1, 0, 0, 0, 4, 5, 6]])
+        config = Config(arr.copy())
+        shift = config.remove_phonon_(1, 0)
+        assert np.all(shift == np.array([4]))
+        assert np.all(config.config == np.array([[1, 2, 3], [4, 5, 6]]))
+
+    @staticmethod
+    def test_add_phonon_Shift_1d_right():
+        arr = np.array([[1, 2, 3], [4, 5, 6]])
+        config = Config(arr.copy())
+        shift = config.add_phonon_(0, 6)
+        arr2 = np.array([[1, 2, 3, 0, 0, 0, 1], [4, 5, 6, 0, 0, 0, 0]])
+        assert np.all(shift == np.array([0]))
+        assert np.all(config.config == arr2)
+
+    @staticmethod
+    def test_add_phonon_Shift_1d_left():
+        arr = np.array([[1, 2, 3], [4, 5, 6]])
+        config = Config(arr.copy())
+        shift = config.add_phonon_(1, -4)
+        arr2 = np.array([[0, 0, 0, 0, 1, 2, 3], [1, 0, 0, 0, 4, 5, 6]])
+        assert np.all(shift == np.array([-4]))
+        assert np.all(config.config == arr2)
+
+    @staticmethod
+    def test_remove_phonon_shift_2d_0():
+        arr = np.array([[[1, 2, 3, 0, 0, 0, 1], [4, 5, 6, 0, 0, 0, 0]]])
+        config = Config(arr.copy())
+        shift = config.remove_phonon_(0, 0, 6)
+        assert np.all(shift == np.array([0, 0]))
+        assert np.all(config.config == np.array([[[1, 2, 3], [4, 5, 6]]]))
+
+    @staticmethod
+    def test_remove_phonon_shift_2d_1():
+        arr = np.array([[[0, 2, 3], [1, 0, 0]]])
+        config = Config(arr.copy())
+        shift = config.remove_phonon_(0, 1, 0)
+        assert np.all(shift == np.array([0, 1]))
+        assert np.all(config.config == np.array([[[2, 3]]]))
