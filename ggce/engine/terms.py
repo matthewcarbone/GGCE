@@ -8,22 +8,133 @@ from ggce.utils import physics
 from ggce.model import SingleTerm
 
 
+def _config_shape_legal(config):
+    if len(config.shape) < 2:
+        return False
+    return True
+
+
+def _config_values_legal(config):
+    if np.any(config < 0):
+        return False
+    return True
+
+
+def _config_shape_small_dimension(config):
+    if len(config.shape) > 4:
+        return False
+    return True
+
+
+def _check_config(config):
+    if not _config_shape_legal(config):
+        logger.critical(f"Provided config {config} has <2 dimensions")
+    if not _config_values_legal(config):
+        logger.critical(f"Invalid config {config}: some < 0")
+    if not _config_shape_small_dimension(config):
+        logger.warning(
+            f"Provided config of shape {config.shape} is greater than 4, "
+            "indicating more than 3 spatial dimensions. This type of case "
+            "is untested and the user should proceed with caution."
+        )
+
+
+def _config_edges_legal(config):
+
+    # First, sum up over all of the phonon types. This produces the
+    # "anchor" config.
+    _config = config.sum(axis=0)
+
+    # For every dimension, we need to check the "edge". This amounts to
+    # swapping the axes and summing
+    n_dimensions = len(_config.shape)  # The number of dimensions
+    for ii in range(n_dimensions):
+        edge_left = _config.swapaxes(0, ii)[0, ...]
+        edge_right = _config.swapaxes(0, ii)[-1, ...]
+        if np.sum(edge_left) == 0 or np.sum(edge_right) == 0:
+            return False
+    return True
+
+
+def _extent_of_1d(config1d):
+    """Gets the extent of a 1d vector. TODO: this will require a more general
+    solution to find the extent of 2 and 3d systems."""
+
+    where_nonzero = np.where(config1d != 0)[0]
+    L = len(where_nonzero)
+    if L < 2:
+        return L
+    minimum_index = min(where_nonzero)
+    maximum_index = max(where_nonzero)
+    return maximum_index - minimum_index + 1
+
+
+def config_legal(config, max_phonons_per_site=None, phonon_extent=None):
+    """Helper method designed to test a standalone configuration of phonons
+    for legality. A `legal` ``config`` array satisfies the following
+    properties:
+
+    - It has at least two axes (one phonon index and one spatial)
+    - It has only nonnegative entries
+    - Every spatial "edge" has at least one phonon of some type
+    - The maximum number of phonons per site condition is satisfied
+    - The phonon extent criterion is satisfied for all phonon types
+
+    Parameters
+    ----------
+    config : numpy.array
+        The input configuration.
+    max_phonons_per_site : int, optional
+        If not None, checks that the config satisfies the maximum number of
+        phonons per site. Returns False if any site contains more than the
+        specified number.
+    phonon_extent : list, optional
+        A list of int where each entry is the extent allowed for that phonon
+        type. Checks this if not None, otherwise ignores.
+
+    Returns
+    -------
+    bool
+        Returns True if the config passes all the tests. False if it fails any
+        of them.
+    """
+
+    if not _config_shape_legal(config):
+        return False
+    if not _config_values_legal(config):
+        return False
+    if not _config_edges_legal(config):
+        return False
+    if max_phonons_per_site is not None:
+        if not np.all(config <= max_phonons_per_site):
+            return False
+    if phonon_extent is not None:
+        if any(
+            [
+                phonon_extent[ii] < _extent_of_1d(c1d)
+                for ii, c1d in enumerate(config)
+            ]
+        ):
+            return False
+    return True
+
+
+def _validate_config_is_legal(config):
+    """Helper function for exposing the :class:`Config.validate` method to
+    other modules."""
+
+    _check_config(config)
+
+    if np.sum(config) == 0:
+        return
+
+    if not _config_edges_legal(config):
+        logger.critical("Edge invalid on config axis")
+
+
 class Config(MSONable):
     """A class for holding phonon occupations and defining operations on the
     cloud."""
-
-    @staticmethod
-    def _check_config(x):
-        if len(x.shape) < 2:
-            logger.critical(f"Provided config {x} has <2 dimensions")
-        if np.any(x < 0):
-            logger.critical(f"Invalid config {x}: some < 0")
-        if len(x.shape) > 4:
-            logger.warning(
-                f"Provided config of shape {x.shape} is greater than 4, "
-                "indicating more than 3 spatial dimensions. This type of case "
-                "is untested and the user should proceed with caution."
-            )
 
     @property
     def config(self):
@@ -64,7 +175,7 @@ class Config(MSONable):
 
     @config.setter
     def config(self, x):
-        Config._check_config(x)
+        _check_config(x)
         self._config = x
 
     @property
@@ -121,8 +232,8 @@ class Config(MSONable):
         which also kills the program if the validity checks fail. If any of the
         following fail, a critical is raised:
 
-        1. If any element in the config has less than 0 phonons.
-        2. If any of the edges of the cloud has 0 phonons total.
+        - If any element in the config has less than 0 phonons.
+        - If any of the edges of the cloud has 0 phonons total.
 
         .. warning::
 
@@ -130,23 +241,7 @@ class Config(MSONable):
             phonons on the cloud, will not raise any critical.
         """
 
-        Config._check_config(self._config)
-
-        if self.total_phonons == 0:
-            return
-
-        # First, sum up over all of the phonon types. This produces the
-        # "anchor" config.
-        _config = self._config.sum(axis=0)
-
-        # For every dimension, we need to check the "edge". This amounts to
-        # swapping the axes and summing
-        n_dimensions = len(_config.shape)  # The number of dimensions
-        for ii in range(n_dimensions):
-            edge_left = _config.swapaxes(0, ii)[0, ...]
-            edge_right = _config.swapaxes(0, ii)[-1, ...]
-            if np.sum(edge_left) == 0 or np.sum(edge_right) == 0:
-                logger.critical(f"Edge invalid on config axis {ii + 1}")
+        _validate_config_is_legal(self._config)
 
     def __init__(self, config, max_modifications=1, modifications=0):
         """Initializes the Config class.
