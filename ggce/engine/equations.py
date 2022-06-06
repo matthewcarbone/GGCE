@@ -259,7 +259,12 @@ class Equation(MSONable):
                     t.step_(*loc)
                     t.check_if_green_and_simplify_()
                     t.config.validate()
-                    self._terms_list.append(t)
+                    if terms_module.config_legal(
+                        t.config.config,
+                        self._model.phonon_max_per_site,
+                        self._model.phonon_extent
+                    ):
+                        self._terms_list.append(t)
 
             # Don't want to create an equation corresponding to more than
             # the maximum number of allowed phonons.
@@ -299,7 +304,12 @@ class Equation(MSONable):
                     t.step_(*loc)
                     t.check_if_green_and_simplify_()
                     t.config.validate()
-                    self._terms_list.append(t)
+                    if terms_module.config_legal(
+                        t.config.config,
+                        self._model.phonon_max_per_site,
+                        self._model.phonon_extent
+                    ):
+                        self._terms_list.append(t)
 
 
 class GreenEquation(Equation):

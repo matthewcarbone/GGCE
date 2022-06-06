@@ -1,7 +1,12 @@
+from copy import deepcopy
+from time import time
+
 import numpy as np
 
 from ggce import logger
 from ggce.engine.terms import Config, config_legal
+from ggce.engine.equations import Equation, GreenEquation
+from ggce.utils.utils import timeit
 
 
 # TODO: tagged for C++ acceleration
@@ -78,7 +83,8 @@ def generate_all_legal_configurations(model):
             # This will only work for 1d!!!
             c = [np.array(cc).reshape(n_phonon_types, -1) for cc in c]
 
-            # Deal with the
+            # Deal with the multiple dimensions later!
+            # TODO
 
             # Now, we get all of the LEGAL nvecs, which are those in
             # which at least a single boson of any type is on both
@@ -99,297 +105,274 @@ def generate_all_legal_configurations(model):
     return config_dict
 
 
-# class System:
-#     """Defines a list of Equations (a system of equations, so to speak) and
-#     operations on that system.
+class System:
+    """Defines a list of Equations (a system of equations, so to speak) and
+    operations on that system.
 
-#     Attributes
-#     ----------
-#     generalized_equations : List[Equation]
-#         A list of equations constituting the system; in general form, meaning
-#         all except for the Green's function are not defined for specific
-#         delta values.
-#     """
+    Attributes
+    ----------
+    generalized_equations : List[Equation]
+        A list of equations constituting the system; in general form, meaning
+        all except for the Green's function are not defined for specific
+        delta values.
+    """
 
-#     def __init__(self, model, logger=Logger(dummy=True)):
-#         """Initializer.
+    @property
+    def generalized_equations(self):
+        return self._generalized_equations
 
-#         Parameters
-#         ----------
-#         model : SystemParameters
-#             Container for the full set of parameters.
-#         """
+    def _append_master_dictionary(self, eq):
+        """Takes an equation and appends the master_f_arg_list dictionary."""
 
-#         self.logger = logger
+        if self._master_f_arg_list is None:
+            self._master_f_arg_list = deepcopy(eq._f_arg_terms)
+            return
 
-#         self.model = copy.deepcopy(model)
+        # Else, we append the terms
+        for n_mat_id, l_deltas in eq._f_arg_terms.items():
+            for delta in l_deltas:
+                try:
+                    self._master_f_arg_list[n_mat_id].append(delta)
+                except KeyError:
+                    self._master_f_arg_list[n_mat_id] = [delta]
 
-#         # The number of unique boson types has already been evaluated upon
-#         # initializing the configuration class
-#         self.n_boson_types = self.model.n_boson_types
-#         self.max_bosons_per_site = self.model.max_bosons_per_site
+    def _append_generalized_equation(self, n_bosons, config):
 
-#         self.master_f_arg_list = None
+        eq = Equation.from_config(config, model=self.model)
 
-#         # The equations are organized by the number of bosons contained
-#         # in their configuration space.
-#         self.generalized_equations = dict()
-#         self.equations = dict()
+        # Append a master dictionary at the System object level that
+        # keeps track of all the f_arg values required for each value of
+        # the config.
+        self._append_master_dictionary(eq)
 
-#         # Config space generator
-#         self.csg = ConfigurationSpaceGenerator(self.model)
+        # Finally, append the equation to a master list of generalized
+        # equations/
+        self._generalized_equations[n_bosons].append(eq)
 
-#     def _append_generalized_equation(self, n_bosons, config):
+    def __init__(self, model):
+        """Initializer.
 
-#         eq = Equation(config, model=self.model)
+        Parameters
+        ----------
+        model : SystemParameters
+            Container for the full set of parameters.
+        """
 
-#         # Initialize the index term, basically the f_n(delta)
-#         eq.initialize_index_term()
+        self.model = deepcopy(model)
 
-#         # Initialize the specific terms which constitute the f_n(delta)
-#         # EOM, such as f_n'(1), f_n''(0), etc.
-#         eq.initialize_terms(self.csg)
+        # The number of unique boson types has already been evaluated upon
+        # initializing the configuration class
+        self.n_boson_types = self.model.n_boson_types
+        self.max_bosons_per_site = self.model.max_bosons_per_site
 
-#         # Initialize the required values for delta (arguments of f) as
-#         # derived from the terms themselves, used later when generating
-#         # the specific equations.
-#         eq._populate_f_arg_terms()
+        self._master_f_arg_list = None
 
-#         # Append a master dictionary at the System object level that
-#         # keeps track of all the f_arg values required for each value of
-#         # the config.
-#         self._append_master_dictionary(eq)
+        # The equations are organized by the number of bosons contained
+        # in their configuration space.
+        self.equations = dict()
 
-#         # Finally, append the equation to a master list of generalized
-#         # equations/
-#         try:
-#             self.generalized_equations[n_bosons].append(eq)
-#         except KeyError:
-#             self.generalized_equations[n_bosons] = [eq]
+        # Get all of the allowed configurations
+        with timeit(logger.debug, "generate_all_legal_configurations"):
+            allowed_configs = generate_all_legal_configurations(self.model)
 
-#     def _extend_legal_configs(self, n_bosons, configs):
-#         """Appends a new configuration to the dictionary legal configs."""
+        self._generalized_equations = {n: [] for n in allowed_configs.keys()}
 
-#         for config in configs:
-#             self._append_generalized_equation(n_bosons, config)
+        # Generate all possible numbers of bosons consistent with n_max.
+        with timeit(logger.debug, "initialize equations"):
+            for n_bosons, configs in allowed_configs.items():
+                for config in configs:
+                    self._append_generalized_equation(n_bosons, config)
 
-#     # @profile
-#     def initialize_generalized_equations(self):
-#         """Starting with values for the order of the momentum approximation
-#         and the maximum allowed number of bosons, this method generates a
-#         of config arrays, consisting of all possible legal contributions,
-#         meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
-#         sum of all of the entries equals n, where n = [1, ..., n_max]."""
+            eq = GreenEquation(model=self.model)
+            self._append_master_dictionary(eq)
 
-#         t0 = time.time()
+            # Only one Green's function, with "zero" bosons
+            self._generalized_equations[0] = [eq]
 
-#         allowed_configs = self.csg()
+    def initialize_generalized_equations(self):
+        """Starting with values for the order of the momentum approximation
+        and the maximum allowed number of bosons, this method generates a
+        of config arrays, consisting of all possible legal contributions,
+        meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
+        sum of all of the entries equals n, where n = [1, ..., n_max]."""
 
-#         # Generate all possible numbers of bosons consistent with n_max.
-#         for n_bosons, configs in allowed_configs.items():
-#             self._extend_legal_configs(n_bosons, configs)
+        t0 = time()
 
-#         # Manually append the Green's function (do the same as above except)
-#         # for this special case. Note that no matter what this is always
-#         # neded, but the form of the GreenEquation EOM will differ depending
-#         # on the system type.
-#         eq = GreenEquation(model=self.model)
-#         eq.initialize_index_term()
-#         eq.initialize_terms()
-#         eq._populate_f_arg_terms()
-#         self._append_master_dictionary(eq)
 
-#         # Only one Green's function, with "zero" bosons
-#         self.generalized_equations[0] = [eq]
 
-#         self._determine_unique_dictionary()
+        self._determine_unique_dictionary()
 
-#         dt = time.time() - t0
+        dt = time() - t0
 
-#         L = sum([len(val) for val in self.generalized_equations.values()])
-#         self.logger.info(f"Generated {L} generalized equations", elapsed=dt)
+        L = sum([len(val) for val in self._generalized_equations.values()])
+        logger.info(f"Generated {L} generalized equations")
 
-#         # Need to generalize this
-#         if self.n_boson_types == 1 and self.max_bosons_per_site is None:
-#             # Plus one for the Green's function
-#             T = 1 + total_generalized_equations(
-#                 self.model.M, self.model.N, self.n_boson_types
-#             )
-#             self.logger.debug(
-#                 f"Predicted {T} equations from combinatorics equations"
-#             )
+        # Need to generalize this
+        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
+            # Plus one for the Green's function
+            T = 1 + total_generalized_equations(
+                self.model.M, self.model.N, self.n_boson_types
+            )
+            self.logger.debug(
+                f"Predicted {T} equations from combinatorics equations"
+            )
 
-#             assert T == L, f"{T}, {L}"
+            assert T == L, f"{T}, {L}"
 
-#         totals = self._get_total_terms()
-#         self.logger.debug(f"Predicting {totals} total terms")
+        totals = self._get_total_terms()
+        self.logger.debug(f"Predicting {totals} total terms")
 
-#         # Initialize the self.equations attribute's lists here since we know
-#         # all the keys:
-#         for key, _ in self.generalized_equations.items():
-#             self.equations[key] = []
+        # Initialize the self.equations attribute's lists here since we know
+        # all the keys:
+        for key, _ in self._generalized_equations.items():
+            self.equations[key] = []
 
-#         return L
+        return L
 
-#     def _append_master_dictionary(self, eq):
-#         """Takes an equation and appends the master_f_arg_list dictionary."""
+    def _determine_unique_dictionary(self):
+        """Sorts the master delta terms for easier readability and takes
+        only unique delta terms."""
 
-#         if self.master_f_arg_list is None:
-#             self.master_f_arg_list = copy.deepcopy(eq.f_arg_terms)
-#             return
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+            self._master_f_arg_list[n_mat_id] = list(set(l_deltas))
 
-#         # Else, we append the terms
-#         for n_mat_id, l_deltas in eq.f_arg_terms.items():
-#             for delta in l_deltas:
-#                 try:
-#                     self.master_f_arg_list[n_mat_id].append(delta)
-#                 except KeyError:
-#                     self.master_f_arg_list[n_mat_id] = [delta]
+    def _get_total_terms(self):
+        """Predicts the total number of required specific equations needed
+        to close the system."""
 
-#     def _determine_unique_dictionary(self):
-#         """Sorts the master delta terms for easier readability and takes
-#         only unique delta terms."""
+        cc = 0
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+            cc += len(l_deltas)
+        return cc
 
-#         for n_mat_id, l_deltas in self.master_f_arg_list.items():
-#             self.master_f_arg_list[n_mat_id] = list(set(l_deltas))
+    # @profile
+    def initialize_equations(self):
+        """Generates the true equations on the rhs which have their explicit
+        delta values provided."""
 
-#     def _get_total_terms(self):
-#         """Predicts the total number of required specific equations needed
-#         to close the system."""
+        t0 = time()
 
-#         cc = 0
-#         for n_mat_id, l_deltas in self.master_f_arg_list.items():
-#             cc += len(l_deltas)
-#         return cc
+        for n_bosons, l_eqs in self._generalized_equations.items():
+            for eq in l_eqs:
+                n_mat_id = eq.index_term._get_boson_config_identifier()
+                l_deltas = self._master_f_arg_list[n_mat_id]
+                for true_delta in l_deltas:
+                    eq_copy = copy.deepcopy(eq)
+                    eq_copy.init_full(true_delta)
+                    self.equations[n_bosons].append(eq_copy)
 
-#     # @profile
-#     def initialize_equations(self):
-#         """Generates the true equations on the rhs which have their explicit
-#         delta values provided."""
+        dt = time() - t0
 
-#         t0 = time.time()
+        L = sum([len(val) for val in self.equations.values()])
+        self.logger.info(f"Generated {L} equations", elapsed=dt)
 
-#         for n_bosons, l_eqs in self.generalized_equations.items():
-#             for eq in l_eqs:
-#                 n_mat_id = eq.index_term._get_boson_config_identifier()
-#                 l_deltas = self.master_f_arg_list[n_mat_id]
-#                 for true_delta in l_deltas:
-#                     eq_copy = copy.deepcopy(eq)
-#                     eq_copy.init_full(true_delta)
-#                     self.equations[n_bosons].append(eq_copy)
+        return L
 
-#         dt = time.time() - t0
+    def visualize(self, generalized=True, full=True, coef=None):
+        """Allows for easy visualization of the closure. Note this isn't
+        recommended when there are greater than 10 or so equations, since
+        it will be very difficult to see everything.
 
-#         L = sum([len(val) for val in self.equations.values()])
-#         self.logger.info(f"Generated {L} equations", elapsed=dt)
+        Parameters
+        ----------
+        generalized : bool
+            If True, prints information on the generalized equations, else
+            prints the full equations. Default is True.
+        full : bool
+            If True, prints information about the argument of g(...) and the
+            exponential shift in addition to the n-vector and f-argument.
+            Else, just prints the latter two. Default is True.
+        coef : list, optional
+            If not None, actually evaluates the terms at the value of the
+            (k, w) coefficient. Default is None.
+        """
 
-#         return L
+        eqs_dict = self._generalized_equations if generalized \
+            else self.equations
+        od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
+        for n_bosons, eqs in od.items():
+            print(f"{n_bosons}")
+            print("-" * 60)
+            for eq in eqs:
+                eq.visualize(full=full, coef=coef)
+            print("\n")
 
-#     def visualize(self, generalized=True, full=True, coef=None):
-#         """Allows for easy visualization of the closure. Note this isn't
-#         recommended when there are greater than 10 or so equations, since
-#         it will be very difficult to see everything.
+    def generate_unique_terms(self):
+        """Constructs the basis for the problem, which is a mapping between
+        the short identifiers and the index of the basis. Also, run a sanity
+        check on the unique keys, which should equal the number of equations.
+        """
 
-#         Parameters
-#         ----------
-#         generalized : bool
-#             If True, prints information on the generalized equations, else
-#             prints the full equations. Default is True.
-#         full : bool
-#             If True, prints information about the argument of g(...) and the
-#             exponential shift in addition to the n-vector and f-argument.
-#             Else, just prints the latter two. Default is True.
-#         coef : list, optional
-#             If not None, actually evaluates the terms at the value of the
-#             (k, w) coefficient. Default is None.
-#         """
+        t0 = time()
+        unique_short_identifiers = set()
+        all_terms_rhs = set()
+        for n_bosons, equations in self.equations.items():
+            for eq in equations:
+                unique_short_identifiers.add(eq.index_term.identifier())
+                for term in eq.terms_list:
+                    all_terms_rhs.add(term.identifier())
+        dt = time() - t0
 
-#         eqs_dict = self.generalized_equations if generalized \
-#             else self.equations
-#         od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
-#         for n_bosons, eqs in od.items():
-#             print(f"{n_bosons}")
-#             print("-" * 60)
-#             for eq in eqs:
-#                 eq.visualize(full=full, coef=coef)
-#             print("\n")
+        if unique_short_identifiers == all_terms_rhs:
+            self.logger.info("Closure checked and valid", elapsed=dt)
+        else:
+            self.logger.error("Invalid closure!")
+            print(unique_short_identifiers - all_terms_rhs)
+            print(all_terms_rhs - unique_short_identifiers)
+            self.logger.critical("Critical error due to invalid closure.")
 
-#     def generate_unique_terms(self):
-#         """Constructs the basis for the problem, which is a mapping between
-#         the short identifiers and the index of the basis. Also, run a sanity
-#         check on the unique keys, which should equal the number of equations.
-#         """
+    def get_basis(self, full_basis=False):
+        """Prepares the solver-specific information.
 
-#         t0 = time.time()
-#         unique_short_identifiers = set()
-#         all_terms_rhs = set()
-#         for n_bosons, equations in self.equations.items():
-#             for eq in equations:
-#                 unique_short_identifiers.add(eq.index_term.identifier())
-#                 for term in eq.terms_list:
-#                     all_terms_rhs.add(term.identifier())
-#         dt = time.time() - t0
+        Returns the non-zero elements of the matrix in the following format.
+        The returned quantity is a dictionary indexed by the order of the
+        hierarchy (in this case, the number of phonons contained). Each
+        element of this dictionary is another dictionary, with the keys being
+        the index term identifier (basically indexing the row of the matrix),
+        and the values a list of tuples, where the first element of each
+        is the identifier (a string) and the second is a callable function of
+        k and omega, representing the coefficient at that point.
 
-#         if unique_short_identifiers == all_terms_rhs:
-#             self.logger.info("Closure checked and valid", elapsed=dt)
-#         else:
-#             self.logger.error("Invalid closure!")
-#             print(unique_short_identifiers - all_terms_rhs)
-#             print(all_terms_rhs - unique_short_identifiers)
-#             self.logger.critical("Critical error due to invalid closure.")
+        Parameters
+        ----------
+        full_basis : bool, optional
+            If True, returns the full basis mapping. If False, returns the
+            local basis mapping, which is used in the continued fraction
+            solver. (The default is False).
 
-#     def get_basis(self, full_basis=False):
-#         """Prepares the solver-specific information.
+        Returns
+        -------
+        dict
+            The dictionary objects containing the basis.
+        """
 
-#         Returns the non-zero elements of the matrix in the following format.
-#         The returned quantity is a dictionary indexed by the order of the
-#         hierarchy (in this case, the number of phonons contained). Each
-#         element of this dictionary is another dictionary, with the keys being
-#         the index term identifier (basically indexing the row of the matrix),
-#         and the values a list of tuples, where the first element of each
-#         is the identifier (a string) and the second is a callable function of
-#         k and omega, representing the coefficient at that point.
+        t0 = time()
 
-#         Parameters
-#         ----------
-#         full_basis : bool, optional
-#             If True, returns the full basis mapping. If False, returns the
-#             local basis mapping, which is used in the continued fraction
-#             solver. (The default is False).
+        # The basis object maps each unique identifier to a unique number.
+        # The local_basis object maps each unique identifier to a unique
+        # number within the manifold of some number of phonons.
+        basis = dict()
 
-#         Returns
-#         -------
-#         dict
-#             The dictionary objects containing the basis.
-#         """
+        if full_basis:
 
-#         t0 = time.time()
+            # Set the overall basis. Each unique identifier gets its own .
+            cc = 0
+            for _, equations in self.equations.items():
+                for eq in equations:
+                    basis[eq.index_term.identifier()] = cc
+                    cc += 1
 
-#         # The basis object maps each unique identifier to a unique number.
-#         # The local_basis object maps each unique identifier to a unique
-#         # number within the manifold of some number of phonons.
-#         basis = dict()
+        else:
 
-#         if full_basis:
+            # Set the local basis, in which each identifier gets its own
+            # relative to the n-phonon manifold.
+            for n_phonons, list_of_equations in self.equations.items():
+                basis[n_phonons] = {
+                    eq.index_term.identifier(): ii
+                    for ii, eq in enumerate(list_of_equations)
+                }
 
-#             # Set the overall basis. Each unique identifier gets its own .
-#             cc = 0
-#             for _, equations in self.equations.items():
-#                 for eq in equations:
-#                     basis[eq.index_term.identifier()] = cc
-#                     cc += 1
+        dt = time() - t0
+        self.logger.info("Basis has been constructed", elapsed=dt)
 
-#         else:
-
-#             # Set the local basis, in which each identifier gets its own
-#             # relative to the n-phonon manifold.
-#             for n_phonons, list_of_equations in self.equations.items():
-#                 basis[n_phonons] = {
-#                     eq.index_term.identifier(): ii
-#                     for ii, eq in enumerate(list_of_equations)
-#                 }
-
-#         dt = time.time() - t0
-#         self.logger.info("Basis has been constructed", elapsed=dt)
-
-#         return basis
+        return basis
