@@ -69,7 +69,9 @@ def _extent_of_1d(config1d):
     return maximum_index - minimum_index + 1
 
 
-def config_legal(config, max_phonons_per_site=None, phonon_extent=None):
+def config_legal(
+    config, max_phonons_per_site=None, phonon_extent=None, allow_green=False
+):
     """Helper method designed to test a standalone configuration of phonons
     for legality. A `legal` ``config`` array satisfies the following
     properties:
@@ -91,6 +93,9 @@ def config_legal(config, max_phonons_per_site=None, phonon_extent=None):
     phonon_extent : list, optional
         A list of int where each entry is the extent allowed for that phonon
         type. Checks this if not None, otherwise ignores.
+    allow_green : bool, optional
+        If True, automatically passes the check if the total number of phonons
+        sum to 0.
 
     Returns
     -------
@@ -99,6 +104,8 @@ def config_legal(config, max_phonons_per_site=None, phonon_extent=None):
         of them.
     """
 
+    if allow_green and np.sum(config) == 0:
+        return True
     if not _config_shape_legal(config):
         return False
     if not _config_values_legal(config):
@@ -448,7 +455,7 @@ class Config(MSONable):
         # Now, for each of the spatial dimensions we determine the padding
         pad = pad + [
             (0, 0)
-            if 0 <= index < self._config.shape[ii]
+            if 0 <= index < self._config.shape[ii] - 1
             else (-index, 0)
             if index < 0
             else (0, index - self._config.shape[ii + 1] + 1)

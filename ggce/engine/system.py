@@ -7,6 +7,7 @@ from ggce import logger
 from ggce.engine.terms import Config, config_legal
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.utils.utils import timeit
+from ggce.utils.combinatorics import total_generalized_equations
 
 
 # TODO: tagged for C++ acceleration
@@ -136,7 +137,7 @@ class System:
                 except KeyError:
                     self._master_f_arg_list[n_mat_id] = [delta]
 
-    def _append_generalized_equation(self, n_bosons, config):
+    def _append_generalized_equation(self, n_phonons, config):
 
         eq = Equation.from_config(config, model=self.model)
 
@@ -147,7 +148,22 @@ class System:
 
         # Finally, append the equation to a master list of generalized
         # equations/
-        self._generalized_equations[n_bosons].append(eq)
+        self._generalized_equations[n_phonons].append(eq)
+
+    def _determine_unique_dictionary(self):
+        """Sorts the master delta terms for easier readability and takes
+        only unique delta terms."""
+
+        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+            self._master_f_arg_list[n_mat_id] = list(
+                np.unique(np.array(l_deltas), axis=0)
+            )
+
+    def _get_total_terms(self):
+        """Predicts the total number of required specific equations needed
+        to close the system."""
+
+        return sum([len(ll) for ll in self._master_f_arg_list.values()])
 
     def __init__(self, model):
         """Initializer.
@@ -162,111 +178,75 @@ class System:
 
         # The number of unique boson types has already been evaluated upon
         # initializing the configuration class
-        self.n_boson_types = self.model.n_boson_types
-        self.max_bosons_per_site = self.model.max_bosons_per_site
+        self.n_phonon_types = self.model.n_phonon_types
+        self.phonon_max_per_site = self.model.phonon_max_per_site
 
         self._master_f_arg_list = None
 
-        # The equations are organized by the number of bosons contained
+        # The equations are organized by the number of phonons contained
         # in their configuration space.
         self.equations = dict()
 
         # Get all of the allowed configurations
-        with timeit(logger.debug, "generate_all_legal_configurations"):
+        with timeit(logger.info, "Generate legal configurations"):
             allowed_configs = generate_all_legal_configurations(self.model)
 
         self._generalized_equations = {n: [] for n in allowed_configs.keys()}
 
-        # Generate all possible numbers of bosons consistent with n_max.
-        with timeit(logger.debug, "initialize equations"):
-            for n_bosons, configs in allowed_configs.items():
+        # Generate all possible numbers of phonons consistent with n_max.
+        with timeit(logger.info, "Equations initialized"):
+            for n_phonons, configs in allowed_configs.items():
                 for config in configs:
-                    self._append_generalized_equation(n_bosons, config)
+                    self._append_generalized_equation(n_phonons, config.config)
 
             eq = GreenEquation(model=self.model)
             self._append_master_dictionary(eq)
 
-            # Only one Green's function, with "zero" bosons
+            # Only one Green's function, with "zero" phonons
             self._generalized_equations[0] = [eq]
 
-    def initialize_generalized_equations(self):
-        """Starting with values for the order of the momentum approximation
-        and the maximum allowed number of bosons, this method generates a
-        of config arrays, consisting of all possible legal contributions,
-        meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
-        sum of all of the entries equals n, where n = [1, ..., n_max]."""
-
-        t0 = time()
-
-
-
-        self._determine_unique_dictionary()
-
-        dt = time() - t0
+            self._determine_unique_dictionary()
 
         L = sum([len(val) for val in self._generalized_equations.values()])
         logger.info(f"Generated {L} generalized equations")
 
         # Need to generalize this
-        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
+        if self.n_phonon_types == 1 and self.phonon_max_per_site is None:
             # Plus one for the Green's function
+
             T = 1 + total_generalized_equations(
-                self.model.M, self.model.N, self.n_boson_types
+                self.model.phonon_extent,
+                self.model.phonon_number,
+                self.n_phonon_types,
             )
-            self.logger.debug(
+            logger.info(
                 f"Predicted {T} equations from combinatorics equations"
             )
 
             assert T == L, f"{T}, {L}"
 
         totals = self._get_total_terms()
-        self.logger.debug(f"Predicting {totals} total terms")
+        logger.info(f"Predicting {totals} total terms")
 
         # Initialize the self.equations attribute's lists here since we know
         # all the keys:
-        for key, _ in self._generalized_equations.items():
-            self.equations[key] = []
+        self.equations = {
+            key: [] for key in self._generalized_equations.keys()
+        }
 
-        return L
-
-    def _determine_unique_dictionary(self):
-        """Sorts the master delta terms for easier readability and takes
-        only unique delta terms."""
-
-        for n_mat_id, l_deltas in self._master_f_arg_list.items():
-            self._master_f_arg_list[n_mat_id] = list(set(l_deltas))
-
-    def _get_total_terms(self):
-        """Predicts the total number of required specific equations needed
-        to close the system."""
-
-        cc = 0
-        for n_mat_id, l_deltas in self._master_f_arg_list.items():
-            cc += len(l_deltas)
-        return cc
-
-    # @profile
-    def initialize_equations(self):
-        """Generates the true equations on the rhs which have their explicit
-        delta values provided."""
-
-        t0 = time()
-
-        for n_bosons, l_eqs in self._generalized_equations.items():
-            for eq in l_eqs:
-                n_mat_id = eq.index_term._get_boson_config_identifier()
-                l_deltas = self._master_f_arg_list[n_mat_id]
-                for true_delta in l_deltas:
-                    eq_copy = copy.deepcopy(eq)
-                    eq_copy.init_full(true_delta)
-                    self.equations[n_bosons].append(eq_copy)
-
-        dt = time() - t0
+        # Initialize the full set of equations
+        with timeit(logger.info, "Full equations initialized"):
+            for n_phonons, l_eqs in self._generalized_equations.items():
+                for eq in l_eqs:
+                    n_mat_id = eq.index_term._get_phonon_config_id()
+                    l_deltas = self._master_f_arg_list[n_mat_id]
+                    for true_delta in l_deltas:
+                        eq_copy = deepcopy(eq)
+                        eq_copy._init_full(true_delta)
+                        self.equations[n_phonons].append(eq_copy)
 
         L = sum([len(val) for val in self.equations.values()])
-        self.logger.info(f"Generated {L} equations", elapsed=dt)
-
-        return L
+        logger.info(f"Generated {L} equations")
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
@@ -287,11 +267,12 @@ class System:
             (k, w) coefficient. Default is None.
         """
 
-        eqs_dict = self._generalized_equations if generalized \
-            else self.equations
+        eqs_dict = (
+            self._generalized_equations if generalized else self.equations
+        )
         od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
-        for n_bosons, eqs in od.items():
-            print(f"{n_bosons}")
+        for n_phonons, eqs in od.items():
+            print(f"{n_phonons}")
             print("-" * 60)
             for eq in eqs:
                 eq.visualize(full=full, coef=coef)
@@ -306,7 +287,7 @@ class System:
         t0 = time()
         unique_short_identifiers = set()
         all_terms_rhs = set()
-        for n_bosons, equations in self.equations.items():
+        for n_phonons, equations in self.equations.items():
             for eq in equations:
                 unique_short_identifiers.add(eq.index_term.identifier())
                 for term in eq.terms_list:

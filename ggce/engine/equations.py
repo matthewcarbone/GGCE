@@ -262,7 +262,8 @@ class Equation(MSONable):
                     if terms_module.config_legal(
                         t.config.config,
                         self._model.phonon_max_per_site,
-                        self._model.phonon_extent
+                        self._model.phonon_extent,
+                        allow_green=True,
                     ):
                         self._terms_list.append(t)
 
@@ -307,7 +308,8 @@ class Equation(MSONable):
                     if terms_module.config_legal(
                         t.config.config,
                         self._model.phonon_max_per_site,
-                        self._model.phonon_extent
+                        self._model.phonon_extent,
+                        allow_green=True,
                     ):
                         self._terms_list.append(t)
 
