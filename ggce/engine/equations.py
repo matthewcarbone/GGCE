@@ -267,9 +267,13 @@ class Equation(MSONable):
                     ):
                         self._terms_list.append(t)
 
-            # Don't want to create an equation corresponding to more than
-            # the maximum number of allowed phonons.
             elif hterm.dag == "+":
+
+                # Don't want to create an equation corresponding to more than
+                # the maximum number of allowed phonons.
+                s = np.sum(self._index_term.config.config) + 1
+                if s > self._model.phonon_number:
+                    continue
 
                 if any([xx - ae > 0 for xx in self._index_term.config.shape]):
                     logger.critical(

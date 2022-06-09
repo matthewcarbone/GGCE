@@ -1,4 +1,5 @@
 from copy import deepcopy
+from collections import OrderedDict
 from time import time
 
 import numpy as np
@@ -205,7 +206,7 @@ class System:
             # Only one Green's function, with "zero" phonons
             self._generalized_equations[0] = [eq]
 
-            self._determine_unique_dictionary()
+            # self._determine_unique_dictionary()
 
         L = sum([len(val) for val in self._generalized_equations.values()])
         logger.info(f"Generated {L} generalized equations")
