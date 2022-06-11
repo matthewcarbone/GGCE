@@ -123,6 +123,10 @@ class System:
     def generalized_equations(self):
         return self._generalized_equations
 
+    @property
+    def equations(self):
+        return self._equations
+
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
 
@@ -168,6 +172,84 @@ class System:
 
         return sum([len(ll) for ll in self._master_f_arg_list.values()])
 
+    def _predict_total_terms(self):
+
+        L = sum([len(val) for val in self._generalized_equations.values()])
+
+        # Need to generalize this
+        if self.n_phonon_types == 1 and self.phonon_max_per_site is None:
+            # Plus one for the Green's function
+
+            T = 1 + total_generalized_equations(
+                self.model.phonon_extent,
+                self.model.phonon_number,
+                self.n_phonon_types,
+            )
+
+            if L == T:
+                logger.info(
+                    f"Predicted {L} generalized equations (agrees with "
+                    "analytic formula)"
+                )
+            else:
+                logger.error(
+                    f"Predicted {T} generalized equations from analytic "
+                    f"equation but {L} were generated. This will likely "
+                    "in a critical error!"
+                )
+        else:
+            logger.info(f"Predicted {L} generalized equations")
+
+    def _initialize_generalized_equations(self, allowed_configs):
+
+        self._generalized_equations = {n: [] for n in allowed_configs.keys()}
+
+        # Generate all possible numbers of phonons consistent with n_max.
+        for n_phonons, configs in allowed_configs.items():
+            for config in configs:
+                self._append_generalized_equation(n_phonons, config.config)
+
+        eq = GreenEquation(model=self.model)
+        self._append_master_dictionary(eq)
+
+        # Only one Green's function, with "zero" phonons
+        self._generalized_equations[0] = [eq]
+
+        self._determine_unique_dictionary()
+        self._predict_total_terms()
+
+    def _initialize_equations(self):
+
+        totals = self._get_total_terms()
+
+        # Initialize the self._equations attribute's lists here since we know
+        # all the keys:
+        self._equations = {
+            key: [] for key in self._generalized_equations.keys()
+        }
+
+        # Initialize the full set of equations
+        with timeit(logger.info, "Full equations initialized"):
+            for n_phonons, l_eqs in self._generalized_equations.items():
+                for eq in l_eqs:
+                    n_mat_id = eq.index_term._get_phonon_config_id()
+                    l_deltas = self._master_f_arg_list[n_mat_id]
+                    for true_delta in l_deltas:
+                        eq_copy = deepcopy(eq)
+                        eq_copy._init_full(true_delta)
+                        self._equations[n_phonons].append(eq_copy)
+
+        L = sum([len(val) for val in self._equations.values()])
+
+        if L == totals:
+            logger.info(f"Generated {L} total equations")
+        else:
+            logger.error(
+                f"Predicted {totals} equations from generalized form but {L} "
+                f"were generated. This is likely a bug in the code that will "
+                "result in a critical error!"
+            )
+
     def __init__(self, model):
         """Initializer.
 
@@ -186,70 +268,15 @@ class System:
 
         self._master_f_arg_list = None
 
-        # The equations are organized by the number of phonons contained
-        # in their configuration space.
-        self.equations = dict()
-
         # Get all of the allowed configurations
         with timeit(logger.info, "Generate legal configurations"):
             allowed_configs = generate_all_legal_configurations(self.model)
 
-        self._generalized_equations = {n: [] for n in allowed_configs.keys()}
+        with timeit(logger.info, "Generalized equations initialized"):
+            self._initialize_generalized_equations(allowed_configs)
 
-        # Generate all possible numbers of phonons consistent with n_max.
         with timeit(logger.info, "Equations initialized"):
-            for n_phonons, configs in allowed_configs.items():
-                for config in configs:
-                    self._append_generalized_equation(n_phonons, config.config)
-
-            eq = GreenEquation(model=self.model)
-            self._append_master_dictionary(eq)
-
-            # Only one Green's function, with "zero" phonons
-            self._generalized_equations[0] = [eq]
-
-            self._determine_unique_dictionary()
-
-        L = sum([len(val) for val in self._generalized_equations.values()])
-        logger.info(f"Generated {L} generalized equations")
-
-        # Need to generalize this
-        if self.n_phonon_types == 1 and self.phonon_max_per_site is None:
-            # Plus one for the Green's function
-
-            T = 1 + total_generalized_equations(
-                self.model.phonon_extent,
-                self.model.phonon_number,
-                self.n_phonon_types,
-            )
-            logger.info(
-                f"Predicted {T} equations from combinatorics equations"
-            )
-
-            assert T == L, f"{T}, {L}"
-
-        totals = self._get_total_terms()
-        logger.info(f"Predicting {totals} total terms")
-
-        # Initialize the self.equations attribute's lists here since we know
-        # all the keys:
-        self.equations = {
-            key: [] for key in self._generalized_equations.keys()
-        }
-
-        # Initialize the full set of equations
-        with timeit(logger.info, "Full equations initialized"):
-            for n_phonons, l_eqs in self._generalized_equations.items():
-                for eq in l_eqs:
-                    n_mat_id = eq.index_term._get_phonon_config_id()
-                    l_deltas = self._master_f_arg_list[n_mat_id]
-                    for true_delta in l_deltas:
-                        eq_copy = deepcopy(eq)
-                        eq_copy._init_full(true_delta)
-                        self.equations[n_phonons].append(eq_copy)
-
-        L = sum([len(val) for val in self.equations.values()])
-        logger.info(f"Generated {L} equations")
+            self._initialize_equations()
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
@@ -271,7 +298,7 @@ class System:
         """
 
         eqs_dict = (
-            self._generalized_equations if generalized else self.equations
+            self._generalized_equations if generalized else self._equations
         )
         od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
         for n_phonons, eqs in od.items():
@@ -290,7 +317,7 @@ class System:
         t0 = time()
         unique_short_identifiers = set()
         all_terms_rhs = set()
-        for n_phonons, equations in self.equations.items():
+        for n_phonons, equations in self._equations.items():
             for eq in equations:
                 unique_short_identifiers.add(eq.index_term.identifier())
                 for term in eq.terms_list:
@@ -341,7 +368,7 @@ class System:
 
             # Set the overall basis. Each unique identifier gets its own .
             cc = 0
-            for _, equations in self.equations.items():
+            for _, equations in self._equations.items():
                 for eq in equations:
                     basis[eq.index_term.identifier()] = cc
                     cc += 1
@@ -350,7 +377,7 @@ class System:
 
             # Set the local basis, in which each identifier gets its own
             # relative to the n-phonon manifold.
-            for n_phonons, list_of_equations in self.equations.items():
+            for n_phonons, list_of_equations in self._equations.items():
                 basis[n_phonons] = {
                     eq.index_term.identifier(): ii
                     for ii, eq in enumerate(list_of_equations)
