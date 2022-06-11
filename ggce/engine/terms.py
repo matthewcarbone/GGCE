@@ -774,7 +774,7 @@ class Term(MSONable):
         when the specific equations are generated, it will think there are
         multiple Greens equations, of which of course there can be only one."""
 
-        if self._get_phonon_config_id() == "G" and np.any(self._f_arg != 0):
+        if self._get_phonon_config_id() == "{G}" and np.any(self._f_arg != 0):
             self._exp_shift += self._f_arg
             self._f_arg = np.zeros_like(self._f_arg)
 

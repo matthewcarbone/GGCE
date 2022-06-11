@@ -1,3 +1,5 @@
+# TODO: entire module should be accelerated via C++
+
 from copy import deepcopy
 from collections import OrderedDict
 
