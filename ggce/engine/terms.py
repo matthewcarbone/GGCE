@@ -468,7 +468,7 @@ class Config(MSONable):
         self._config[indexes] += 1
 
         self._modifications += 1
-        return shift
+        return -shift
 
 
 class Term(MSONable):
@@ -834,8 +834,10 @@ class EOMTerm(Term):
                 "EOM term requires a Hamiltonian term passed in the "
                 "constructor"
             )
-        self._exp_shift = self.hamiltonian_term.psi - self.hamiltonian_term.phi
-        self._f_arg = self.hamiltonian_term.phi
+        self._exp_shift = (
+            self.hamiltonian_term.psi - self.hamiltonian_term.phi
+        ).copy()
+        self._f_arg = self.hamiltonian_term.phi.copy()
         self._constant_prefactor = self.hamiltonian_term.coupling
         self._lattice_constant = model.lattice_constant
         self._hopping = model.hopping
@@ -868,8 +870,10 @@ class NonIndexTerm(Term):
         assert self.hamiltonian_term is not None
 
         # This is entirely general now
-        self.f_arg = self.hamiltonian_term.phi
-        self.g_arg = self.hamiltonian_term.psi - self.hamiltonian_term.phi
+        self.f_arg = self.hamiltonian_term.phi.copy()
+        self.g_arg = (
+            self.hamiltonian_term.psi - self.hamiltonian_term.phi
+        ).copy()
         self.constant_prefactor = constant_prefactor
         self.freq_shift = sum(
             [

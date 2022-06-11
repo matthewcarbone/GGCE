@@ -156,9 +156,11 @@ class System:
         only unique delta terms."""
 
         for n_mat_id, l_deltas in self._master_f_arg_list.items():
-            self._master_f_arg_list[n_mat_id] = list(
-                np.unique(np.array(l_deltas), axis=0)
-            )
+            new_list = [
+                np.array(xx)
+                for xx in set([tuple(yy.tolist()) for yy in l_deltas])
+            ]
+            self._master_f_arg_list[n_mat_id] = new_list
 
     def _get_total_terms(self):
         """Predicts the total number of required specific equations needed
@@ -206,7 +208,7 @@ class System:
             # Only one Green's function, with "zero" phonons
             self._generalized_equations[0] = [eq]
 
-            # self._determine_unique_dictionary()
+            self._determine_unique_dictionary()
 
         L = sum([len(val) for val in self._generalized_equations.values()])
         logger.info(f"Generated {L} generalized equations")

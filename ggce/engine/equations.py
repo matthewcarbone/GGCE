@@ -290,7 +290,7 @@ class Equation(MSONable):
                     ]
                 )
 
-                for ii, (index, _) in enumerate(np.ndenumerate(dummy)):
+                for _, (index, _) in enumerate(np.ndenumerate(dummy)):
                     loc = tuple(
                         [
                             index[jj]
