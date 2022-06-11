@@ -40,7 +40,17 @@ DEBUG_FMT_WITH_MPI_RANK = (
     "|<lvl>{level: <10}</>|%s<lvl>{message}</>" % RANK
 )
 
+# DEBUG_FMT_WITHOUT_MPI_RANK = (
+#     "<fg #808080>{time:YYYY-MM-DD HH:mm:ss.SSS} "
+#     "{name}:{function}:{line}</> "
+#     "|<lvl>{level: <10}</>| <lvl>{message}</>"
+# )
+
 DEBUG_FMT_WITHOUT_MPI_RANK = (
+    "<fg #808080>{time:YYYY-MM-DD HH:mm:ss}</> <lvl>{message}</>"
+)
+
+WARN_FMT_WITHOUT_MPI_RANK = (
     "<fg #808080>{time:YYYY-MM-DD HH:mm:ss.SSS} "
     "{name}:{function}:{line}</> "
     "|<lvl>{level: <10}</>| <lvl>{message}</>"
@@ -52,7 +62,7 @@ def configure_loggers(
     stdout_debug_fmt=DEBUG_FMT_WITH_MPI_RANK,
     stdout_fmt=DEBUG_FMT_WITHOUT_MPI_RANK,
     stderr_filter=["WARNING", "ERROR", "CRITICAL"],
-    stderr_fmt=DEBUG_FMT_WITHOUT_MPI_RANK,
+    stderr_fmt=WARN_FMT_WITHOUT_MPI_RANK,
     run_as_mpi=False,
     enable_python_standard_warnings=False,
 ):
@@ -165,6 +175,15 @@ def _testing_mode():
         yield None
     finally:
         DEBUG()
+
+
+@contextmanager
+def debug():
+    DEBUG()
+    try:
+        yield None
+    finally:
+        DISABLE_DEBUG()
 
 
 DISABLE_DEBUG()

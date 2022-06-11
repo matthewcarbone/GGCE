@@ -1,6 +1,5 @@
 from copy import deepcopy
 from collections import OrderedDict
-from time import time
 
 import numpy as np
 
@@ -120,6 +119,10 @@ class System:
     """
 
     @property
+    def model(self):
+        return self._model
+
+    @property
     def generalized_equations(self):
         return self._generalized_equations
 
@@ -144,7 +147,7 @@ class System:
 
     def _append_generalized_equation(self, n_phonons, config):
 
-        eq = Equation.from_config(config, model=self.model)
+        eq = Equation.from_config(config, model=self._model)
 
         # Append a master dictionary at the System object level that
         # keeps track of all the f_arg values required for each value of
@@ -177,13 +180,15 @@ class System:
         L = sum([len(val) for val in self._generalized_equations.values()])
 
         # Need to generalize this
-        if self.n_phonon_types == 1 and self.phonon_max_per_site is None:
+        phonon_max_per_site = self._model.phonon_max_per_site
+        n_phonon_types = self._model.n_phonon_types
+        if n_phonon_types == 1 and phonon_max_per_site is None:
             # Plus one for the Green's function
 
             T = 1 + total_generalized_equations(
-                self.model.phonon_extent,
-                self.model.phonon_number,
-                self.n_phonon_types,
+                self._model.phonon_extent,
+                self._model.phonon_number,
+                n_phonon_types,
             )
 
             if L == T:
@@ -209,7 +214,7 @@ class System:
             for config in configs:
                 self._append_generalized_equation(n_phonons, config.config)
 
-        eq = GreenEquation(model=self.model)
+        eq = GreenEquation(model=self._model)
         self._append_master_dictionary(eq)
 
         # Only one Green's function, with "zero" phonons
@@ -229,15 +234,14 @@ class System:
         }
 
         # Initialize the full set of equations
-        with timeit(logger.info, "Full equations initialized"):
-            for n_phonons, l_eqs in self._generalized_equations.items():
-                for eq in l_eqs:
-                    n_mat_id = eq.index_term._get_phonon_config_id()
-                    l_deltas = self._master_f_arg_list[n_mat_id]
-                    for true_delta in l_deltas:
-                        eq_copy = deepcopy(eq)
-                        eq_copy._init_full(true_delta)
-                        self._equations[n_phonons].append(eq_copy)
+        for n_phonons, l_eqs in self._generalized_equations.items():
+            for eq in l_eqs:
+                n_mat_id = eq.index_term._get_phonon_config_id()
+                l_deltas = self._master_f_arg_list[n_mat_id]
+                for true_delta in l_deltas:
+                    eq_copy = deepcopy(eq)
+                    eq_copy._init_full(true_delta)
+                    self._equations[n_phonons].append(eq_copy)
 
         L = sum([len(val) for val in self._equations.values()])
 
@@ -250,6 +254,27 @@ class System:
                 "result in a critical error!"
             )
 
+    def _final_checks(self):
+        """Runs a sanity check on the unique keys, which should equal the
+        number of equations.
+        """
+
+        unique_short_identifiers = set()
+        all_terms_rhs = set()
+        for n_phonons, equations in self._equations.items():
+            for eq in equations:
+                unique_short_identifiers.add(eq.index_term.id())
+                for term in eq._terms_list:
+                    all_terms_rhs.add(term.id())
+
+        if unique_short_identifiers == all_terms_rhs:
+            logger.info("Closure checked and valid")
+        else:
+            # logger.error("Invalid closure!")
+            # logger.error(unique_short_identifiers - all_terms_rhs)
+            # logger.error(all_terms_rhs - unique_short_identifiers)
+            logger.critical("Critical error due to invalid closure.")
+
     def __init__(self, model):
         """Initializer.
 
@@ -259,24 +284,23 @@ class System:
             Container for the full set of parameters.
         """
 
-        self.model = deepcopy(model)
-
-        # The number of unique boson types has already been evaluated upon
-        # initializing the configuration class
-        self.n_phonon_types = self.model.n_phonon_types
-        self.phonon_max_per_site = self.model.phonon_max_per_site
-
+        self._model = deepcopy(model)
+        self._generalized_equations = None
         self._master_f_arg_list = None
+        self._equations = None
 
         # Get all of the allowed configurations
-        with timeit(logger.info, "Generate legal configurations"):
-            allowed_configs = generate_all_legal_configurations(self.model)
+        with timeit(logger.info, "Legal configurations generated"):
+            allowed_configs = generate_all_legal_configurations(self._model)
 
         with timeit(logger.info, "Generalized equations initialized"):
             self._initialize_generalized_equations(allowed_configs)
 
         with timeit(logger.info, "Equations initialized"):
             self._initialize_equations()
+
+        with timeit(logger.info, "Final checks"):
+            self._final_checks()
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
@@ -308,30 +332,6 @@ class System:
                 eq.visualize(full=full, coef=coef)
             print("\n")
 
-    def generate_unique_terms(self):
-        """Constructs the basis for the problem, which is a mapping between
-        the short identifiers and the index of the basis. Also, run a sanity
-        check on the unique keys, which should equal the number of equations.
-        """
-
-        t0 = time()
-        unique_short_identifiers = set()
-        all_terms_rhs = set()
-        for n_phonons, equations in self._equations.items():
-            for eq in equations:
-                unique_short_identifiers.add(eq.index_term.identifier())
-                for term in eq.terms_list:
-                    all_terms_rhs.add(term.identifier())
-        dt = time() - t0
-
-        if unique_short_identifiers == all_terms_rhs:
-            self.logger.info("Closure checked and valid", elapsed=dt)
-        else:
-            self.logger.error("Invalid closure!")
-            print(unique_short_identifiers - all_terms_rhs)
-            print(all_terms_rhs - unique_short_identifiers)
-            self.logger.critical("Critical error due to invalid closure.")
-
     def get_basis(self, full_basis=False):
         """Prepares the solver-specific information.
 
@@ -357,8 +357,6 @@ class System:
             The dictionary objects containing the basis.
         """
 
-        t0 = time()
-
         # The basis object maps each unique identifier to a unique number.
         # The local_basis object maps each unique identifier to a unique
         # number within the manifold of some number of phonons.
@@ -370,7 +368,7 @@ class System:
             cc = 0
             for _, equations in self._equations.items():
                 for eq in equations:
-                    basis[eq.index_term.identifier()] = cc
+                    basis[eq.index_term.id()] = cc
                     cc += 1
 
         else:
@@ -379,11 +377,8 @@ class System:
             # relative to the n-phonon manifold.
             for n_phonons, list_of_equations in self._equations.items():
                 basis[n_phonons] = {
-                    eq.index_term.identifier(): ii
+                    eq.index_term.id(): ii
                     for ii, eq in enumerate(list_of_equations)
                 }
-
-        dt = time() - t0
-        self.logger.info("Basis has been constructed", elapsed=dt)
 
         return basis

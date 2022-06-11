@@ -186,10 +186,12 @@ class Equation(MSONable):
                 id1 = term.id(full=full)
                 if coef is not None:
                     c = term.coefficient(*coef)
+                    c_real = c.real.item()
+                    c_imag = c.imag.item()
                     if c.imag < 0:
-                        id1 += f" -> {c.real:.02e} - {-c.imag:.02e}i"
+                        id1 += f" -> {c_real:.02e} - {-c_imag:.02e}i"
                     else:
-                        id1 += f" -> {c.real:.02e} + {c.imag:.02e}i"
+                        id1 += f" -> {c_real:.02e} + {c_imag:.02e}i"
                 print("\t", id1)
 
     def _populate_f_arg_terms(self):
