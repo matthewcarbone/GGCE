@@ -834,6 +834,7 @@ class EOMTerm(Term):
                 "EOM term requires a Hamiltonian term passed in the "
                 "constructor"
             )
+        self._model = model
         self._exp_shift = (
             self.hamiltonian_term.psi - self.hamiltonian_term.phi
         ).copy()
@@ -866,7 +867,7 @@ class EOMTerm(Term):
 
 class NonIndexTerm(Term):
     def __init__(self, config, hamiltonian_term, model, constant_prefactor):
-        super().__init__(config, hamiltonian_term, model)
+        super().__init__(config, hamiltonian_term)
         assert self.hamiltonian_term is not None
 
         # This is entirely general now
@@ -875,6 +876,7 @@ class NonIndexTerm(Term):
             self.hamiltonian_term.psi - self.hamiltonian_term.phi
         ).copy()
         self.constant_prefactor = constant_prefactor
+        self._model = model
         self.freq_shift = sum(
             [
                 model.hamiltonian.phonon_frequencies[ii] * bpt

@@ -10,6 +10,7 @@ from monty.json import MSONable
 import pickle
 
 from ggce import logger
+from ggce.model import Model
 from ggce.engine.terms import Config, config_legal
 from ggce.engine.equations import Equation, GreenEquation
 from ggce.utils.utils import timeit
@@ -289,8 +290,9 @@ class System(MSONable):
             return
 
         path = Path(self._root) / Path("model.json")
+        m = json.loads(self._model.to_json())
         with open(path, "w") as f:
-            json.dump(self._model.as_dict(), f, indent=4, sort_keys=False)
+            json.dump(m, f, indent=4, sort_keys=False)
 
     def checkpoint(self):
         """Runs the checkpoint protocol to attempt and save the current
@@ -306,11 +308,48 @@ class System(MSONable):
             path = Path(self._root) / Path(f"{attr}.pkl")
             if obj is not None and not path.exists():
                 pickle.dump(
-                    self._generalized_equations,
+                    obj,
                     open(path, "wb"),
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
                 logger.info(f"Checkpoint saved: {attr}")
+
+    @classmethod
+    def from_checkpoint(cls, root):
+        """Reloads the state of the System from the saved pickle file
+        checkpoint.
+
+        Parameters
+        ----------
+        root : os.PathLike
+            Checkpoint directory
+        """
+
+        with open(Path(root) / Path("model.json"), "r") as f:
+            model = Model.from_dict(json.load(f))
+
+        generalized_equations = None
+        path = Path(root) / Path("generalized_equations.pkl")
+        if path.exists():
+            generalized_equations = pickle.load(open(path, "rb"))
+
+        f_arg_list = None
+        path = Path(root) / Path("f_arg_list.pkl")
+        if path.exists():
+            f_arg_list = pickle.load(open(path, "rb"))
+
+        equations = None
+        path = Path(root) / Path("equations.pkl")
+        if path.exists():
+            equations = pickle.load(open(path, "rb"))
+
+        return cls(
+            model=model,
+            generalized_equations=generalized_equations,
+            f_arg_list=f_arg_list,
+            equations=equations,
+            root=str(root),
+        )
 
     def __init__(
         self,
@@ -336,15 +375,16 @@ class System(MSONable):
             Description
         """
 
+        self._root = root
         if self._root is not None:
             Path(root).mkdir(exist_ok=True, parents=True)
 
         self._model = deepcopy(model)
         self._save_model()
+
         self._generalized_equations = generalized_equations
         self._f_arg_list = f_arg_list
         self._equations = equations
-        self._root = root
 
         # Get all of the allowed configurations - additionally checkpoint the
         # generalized configurations in a root directory if its provided
