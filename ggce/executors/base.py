@@ -1,12 +1,15 @@
-#!/usr/bin/env python3
-
 import numpy as np
 
-from ggce.engine.system import System
-from ggce.utils.logger import Logger
+from ggce import logger
 from ggce.utils.utils import peak_location_and_weight, \
                         peak_location_and_weight_wstep, chunk_jobs, \
                                                             float_to_list
+
+
+class ExecutorResults:
+
+    def __init__(self):
+        ...
 
 
 class BaseExecutor:
@@ -29,36 +32,44 @@ class BaseExecutor:
         default is 1).
     """
 
-    def __init__(
-        self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None, log_every=1
-    ):
+    @property
+    def system(self):
+        return self._system
+
+    @property
+    def mpi_comm(self):
+        return self._mpi_comm
+
+    @property
+    def mpi_rank(self):
+        if self._mpi_comm is not None:
+            return self._mpi_comm.Get_rank()
+        return 0
+
+    @property
+    def mpi_world_size(self):
+        if self._mpi_comm is not None:
+            return self._mpi_comm.Get_size()
+        return 1
+
+    def __init__(self, system, mpi_comm=None):
         # Initialize the executor's logger and adjust the default logging level
         # for the console output
-        self.mpi_comm = None
-        self.mpi_rank = 0
-        self.mpi_world_size = 1
-        if mpi_comm is not None:
-            self.mpi_comm = mpi_comm
-            self.mpi_rank = mpi_comm.Get_rank()
-            self.mpi_world_size = mpi_comm.Get_size()
-        self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
-        self._logger.adjust_logging_level(default_console_logging_level)
-        self._model = model
-        self._system = None
+
+        self._mpi_comm = mpi_comm
+        self._system = system
         self._basis = None
-        self._log_every = log_every
         self._total_jobs_on_this_rank = 1
 
     def get_jobs_on_this_rank(self, jobs):
-        """Get's the jobs assigned to this rank. Note this method silently
-        behaves as it should when the world size is 1, and will log a warning
-        if it is called but the communicator is not initialized.
+        """Gets the jobs assigned to this rank. Note this method silently
+        behaves as it should when the world size is 1 (or there's no MPI
+        communicator).
 
         Parameters
         ----------
         jobs : list
-            The jobs to chunk
+            The jobs to chunk.
 
         Returns
         -------
@@ -67,7 +78,6 @@ class BaseExecutor:
         """
 
         if self.mpi_comm is None:
-            self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
 
         return chunk_jobs(jobs, self.mpi_world_size, self.mpi_rank)
@@ -82,33 +92,15 @@ class BaseExecutor:
             mu = np.mean(lengths)
             if std == 0:
                 mu = int(mu)
-                self._logger.info(f"Jobs balanced on all ranks ({mu}/rank)")
+                logger.info(f"Jobs balanced on all ranks ({mu}/rank)")
             else:
-                self._logger.info(
+                logger.info(
                     f"Job balance: {mu:.02f} +/- {std:.02f} per rank"
                 )
         self.mpi_comm.Barrier()
 
-    def get_system(self):
-        """Returns the system object, which will be None if _prime_system()
-        has not been called.
-
-        Returns
-        -------
-        System
-        """
-
-        return self._system
-
-    def _prime_system(self):
-
-        self._system = System(self._model, self._logger)
-        self._system.initialize_generalized_equations()
-        self._system.initialize_equations()
-        self._system.generate_unique_terms()
-
     def _log_spectral_error(self, k, w):
-        self._logger.error(
+        logger.error(
             f"Negative spectral weight at k, w = ({k:.02f}, {w:.02f}"
         )
 
@@ -125,21 +117,16 @@ class BaseExecutor:
         msg1 = f"({index:03}/{self._total_jobs_on_this_rank:03}) solved "
         msg_debug = f"{msg1} A({k:.02e}, {w:.02e}) = {A:.02e}"
         if index % self._log_every == 0:
-            self._logger.info(msg_debug, elapsed=dt)
-        self._logger.debug(msg_debug, elapsed=dt)
+            logger.info(msg_debug, elapsed=dt)
+        logger.debug(msg_debug, elapsed=dt)
 
     def _scaffold():
-        raise NotImplementedError
-
-    def prime():
         raise NotImplementedError
 
     def solve():
         raise NotImplementedError
 
-    def spectrum(
-        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs
-    ):
+    def spectrum(self, k, w, eta, **solve_kwargs):
         """Solves for the spectrum in serial.
 
         Parameters
@@ -152,13 +139,6 @@ class BaseExecutor:
             The artificial broadening parameter of the calculation.
         **solve_kwargs
             Extra arguments to pass to solve().
-        return_G : bool
-            If True, returns the Green's function as opposed to the spectral
-            function (the default is False).
-        return_meta : bool
-            If True, returns a tuple of the Green's function and the dictionary
-            containing meta information. If False, returns just the Green's
-            function (the default is False).
 
         Returns
         -------
@@ -275,7 +255,7 @@ class BaseExecutor:
             while True:
 
                 if current_n_w > nmax:
-                    self._logger.error("Exceeded maximum omega points")
+                    logger.error("Exceeded maximum omega points")
                     return results
 
                 G, _ = self.solve(k_val, w_val, eta, **solve_kwargs)
@@ -308,7 +288,7 @@ class BaseExecutor:
                 results[ii]['ground_state'] = loc
                 results[ii]['weight'] = weight
                 w_val = loc - eta * next_k_offset_factor
-                self._logger.info(
+                logger.info(
                     f"For k ({ii:03}/{nk:03}) = {k_val:.02f}: GS={loc:.08f}, "
                     f"wt={weight:.02e}"
                 )

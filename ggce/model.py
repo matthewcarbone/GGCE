@@ -4,7 +4,7 @@ import math
 
 from monty.json import MSONable
 
-from ggce import logger
+from ggce.logger import logger
 
 
 def model_coupling_map(coupling_type, t, Omega, lam):

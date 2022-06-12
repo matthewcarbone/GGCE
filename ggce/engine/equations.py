@@ -40,7 +40,7 @@ import numpy as np
 
 from monty.json import MSONable
 
-from ggce import logger
+from ggce.logger import logger
 from ggce.utils import physics
 from ggce.utils.utils import timeit
 from ggce.engine import terms as terms_module

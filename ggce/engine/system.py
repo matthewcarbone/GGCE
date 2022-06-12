@@ -6,10 +6,9 @@ from pathlib import Path
 
 import json
 import numpy as np
-from monty.json import MSONable
 import pickle
 
-from ggce import logger
+from ggce.logger import logger
 from ggce.model import Model
 from ggce.engine.terms import Config, config_legal
 from ggce.engine.equations import Equation, GreenEquation
@@ -95,7 +94,7 @@ def generate_all_legal_configurations(model):
             # TODO
 
             # Now, we get all of the LEGAL nvecs, which are those in
-            # which at least a single boson of any type is on both
+            # which at least a single phonon of any type is on both
             # edges of the cloud.
             tmp_legal_configs = [
                 Config(cc)
@@ -113,7 +112,7 @@ def generate_all_legal_configurations(model):
     return config_dict
 
 
-class System(MSONable):
+class System:
     """Defines a list of Equations (a system of equations, so to speak) and
     operations on that system.
 
@@ -325,7 +324,11 @@ class System(MSONable):
             Checkpoint directory
         """
 
-        with open(Path(root) / Path("model.json"), "r") as f:
+        path = Path(root) / Path("model.json")
+        if not path.exists():
+            logger.critical(f"Model checkpoint file {path} does not exist")
+
+        with open(path, "r") as f:
             model = Model.from_dict(json.load(f))
 
         generalized_equations = None
@@ -355,26 +358,11 @@ class System(MSONable):
         self,
         model,
         generalized_equations=None,
-        f_arg_list=None,
+        f_arg_list=None,  # TODO: pool f_arg_list into generalized_equations
         equations=None,
         root=None,
+        mpi_comm=None,
     ):
-        """Initializer.
-
-        Parameters
-        ----------
-        model : ggce.model.Model
-            Container for the full set of parameters.
-        generalized_equations : None, optional
-            Description
-        f_arg_list : None, optional
-            Description
-        equations : None, optional
-            Description
-        root : None, optional
-            Description
-        """
-
         self._root = root
         if self._root is not None:
             Path(root).mkdir(exist_ok=True, parents=True)

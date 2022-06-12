@@ -3,7 +3,7 @@ import numpy as np
 
 from monty.json import MSONable
 
-from ggce import logger
+from ggce.logger import logger
 from ggce.utils import physics
 from ggce.model import SingleTerm
 
@@ -678,7 +678,7 @@ class Term(MSONable):
         if self._f_arg is None:
             return "(!)"
 
-        return str(list(self._f_arg))
+        return str(list(self._f_arg.astype(float)))
 
     def _get_g_arg_id(self):
         """Returns a string of the f_arg id."""
@@ -686,7 +686,7 @@ class Term(MSONable):
         if self._g_arg is None:
             return "<!>"
 
-        return str(list(self._g_arg))
+        return str(list(self._g_arg.astype(float)))
 
     def _get_c_exp_id(self):
         """Returns a string of the current value of the exponential shift."""
@@ -694,7 +694,7 @@ class Term(MSONable):
         if self._exp_shift is None:
             return "[!]"
 
-        return str(self._exp_shift)
+        return str(list(self._exp_shift.astype(float)))
 
     def id(self, full=False):
         """Returns a string with which one can index the term. There are two
