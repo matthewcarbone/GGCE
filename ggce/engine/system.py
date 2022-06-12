@@ -2,8 +2,12 @@
 
 from copy import deepcopy
 from collections import OrderedDict
+from pathlib import Path
 
+import json
 import numpy as np
+from monty.json import MSONable
+import pickle
 
 from ggce import logger
 from ggce.engine.terms import Config, config_legal
@@ -108,7 +112,7 @@ def generate_all_legal_configurations(model):
     return config_dict
 
 
-class System:
+class System(MSONable):
     """Defines a list of Equations (a system of equations, so to speak) and
     operations on that system.
 
@@ -135,17 +139,17 @@ class System:
     def _append_master_dictionary(self, eq):
         """Takes an equation and appends the master_f_arg_list dictionary."""
 
-        if self._master_f_arg_list is None:
-            self._master_f_arg_list = deepcopy(eq._f_arg_terms)
+        if self._f_arg_list is None:
+            self._f_arg_list = deepcopy(eq._f_arg_terms)
             return
 
         # Else, we append the terms
         for n_mat_id, l_deltas in eq._f_arg_terms.items():
             for delta in l_deltas:
                 try:
-                    self._master_f_arg_list[n_mat_id].append(delta)
+                    self._f_arg_list[n_mat_id].append(delta)
                 except KeyError:
-                    self._master_f_arg_list[n_mat_id] = [delta]
+                    self._f_arg_list[n_mat_id] = [delta]
 
     def _append_generalized_equation(self, n_phonons, config):
 
@@ -164,18 +168,18 @@ class System:
         """Sorts the master delta terms for easier readability and takes
         only unique delta terms."""
 
-        for n_mat_id, l_deltas in self._master_f_arg_list.items():
+        for n_mat_id, l_deltas in self._f_arg_list.items():
             new_list = [
                 np.array(xx)
                 for xx in set([tuple(yy.tolist()) for yy in l_deltas])
             ]
-            self._master_f_arg_list[n_mat_id] = new_list
+            self._f_arg_list[n_mat_id] = new_list
 
     def _get_total_terms(self):
         """Predicts the total number of required specific equations needed
         to close the system."""
 
-        return sum([len(ll) for ll in self._master_f_arg_list.values()])
+        return sum([len(ll) for ll in self._f_arg_list.values()])
 
     def _predict_total_terms(self):
 
@@ -239,7 +243,7 @@ class System:
         for n_phonons, l_eqs in self._generalized_equations.items():
             for eq in l_eqs:
                 n_mat_id = eq.index_term._get_phonon_config_id()
-                l_deltas = self._master_f_arg_list[n_mat_id]
+                l_deltas = self._f_arg_list[n_mat_id]
                 for true_delta in l_deltas:
                     eq_copy = deepcopy(eq)
                     eq_copy._init_full(true_delta)
@@ -277,29 +281,88 @@ class System:
             # logger.error(all_terms_rhs - unique_short_identifiers)
             logger.critical("Critical error due to invalid closure.")
 
-    def __init__(self, model):
+    def _save_model(self):
+        """Saves the model attribute to disk. Will not overwrite an existing
+        file."""
+
+        if self._root is None:
+            return
+
+        path = Path(self._root) / Path("model.json")
+        with open(path, "w") as f:
+            json.dump(self._model.as_dict(), f, indent=4, sort_keys=False)
+
+    def checkpoint(self):
+        """Runs the checkpoint protocol to attempt and save the current
+        state of the system. This method will only run if a root directory is
+        defined at class instantiation. Note that existing checkpoints will
+        never be overwritten."""
+
+        if self._root is None:
+            return
+
+        for attr in ["generalized_equations", "f_arg_list", "equations"]:
+            obj = eval(f"self._{attr}")
+            path = Path(self._root) / Path(f"{attr}.pkl")
+            if obj is not None and not path.exists():
+                pickle.dump(
+                    self._generalized_equations,
+                    open(path, "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+                logger.info(f"Checkpoint saved: {attr}")
+
+    def __init__(
+        self,
+        model,
+        generalized_equations=None,
+        f_arg_list=None,
+        equations=None,
+        root=None,
+    ):
         """Initializer.
 
         Parameters
         ----------
-        model : SystemParameters
+        model : ggce.model.Model
             Container for the full set of parameters.
+        generalized_equations : None, optional
+            Description
+        f_arg_list : None, optional
+            Description
+        equations : None, optional
+            Description
+        root : None, optional
+            Description
         """
 
+        if self._root is not None:
+            Path(root).mkdir(exist_ok=True, parents=True)
+
         self._model = deepcopy(model)
-        self._generalized_equations = None
-        self._master_f_arg_list = None
-        self._equations = None
+        self._save_model()
+        self._generalized_equations = generalized_equations
+        self._f_arg_list = f_arg_list
+        self._equations = equations
+        self._root = root
 
-        # Get all of the allowed configurations
-        with timeit(logger.info, "Legal configurations generated"):
-            allowed_configs = generate_all_legal_configurations(self._model)
+        # Get all of the allowed configurations - additionally checkpoint the
+        # generalized configurations in a root directory if its provided
+        if self._generalized_equations is None:
+            with timeit(logger.info, "Legal configurations generated"):
+                confs = generate_all_legal_configurations(self._model)
+            with timeit(logger.info, "Generalized equations initialized"):
+                self._initialize_generalized_equations(confs)
+        else:
+            logger.info("Generalized equations reloaded from state")
+        self.checkpoint()
 
-        with timeit(logger.info, "Generalized equations initialized"):
-            self._initialize_generalized_equations(allowed_configs)
-
-        with timeit(logger.info, "Equations initialized"):
-            self._initialize_equations()
+        if self._equations is None:
+            with timeit(logger.info, "Equations initialized"):
+                self._initialize_equations()
+        else:
+            logger.info("Equations reloaded from state")
+        self.checkpoint()
 
         with timeit(logger.info, "Final checks"):
             self._final_checks()
