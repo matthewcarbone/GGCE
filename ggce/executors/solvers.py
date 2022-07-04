@@ -83,7 +83,9 @@ class SparseSolver:
         # Force checkpoint the system, which at this point must be initialized
         with disable_logger():
             self._system.checkpoint()
-        logger.info(f"System checkpointed to {self._root}")
+
+        if self._root is not None:
+            logger.info(f"System checkpointed to {self._root}")
 
         if self._basis is None:
             self._basis = self._system.get_basis(full_basis=True)
@@ -165,10 +167,12 @@ class SparseSolver:
 
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
 
-        X = coo_matrix((
-            np.array(dat, dtype=np.complex64),
-            (np.array(row_ind), np.array(col_ind))
-        )).tocsr()
+        X = coo_matrix(
+            (
+                np.array(dat, dtype=np.complex64),
+                (np.array(row_ind), np.array(col_ind)),
+            )
+        ).tocsr()
 
         size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
 
@@ -176,14 +180,17 @@ class SparseSolver:
 
         # Initialize the corresponding sparse vector
         # {G}(0)
-        row_ind = np.array([self._basis['{G}[0.0]']])
+        row_ind = np.array([self._basis["{G}[0.0]"]])
         col_ind = np.array([0])
-        v = coo_matrix((
-            np.array(
-                [self._system.equations[0][0].bias(k, w, eta)],
-                dtype=np.complex64
-            ), (row_ind, col_ind)
-        )).tocsr()
+        v = coo_matrix(
+            (
+                np.array(
+                    [self._system.equations[0][0].bias(k, w, eta)],
+                    dtype=np.complex64,
+                ),
+                (row_ind, col_ind),
+            )
+        ).tocsr()
 
         return X, v
 
@@ -218,7 +225,7 @@ class SparseSolver:
         # Bottleneck: solve the matrix
         res = spsolve(X, v)
 
-        G = res[self._basis['{G}[0.0]']]
+        G = res[self._basis["{G}[0.0]"]]
 
         if -G.imag / np.pi < 0.0:
             logger.error(f"A(k,w) < 0 at k, w = ({k:.02f}, {w:.02f}")
@@ -258,17 +265,3 @@ class SparseSolver:
             s.append(self.solve(_k, _w, eta))
 
         return np.array(s).reshape(len(k), len(w))
-
-        # # Separate meta information
-        # res = [xx[0] for xx in s]
-        # meta = [xx[1] for xx in s]
-
-        # if return_G:
-        #     res = np.array(res)
-        # else:
-        #     res = -np.array(res).imag / np.pi
-        # res = res.reshape(len(k), len(w))
-
-        # if return_meta:
-        #     return (res, meta)
-        # return res

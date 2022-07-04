@@ -377,22 +377,22 @@ class System:
         # Get all of the allowed configurations - additionally checkpoint the
         # generalized configurations in a root directory if its provided
         if self._generalized_equations is None:
-            with timeit(logger.info, "Legal configurations generated"):
+            with timeit(logger.debug, "Legal configurations generated"):
                 confs = generate_all_legal_configurations(self._model)
-            with timeit(logger.info, "Generalized equations initialized"):
+            with timeit(logger.debug, "Generalized equations initialized"):
                 self._initialize_generalized_equations(confs)
         else:
             logger.info("Generalized equations reloaded from state")
         self.checkpoint()
 
         if self._equations is None:
-            with timeit(logger.info, "Equations initialized"):
+            with timeit(logger.debug, "Equations initialized"):
                 self._initialize_equations()
         else:
             logger.info("Equations reloaded from state")
         self.checkpoint()
 
-        with timeit(logger.info, "Final checks"):
+        with timeit(logger.debug, "Final checks"):
             self._final_checks()
 
     def visualize(self, generalized=True, full=True, coef=None):
