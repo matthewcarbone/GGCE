@@ -1,21 +1,15 @@
-.. GGCE documentation master file, created by
-   sphinx-quickstart on Tue Apr 27 22:56:50 2021.
+.. Packaging Scientific Python documentation master file, created by
+   sphinx-quickstart on Thu Jun 28 12:35:56 2018.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to GGCE's documentation!
-================================
-
-.. toctree::
-   :maxdepth: 3
-   :caption: Package Content
-
-   executors
-
-
-Indices and tables
+GGCE Documentation
 ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. toctree::
+
+   overview
+   installation
+   usage
+   modules
+
