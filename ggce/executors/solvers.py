@@ -9,7 +9,7 @@ from scipy.sparse.linalg import spsolve
 from tqdm import tqdm
 
 from ggce.logger import logger, disable_logger
-from ggce.utils.utils import float_to_list
+from ggce.utils.utils import float_to_list, chunk_jobs
 from ggce.engine.system import System
 from ggce.utils.physics import G0_k_omega
 
@@ -18,7 +18,6 @@ BYTES_TO_MB = 1048576
 
 
 class Solver(ABC):
-
     @property
     def system(self):
         return self._system
@@ -78,6 +77,51 @@ class Solver(ABC):
         if self._root is not None:
             logger.info(f"System checkpointed to {self._root}")
 
+    def get_jobs_on_this_rank(self, jobs):
+        """Gets the jobs assigned to this rank. Note this method silently
+        behaves as it should when the world size is 1 (or there's no MPI
+        communicator).
+
+        Parameters
+        ----------
+        jobs : list
+            The jobs to chunk.
+
+        Returns
+        -------
+        list
+            The jobs assigned to this rank.
+        """
+
+        if self.mpi_comm is None:
+            return jobs
+
+        return chunk_jobs(jobs, self.mpi_world_size, self.mpi_rank)
+
+    @staticmethod
+    def _k_omega_eta_to_str(k, omega, eta):
+        # Note this will have to be redone when k is a vector in 2 and 3D!
+        return f"{k:.10f}_{omega:.10f}_{eta:.10f}"
+
+    @abstractmethod
+    def _pre_solve(self):
+        ...
+
+    @abstractmethod
+    def _post_solve(self):
+        ...
+
+    @abstractmethod
+    def solve(self, k, w, eta):
+        """Takes, ``k, w, eta`` and returns the Green's function."""
+        ...
+
+    @abstractmethod
+    def spectrum(self, k, w, eta, pbar=False):
+        ...
+
+
+class SerialSolver(Solver):
     def _pre_solve(self, k, w, eta):
         result = None
         if self._results_directory is not None:
@@ -92,12 +136,6 @@ class Solver(ABC):
             logger.error(f"A(k,w) < 0 at k, w = ({k:.02f}, {w:.02f}")
         if self._results_directory is not None:
             pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
-
-    @abstractmethod
-    def solve(self, k, w, eta):
-        """Takes, ``k, w, eta`` and returns the Green's function."""
-
-        ...
 
     def spectrum(self, k, w, eta, pbar=False):
         """Solves for the spectrum in serial.
@@ -123,15 +161,25 @@ class Solver(ABC):
         # This orders the jobs such that when constructed into an array, the
         # k-points are the rows and the w-points are the columns after reshape
         jobs = [(_k, _w) for _k in k for _w in w]
+        jobs_on_rank = self.get_jobs_on_this_rank(jobs)
 
         s = []
-        for (_k, _w) in tqdm(jobs, disable=not pbar):
+        for (_k, _w) in tqdm(jobs_on_rank, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
+
+        if self.mpi_comm is not None:
+            all_results = self.mpi_comm.gather(s, root=0)
+
+            # Only rank 0 returns the result
+            if self.mpi_rank == 0:
+                return np.array(all_results).reshape(len(k), len(w))
+            else:
+                return None
 
         return np.array(s).reshape(len(k), len(w))
 
 
-class SparseSolver(Solver):
+class SparseSolver(SerialSolver):
     """A sparse, serial solver for the Green's function. Useful for when the
     calculation being performed is quite cheap. Note that there are a variety
     of checkpointing features automatically executed when paths are provided.
@@ -149,11 +197,6 @@ class SparseSolver(Solver):
         super().__init__(*args, **kwargs)
         if self._basis is None:
             self._basis = self._system.get_basis(full_basis=True)
-
-    @staticmethod
-    def _k_omega_eta_to_str(k, omega, eta):
-        # Note this will have to be redone when k is a vector in 2 and 3D!
-        return f"{k:.10f}_{omega:.10f}_{eta:.10f}"
 
     def _sparse_matrix_from_equations(self, k, w, eta):
         """This function iterates through the GGCE equations dicts to extract
@@ -289,7 +332,7 @@ class SparseSolver(Solver):
         return np.array(G)
 
 
-class DenseSolver(Solver):
+class DenseSolver(SerialSolver):
     """A sparse, dense solver for the Green's function. Note that there are a
     variety of checkpointing features automatically executed when paths are
     provided. Uses the SciPy dense solver engine to solve for G(k, w) in
