@@ -1,7 +1,9 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
 import pickle
 
 import numpy as np
+from scipy import linalg
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import spsolve
 from tqdm import tqdm
@@ -9,24 +11,13 @@ from tqdm import tqdm
 from ggce.logger import logger, disable_logger
 from ggce.utils.utils import float_to_list
 from ggce.engine.system import System
+from ggce.utils.physics import G0_k_omega
 
 
 BYTES_TO_MB = 1048576
 
 
-class SparseSolver:
-    """A sparse, serial solver for the Green's function. Useful for when the
-    calculation being performed is quite cheap. Note that there are a variety
-    of checkpointing features automatically executed when paths are provided.
-
-    - When a ``System`` and path are provided, the system's root directory is
-      overwritten and that object immediately checkpointed to the provided
-      directory.
-    - If only a ``System`` object is provided, no checkpointing will be
-      performed.
-    - If only a path is provided, the solver will attempt to instantiate the
-    ``System`` object. Checkpointing will the proceed as normal.
-    """
+class Solver(ABC):
 
     @property
     def system(self):
@@ -87,6 +78,75 @@ class SparseSolver:
         if self._root is not None:
             logger.info(f"System checkpointed to {self._root}")
 
+    def _pre_solve(self, k, w, eta):
+        result = None
+        if self._results_directory is not None:
+            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.txt"
+            path = self._results_directory / Path(ckpt_path)
+            if path.exists():
+                result = np.array(pickle.load(open(path, "rb")))
+        return result, path
+
+    def _post_solve(self, G, k, w, path):
+        if -G.imag / np.pi < 0.0:
+            logger.error(f"A(k,w) < 0 at k, w = ({k:.02f}, {w:.02f}")
+        if self._results_directory is not None:
+            pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+
+    @abstractmethod
+    def solve(self, k, w, eta):
+        """Takes, ``k, w, eta`` and returns the Green's function."""
+
+        ...
+
+    def spectrum(self, k, w, eta, pbar=False):
+        """Solves for the spectrum in serial.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
+
+        Returns
+        -------
+        numpy.ndarray
+            The resulting spectrum of shape ``nk`` by ``nw``.
+        """
+
+        k = float_to_list(k)
+        w = float_to_list(w)
+
+        # This orders the jobs such that when constructed into an array, the
+        # k-points are the rows and the w-points are the columns after reshape
+        jobs = [(_k, _w) for _k in k for _w in w]
+
+        s = []
+        for (_k, _w) in tqdm(jobs, disable=not pbar):
+            s.append(self.solve(_k, _w, eta))
+
+        return np.array(s).reshape(len(k), len(w))
+
+
+class SparseSolver(Solver):
+    """A sparse, serial solver for the Green's function. Useful for when the
+    calculation being performed is quite cheap. Note that there are a variety
+    of checkpointing features automatically executed when paths are provided.
+
+    - When a ``System`` and path are provided, the system's root directory is
+      overwritten and that object immediately checkpointed to the provided
+      directory.
+    - If only a ``System`` object is provided, no checkpointing will be
+      performed.
+    - If only a path is provided, the solver will attempt to instantiate the
+    ``System`` object. Checkpointing will the proceed as normal.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if self._basis is None:
             self._basis = self._system.get_basis(full_basis=True)
 
@@ -214,29 +274,75 @@ class SparseSolver:
             The value of :math:`G(k, \\omega; \\eta)`.
         """
 
-        if self._results_directory is not None:
-            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.txt"
-            path = self._results_directory / Path(ckpt_path)
-            if path.exists():
-                return np.array(pickle.load(open(path, "rb")))
+        result, path = self._pre_solve(k, w, eta)
+        if result is not None:
+            return result
 
+        # Solution ------------------------------------------------------------
         X, v = self._scaffold(k, w, eta)
-
-        # Bottleneck: solve the matrix
         res = spsolve(X, v)
-
         G = res[self._basis["{G}[0.0]"]]
+        # Solution Done -------------------------------------------------------
 
-        if -G.imag / np.pi < 0.0:
-            logger.error(f"A(k,w) < 0 at k, w = ({k:.02f}, {w:.02f}")
-
-        if self._results_directory is not None:
-            pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+        self._post_solve(G, k, w, path)
 
         return np.array(G)
 
-    def spectrum(self, k, w, eta, pbar=False):
-        """Solves for the spectrum in serial.
+
+class DenseSolver(Solver):
+    """A sparse, dense solver for the Green's function. Note that there are a
+    variety of checkpointing features automatically executed when paths are
+    provided. Uses the SciPy dense solver engine to solve for G(k, w) in
+    serial. This method uses the continued fraction approach,
+
+    .. math:: R_{n-1} = (1 - \\beta_{n-1}R_{n})^{-1} \\alpha_{n-1}
+
+    with
+
+    .. math:: R_n = \\alpha_n
+
+    and
+
+    .. math:: f_n = R_n f_{n-1}
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self._basis is None:
+            self._basis = self._system.get_basis(full_basis=False)
+
+    def _fill_matrix(self, k, w, n_phonons, shift, eta):
+
+        n_phonons_shift = n_phonons + shift
+
+        equations_n = self._system.equations[n_phonons]
+
+        # Initialize a matrix to fill
+        d1 = len(self._basis[n_phonons])
+        d2 = len(self._basis[n_phonons + shift])
+        A = np.zeros((d1, d2), dtype=np.complex64)
+
+        # Fill the matrix of coefficients
+        for ii, eq in enumerate(equations_n):
+            index_term_id = eq.index_term.id()
+            ii_basis = self._basis[n_phonons][index_term_id]
+            for term in eq._terms_list:
+                if term.config.total_phonons != n_phonons_shift:
+                    continue
+                t_id = term.id()
+                jj_basis = self._basis[n_phonons_shift][t_id]
+                A[ii_basis, jj_basis] += term.coefficient(k, w, eta)
+
+        return A
+
+    def _get_alpha(self, k, w, n_phonons, eta):
+        return self._fill_matrix(k, w, n_phonons, -1, eta)
+
+    def _get_beta(self, k, w, n_phonons, eta):
+        return self._fill_matrix(k, w, n_phonons, 1, eta)
+
+    def solve(self, k, w, eta):
+        """Solve the dense-represented system.
 
         Parameters
         ----------
@@ -249,19 +355,40 @@ class SparseSolver:
 
         Returns
         -------
-        numpy.ndarray
-            The resulting spectrum of shape ``nk`` by ``nw``.
+        np.ndarray
+            The value of G.
         """
 
-        k = float_to_list(k)
-        w = float_to_list(w)
+        result, path = self._pre_solve(k, w, eta)
+        if result is not None:
+            return result
 
-        # This orders the jobs such that when constructed into an array, the
-        # k-points are the rows and the w-points are the columns after reshape
-        jobs = [(_k, _w) for _k in k for _w in w]
+        # Solution ------------------------------------------------------------
+        total_phonons = np.sum(self._system.model.phonon_number)
+        for n_phonons in range(total_phonons, 0, -1):
 
-        s = []
-        for (_k, _w) in tqdm(jobs, disable=not pbar):
-            s.append(self.solve(_k, _w, eta))
+            # Special case of the recursion where R_N = alpha_N.
+            if n_phonons == total_phonons:
+                R = self._get_alpha(k, w, n_phonons, eta)
+                continue
 
-        return np.array(s).reshape(len(k), len(w))
+            # Get the next loop's alpha and beta values
+            beta = self._get_beta(k, w, n_phonons, eta)
+            alpha = self._get_alpha(k, w, n_phonons, eta)
+
+            # Compute the next R
+            X = np.eye(beta.shape[0], R.shape[1]) - beta @ R
+            R = linalg.solve(X, alpha)
+
+        a = self._system.model.lattice_constant
+        t = self._system.model.hopping
+        G0 = G0_k_omega(k, w, a, eta, t)
+
+        beta0 = self._get_beta(k, w, 0, eta)
+        G = (G0 / (1.0 - beta0 @ R)).squeeze()
+        G = np.array(G, dtype=np.complex64)
+        # Solution Done -------------------------------------------------------
+
+        self._post_solve(G, k, w, path)
+
+        return G
