@@ -273,8 +273,9 @@ class Equation(MSONable):
 
                 # Don't want to create an equation corresponding to more than
                 # the maximum number of allowed phonons.
-                s = np.sum(self._index_term.config.config) + 1
-                if s > self._model.phonon_number:
+                nphonons = self.index_term.config.total_phonons_per_type[bt]
+                s = nphonons + 1
+                if s > self._model.phonon_number[bt]:
                     continue
 
                 if any([xx - ae > 0 for xx in self._index_term.config.shape]):

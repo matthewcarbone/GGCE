@@ -124,6 +124,7 @@ class Solver(ABC):
 class SerialSolver(Solver):
     def _pre_solve(self, k, w, eta):
         result = None
+        path = None
         if self._results_directory is not None:
             ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.txt"
             path = self._results_directory / Path(ckpt_path)

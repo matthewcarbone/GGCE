@@ -103,6 +103,7 @@ def generate_all_legal_configurations(model):
                     cc,
                     max_phonons_per_site=max_phonons_per_site,
                     phonon_extent=phonon_extent,
+                    phonon_number=phonon_number,
                 )
             ]
 

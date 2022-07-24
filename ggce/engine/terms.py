@@ -70,7 +70,11 @@ def _extent_of_1d(config1d):
 
 
 def config_legal(
-    config, max_phonons_per_site=None, phonon_extent=None, allow_green=False
+    config,
+    max_phonons_per_site=None,
+    phonon_extent=None,
+    phonon_number=None,
+    allow_green=False,
 ):
     """Helper method designed to test a standalone configuration of phonons
     for legality. A `legal` ``config`` array satisfies the following
@@ -120,6 +124,14 @@ def config_legal(
             [
                 phonon_extent[ii] < _extent_of_1d(c1d)
                 for ii, c1d in enumerate(config)
+            ]
+        ):
+            return False
+    if phonon_number is not None:
+        if any(
+            [
+                np.sum(config[ii, ...]) > phonon_number[ii]
+                for ii in range(config.shape[0])
             ]
         ):
             return False
