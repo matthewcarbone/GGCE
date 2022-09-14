@@ -1,0 +1,5 @@
+numpy
+scipy
+loguru
+monty
+tqdm

@@ -1,18 +1,30 @@
-
 # GGCE
+
 [![codecov](https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/x94carbone/GGCE)
 
 Generalized Green's function Cluster Expansion
 
-## Necessary packages
-We use `conda` for all package management except for `mpi4py`. The following process should generally explain how to install the `GGCE` repository and its dependencies in a way that should work on most clusters.
+## Installation
+Please see the [INSTALLATION.md](INSTALLATION.md) file for detailed instructions on installing the GGCE package.
 
-1. [Create a fresh `conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) using `python=3.7`.
-2. Make sure you have the correct MPI module loaded. Usually this is done via some `module load`, where generally the package is something like `openmpi/gcc/64/3.1.1` (this example is the one on the Columbia Habanero cluster that I use).
-3. Point the `MPICC` path to the executables corresponding to the loaded modules. I do this with `export MPICC=$(which mpicc)`, where you'll want to check via `echo $MPICC` that this is indeed the correct path.
-4. Install `mpi4py` using `pip`, _not_ `conda`. I have found that `conda` ignores the cluster executables in favor of it's own locally installed versions, and then when submitting jobs, the compute nodes will not detect the correct executables and all processes will correspond to rank 0.
-5. Install `numpy` and `scipy` via `conda`. You'll also want to check that this linked successfully to e.g. `mkl`. 
-    * `conda install -c anaconda numpy`
-    * `conda install -c anaconda scipy`
 
-After these steps, everything should work properly.
+## Acknowledgements
+
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research, Department of Energy Computational Science Graduate Fellowship under Award Number DE-FG02-97ER25308.
+
+## Citation
+
+If you use this code for your own work, we ask that you please cite the following [manuscript](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106):
+
+```
+@article{carbone2021,
+  title={Numerically exact generalized Green's function cluster expansions for electron-phonon problems},
+  author={Carbone, Matthew R and Reichman, David R and Sous, John},
+  journal={Phys. Rev. B},
+  volume={104},
+  number={3},
+  pages={035106},
+  year={2021},
+  publisher={APS}
+}
+```

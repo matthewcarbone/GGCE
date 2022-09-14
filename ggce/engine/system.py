@@ -1,34 +1,49 @@
-#!/usr/bin/env python3
+# TODO: entire module should be accelerated via C++
 
-__author__ = "Matthew R. Carbone & John Sous"
-__maintainer__ = "Matthew R. Carbone"
-__email__ = "x94carbone@gmail.com"
-
+from copy import deepcopy
 from collections import OrderedDict
-import copy
+from pathlib import Path
+
+import json
 import numpy as np
-from scipy import linalg
-from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
+import pickle
 
-import time
-
-from ggce.utils.logger import default_logger as dlog
+from ggce.logger import logger
+from ggce.model import Model
+from ggce.engine.terms import Config, config_legal
 from ggce.engine.equations import Equation, GreenEquation
-from ggce.engine.physics import total_generalized_equations
+from ggce.utils.utils import timeit
+from ggce.utils.combinatorics import total_generalized_equations
 
-BYTES_TO_MB = 1048576
 
-
+# TODO: tagged for C++ acceleration
 def config_space_gen(length, total_sum):
     """Generator for yielding all possible combinations of integers of
-    length `length` that sum to total_sum. Not that cases such as
-    length = 4 and total_sum = 5 like [0, 0, 2, 3] need to be screened
-    out, since these do not correspond to valid f-functions.
+    length ``length`` that sum to ``total_sum``.
 
-    Source of algorithm:
-    https://stackoverflow.com/questions/7748442/
-    generate-all-possible-lists-of-length-n-that-sum-to-s-in-python
+    .. warning::
+
+        Not that cases such as ``length == 4`` and ``total_sum == 5`` such as
+        ``[0, 0, 2, 3]`` still need to be screened out, since these do not
+        correspond to valid f-functions.
+
+    .. note::
+
+        The algorithm to produce this code can be found `here <https://
+        stackoverflow.com/questions/7748442/
+        generate-all-possible-lists-of-length-n-that-sum-to-s-in-python>`_.
+
+    Parameters
+    ----------
+    length : int
+        The length of the array to produce.
+    total_sum : int
+        Constraints the sum over all of the elements of the array to equal this
+        value.
+
+    Yields
+    ------
+    tuple
     """
 
     if length == 1:
@@ -40,100 +55,62 @@ def config_space_gen(length, total_sum):
                 yield r
 
 
-class ConfigurationSpaceGenerator:
-    """Helper class for generating configuration spaces of bosons.
+def generate_all_legal_configurations(model):
+    """Summary
+
+    In one dimension, this is really easy. We can simply iterate over all
+    0 < n <= N and 0 < m <= M. Things get much more complicated as the
+    dimensionality increases. However, it is simplified somewhat since we
+    always assume that M is a "square". We can still generate configurations
+    that
 
     Parameters
     ----------
-    system_params : SystemParams
-        The system parameters containing:
-        * absolute_extent : int
-            The maximum extent of the cloud. Note that this is NOT trivially
-            the sum(M) since there are different ways in which the clouds can
-            overlap. Take for instance, two boson types, with M1 = 3 and
-            M2 = 2. These clouds can overlap such that absolute extent is at
-            most 5, and they can also overlap such that the maximal extent is
-            3.
-        * M : list
-            Length of the allowed cloud extent for each boson type.
-        * N : list
-            Total number of maximum allowed bosons for each boson type. The
-            absolute maximum number of bosons is trivially sum(N).
+    model : TYPE
+        Description
     """
 
-    def __init__(self, system_params):
-        self.absolute_extent = system_params.absolute_extent
-        self.M = system_params.M
-        assert self.absolute_extent >= max(self.M)
-        self.N = system_params.N
-        self.N_2d = np.atleast_2d(self.N).T
-        self.n_boson_types = len(self.M)
-        assert len(self.N) == self.n_boson_types
-        self.max_bosons_per_site = system_params.max_bosons_per_site
+    phonon_absolute_extent = model.phonon_absolute_extent
+    max_phonons_per_site = model.phonon_max_per_site
+    phonon_absolute_extent = model.phonon_absolute_extent
+    phonon_extent = model.phonon_extent
+    phonon_number = model.phonon_number
+    n_phonon_types = model.n_phonon_types
 
-    def extent_of_1d(self, config1d):
-        """Gets the extent of a 1d vector."""
+    if model.hamiltonian.dimension > 1:
+        logger.critical(">1 dimensions not yet implemented")
 
-        where_nonzero = np.where(config1d != 0)[0]
-        L = len(where_nonzero)
-        if L < 2:
-            return L
+    nb_max = sum(phonon_number)
+    config_dict = {n: [] for n in range(1, nb_max + 1)}
+    for nb in range(1, nb_max + 1):
+        for z in range(1, phonon_absolute_extent + 1):
+            c = list(config_space_gen(z * n_phonon_types, nb))
 
-        minimum_index = min(where_nonzero)
-        maximum_index = max(where_nonzero)
-        return maximum_index - minimum_index + 1
+            # Reshape everything properly:
+            # This will only work for 1d!!!
+            c = [np.array(cc).reshape(n_phonon_types, -1) for cc in c]
 
-    def is_legal(self, config):
-        """Checks the condition of a config. If legal, returns True, else
-        returns False."""
+            # Deal with the multiple dimensions later!
+            # TODO
 
-        # First, check that the edges of the cloud have at least one boson
-        # of either type on it.
-        if np.sum(config[:, 0]) < 1 or np.sum(config[:, -1]) < 1:
-            return False
+            # Now, we get all of the LEGAL nvecs, which are those in
+            # which at least a single phonon of any type is on both
+            # edges of the cloud.
+            tmp_legal_configs = [
+                Config(cc)
+                for cc in c
+                if config_legal(
+                    cc,
+                    max_phonons_per_site=max_phonons_per_site,
+                    phonon_extent=phonon_extent,
+                    phonon_number=phonon_number,
+                )
+            ]
 
-        # Second, check that the boson numbers for each boson type are
-        # satisfied
-        if not np.all(config.sum(axis=1, keepdims=True) <= self.N_2d):
-            return False
+            # Extend the temporary config
+            config_dict[nb].extend(tmp_legal_configs)
 
-        # Finally, check that each boson type satisifes its extent rule
-        if any([
-            self.M[ii] < self.extent_of_1d(c1d)
-            for ii, c1d in enumerate(config)
-        ]):
-            return False
-
-        # Constraint that we have maximum N bosons per site.
-        if self.max_bosons_per_site is not None:
-            if not np.all(config <= self.max_bosons_per_site):
-                return False
-
-        return True
-
-    def __call__(self):
-        """Generates all possible configurations of bosons for the composite
-        system. Then, reduce that space down based on the specific rules for
-        each boson type."""
-
-        nb_max = sum(self.N)
-        config_dict = {N: [] for N in range(1, nb_max + 1)}
-        for nb in range(1, nb_max + 1):
-            for z in range(1, self.absolute_extent + 1):
-                c = list(config_space_gen(z * self.n_boson_types, nb))
-
-                # Reshape everything properly:
-                c = [np.array(z).reshape(self.n_boson_types, -1) for z in c]
-
-                # Now, we get all of the LEGAL nvecs, which are those in
-                # which at least a single boson of any type is on both
-                # edges of the cloud.
-                tmp_legal_configs = [nn for nn in c if self.is_legal(nn)]
-
-                # Extend the temporary config
-                config_dict[nb].extend(tmp_legal_configs)
-
-        return config_dict
+    return config_dict
 
 
 class System:
@@ -148,54 +125,36 @@ class System:
         delta values.
     """
 
-    def __init__(self, system_params):
-        """Initializer.
+    @property
+    def model(self):
+        return self._model
 
-        Parameters
-        ----------
-        system_params : SystemParameters
-            Container for the full set of parameters.
-        """
+    @property
+    def generalized_equations(self):
+        return self._generalized_equations
 
-        self.system_params = copy.deepcopy(system_params)
+    @property
+    def equations(self):
+        return self._equations
 
-        # The number of unique boson types has already been evaluated upon
-        # initializing the configuration class
-        self.n_boson_types = self.system_params.n_boson_types
-        self.max_bosons_per_site = self.system_params.max_bosons_per_site
+    def _append_master_dictionary(self, eq):
+        """Takes an equation and appends the master_f_arg_list dictionary."""
 
-        self.master_f_arg_list = None
+        if self._f_arg_list is None:
+            self._f_arg_list = deepcopy(eq._f_arg_terms)
+            return
 
-        # The equations are organized by the number of bosons contained
-        # in their configuration space.
-        self.generalized_equations = dict()
-        self.equations = dict()
-        self.recursion_solver_basis = dict()
-        self.basis = dict()
-        self.unique_short_identifiers = set()
+        # Else, we append the terms
+        for n_mat_id, l_deltas in eq._f_arg_terms.items():
+            for delta in l_deltas:
+                try:
+                    self._f_arg_list[n_mat_id].append(delta)
+                except KeyError:
+                    self._f_arg_list[n_mat_id] = [delta]
 
-        # Total number of bosons allowed is the sum of the number of bosons
-        # allowed for each boson type
-        self.N_total_max = sum(self.system_params.N)
+    def _append_generalized_equation(self, n_phonons, config):
 
-        # Config space generator
-        self.csg = ConfigurationSpaceGenerator(self.system_params)
-
-    def _append_generalized_equation(self, n_bosons, config):
-
-        eq = Equation(config, system_params=self.system_params)
-
-        # Initialize the index term, basically the f_n(delta)
-        eq.initialize_index_term()
-
-        # Initialize the specific terms which constitute the f_n(delta)
-        # EOM, such as f_n'(1), f_n''(0), etc.
-        eq.initialize_terms(self.csg)
-
-        # Initialize the required values for delta (arguments of f) as
-        # derived from the terms themselves, used later when generating
-        # the specific equations.
-        eq._populate_f_arg_terms()
+        eq = Equation.from_config(config, model=self._model)
 
         # Append a master dictionary at the System object level that
         # keeps track of all the f_arg values required for each value of
@@ -204,124 +163,238 @@ class System:
 
         # Finally, append the equation to a master list of generalized
         # equations/
-        try:
-            self.generalized_equations[n_bosons].append(eq)
-        except KeyError:
-            self.generalized_equations[n_bosons] = [eq]
-
-    def _extend_legal_configs(self, n_bosons, configs):
-        """Appends a new configuration to the dictionary legal configs."""
-
-        for config in configs:
-            self._append_generalized_equation(n_bosons, config)
-
-    def initialize_generalized_equations(self):
-        """Starting with values for the order of the momentum approximation
-        and the maximum allowed number of bosons, this method generates a list
-        of config arrays, consisting of all possible legal contributions,
-        meaning, all vectors [n0, n1, ..., n(ma_order - 1)] such that the
-        sum of all of the entries equals n, where n = [1, ..., n_max]."""
-
-        t0 = time.time()
-
-        allowed_configs = self.csg()
-
-        # Generate all possible numbers of bosons consistent with n_max.
-        for n_bosons, configs in allowed_configs.items():
-            self._extend_legal_configs(n_bosons, configs)
-
-        # Manually append the Green's function (do the same as above except)
-        # for this special case. Note that no matter what this is always
-        # neded, but the form of the GreenEquation EOM will differ depending
-        # on the system type.
-        eq = GreenEquation(system_params=self.system_params)
-        eq.initialize_index_term()
-        eq.initialize_terms()
-        eq._populate_f_arg_terms()
-        self._append_master_dictionary(eq)
-
-        # Only one Green's function, with "zero" bosons
-        self.generalized_equations[0] = [eq]
-
-        self._determine_unique_dictionary()
-
-        dt = time.time() - t0
-
-        L = sum([len(val) for val in self.generalized_equations.values()])
-        dlog.info(f"({dt:.02f}s) Generated {L} generalized equations")
-
-        # Need to generalize this
-        if self.n_boson_types == 1 and self.max_bosons_per_site is None:
-            # Plus one for the Green's function
-            T = 1 + total_generalized_equations(
-                self.system_params.M, self.system_params.N, self.n_boson_types
-            )
-            dlog.debug(f"Predicted {T} equations from combinatorics equations")
-
-            assert T == L, f"{T}, {L}"
-
-        totals = self._get_total_terms()
-        dlog.debug(f"Predicting {totals} total terms")
-
-        # Initialize the self.equations attribute's lists here since we know
-        # all the keys:
-        for key, _ in self.generalized_equations.items():
-            self.equations[key] = []
-
-        return L
-
-    def _append_master_dictionary(self, eq):
-        """Takes an equation and appends the master_f_arg_list dictionary."""
-
-        if self.master_f_arg_list is None:
-            self.master_f_arg_list = copy.deepcopy(eq.f_arg_terms)
-            return
-
-        # Else, we append the terms
-        for n_mat_id, l_deltas in eq.f_arg_terms.items():
-            for delta in l_deltas:
-                try:
-                    self.master_f_arg_list[n_mat_id].append(delta)
-                except KeyError:
-                    self.master_f_arg_list[n_mat_id] = [delta]
+        self._generalized_equations[n_phonons].append(eq)
 
     def _determine_unique_dictionary(self):
         """Sorts the master delta terms for easier readability and takes
         only unique delta terms."""
 
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
-            self.master_f_arg_list[n_mat_id] = list(set(l_deltas))
+        for n_mat_id, l_deltas in self._f_arg_list.items():
+            new_list = [
+                np.array(xx)
+                for xx in set([tuple(yy.tolist()) for yy in l_deltas])
+            ]
+            self._f_arg_list[n_mat_id] = new_list
 
     def _get_total_terms(self):
         """Predicts the total number of required specific equations needed
         to close the system."""
 
-        cc = 0
-        for n_mat_id, l_deltas in self.master_f_arg_list.items():
-            cc += len(l_deltas)
-        return cc
+        return sum([len(ll) for ll in self._f_arg_list.values()])
 
-    def initialize_equations(self):
-        """Generates the true equations on the rhs which have their explicit
-        delta values provided."""
+    def _predict_total_terms(self):
 
-        t0 = time.time()
+        L = sum([len(val) for val in self._generalized_equations.values()])
 
-        for n_bosons, l_eqs in self.generalized_equations.items():
+        # Need to generalize this
+        phonon_max_per_site = self._model.phonon_max_per_site
+        n_phonon_types = self._model.n_phonon_types
+        if n_phonon_types == 1 and phonon_max_per_site is None:
+            # Plus one for the Green's function
+
+            T = 1 + total_generalized_equations(
+                self._model.phonon_extent,
+                self._model.phonon_number,
+                n_phonon_types,
+            )
+
+            if L == T:
+                logger.info(
+                    f"Predicted {L} generalized equations (agrees with "
+                    "analytic formula)"
+                )
+            else:
+                logger.error(
+                    f"Predicted {T} generalized equations from analytic "
+                    f"equation but {L} were generated. This will likely "
+                    "in a critical error!"
+                )
+        else:
+            logger.info(f"Predicted {L} generalized equations")
+
+    def _initialize_generalized_equations(self, allowed_configs):
+
+        self._generalized_equations = {n: [] for n in allowed_configs.keys()}
+
+        # Generate all possible numbers of phonons consistent with n_max.
+        for n_phonons, configs in allowed_configs.items():
+            for config in configs:
+                self._append_generalized_equation(n_phonons, config.config)
+
+        eq = GreenEquation(model=self._model)
+        self._append_master_dictionary(eq)
+
+        # Only one Green's function, with "zero" phonons
+        self._generalized_equations[0] = [eq]
+
+        self._determine_unique_dictionary()
+        self._predict_total_terms()
+
+    def _initialize_equations(self):
+
+        totals = self._get_total_terms()
+
+        # Initialize the self._equations attribute's lists here since we know
+        # all the keys:
+        self._equations = {
+            key: [] for key in self._generalized_equations.keys()
+        }
+
+        # Initialize the full set of equations
+        for n_phonons, l_eqs in self._generalized_equations.items():
             for eq in l_eqs:
-                n_mat_id = eq.index_term._get_boson_config_identifier()
-                l_deltas = self.master_f_arg_list[n_mat_id]
+                n_mat_id = eq.index_term._get_phonon_config_id()
+                l_deltas = self._f_arg_list[n_mat_id]
                 for true_delta in l_deltas:
-                    eq_copy = copy.deepcopy(eq)
-                    eq_copy.init_full(true_delta)
-                    self.equations[n_bosons].append(eq_copy)
+                    eq_copy = deepcopy(eq)
+                    eq_copy._init_full(true_delta)
+                    self._equations[n_phonons].append(eq_copy)
 
-        dt = time.time() - t0
+        L = sum([len(val) for val in self._equations.values()])
 
-        L = sum([len(val) for val in self.equations.values()])
-        dlog.info(f"({dt:.02f}s) Generated {L} equations")
+        if L == totals:
+            logger.info(f"Generated {L} total equations")
+        else:
+            logger.error(
+                f"Predicted {totals} equations from generalized form but {L} "
+                f"were generated. This is likely a bug in the code that will "
+                "result in a critical error!"
+            )
 
-        return L
+    def _final_checks(self):
+        """Runs a sanity check on the unique keys, which should equal the
+        number of equations.
+        """
+
+        unique_short_identifiers = set()
+        all_terms_rhs = set()
+        for n_phonons, equations in self._equations.items():
+            for eq in equations:
+                unique_short_identifiers.add(eq.index_term.id())
+                for term in eq._terms_list:
+                    all_terms_rhs.add(term.id())
+
+        if unique_short_identifiers == all_terms_rhs:
+            logger.info("Closure checked and valid")
+        else:
+            # logger.error("Invalid closure!")
+            # logger.error(unique_short_identifiers - all_terms_rhs)
+            # logger.error(all_terms_rhs - unique_short_identifiers)
+            logger.critical("Critical error due to invalid closure.")
+
+    def _save_model(self):
+        """Saves the model attribute to disk. Will not overwrite an existing
+        file."""
+
+        if self._root is None:
+            return
+
+        path = Path(self._root) / Path("model.json")
+        m = json.loads(self._model.to_json())
+        with open(path, "w") as f:
+            json.dump(m, f, indent=4, sort_keys=False)
+
+    def checkpoint(self):
+        """Runs the checkpoint protocol to attempt and save the current
+        state of the system. This method will only run if a root directory is
+        defined at class instantiation. Note that existing checkpoints will
+        never be overwritten."""
+
+        if self._root is None:
+            return
+
+        for attr in ["generalized_equations", "f_arg_list", "equations"]:
+            obj = eval(f"self._{attr}")
+            path = Path(self._root) / Path(f"{attr}.pkl")
+            if obj is not None and not path.exists():
+                pickle.dump(
+                    obj,
+                    open(path, "wb"),
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+                logger.info(f"Checkpoint saved: {attr}")
+
+    @classmethod
+    def from_checkpoint(cls, root):
+        """Reloads the state of the System from the saved pickle file
+        checkpoint.
+
+        Parameters
+        ----------
+        root : os.PathLike
+            Checkpoint directory
+        """
+
+        path = Path(root) / Path("model.json")
+        if not path.exists():
+            logger.critical(f"Model checkpoint file {path} does not exist")
+
+        with open(path, "r") as f:
+            model = Model.from_dict(json.load(f))
+
+        generalized_equations = None
+        path = Path(root) / Path("generalized_equations.pkl")
+        if path.exists():
+            generalized_equations = pickle.load(open(path, "rb"))
+
+        f_arg_list = None
+        path = Path(root) / Path("f_arg_list.pkl")
+        if path.exists():
+            f_arg_list = pickle.load(open(path, "rb"))
+
+        equations = None
+        path = Path(root) / Path("equations.pkl")
+        if path.exists():
+            equations = pickle.load(open(path, "rb"))
+
+        return cls(
+            model=model,
+            generalized_equations=generalized_equations,
+            f_arg_list=f_arg_list,
+            equations=equations,
+            root=str(root),
+        )
+
+    def __init__(
+        self,
+        model,
+        generalized_equations=None,
+        f_arg_list=None,  # TODO: pool f_arg_list into generalized_equations
+        equations=None,
+        root=None,
+        mpi_comm=None,
+    ):
+        self._root = root
+        if self._root is not None:
+            Path(root).mkdir(exist_ok=True, parents=True)
+
+        self._model = deepcopy(model)
+        self._save_model()
+
+        self._generalized_equations = generalized_equations
+        self._f_arg_list = f_arg_list
+        self._equations = equations
+
+        # Get all of the allowed configurations - additionally checkpoint the
+        # generalized configurations in a root directory if its provided
+        if self._generalized_equations is None:
+            with timeit(logger.debug, "Legal configurations generated"):
+                confs = generate_all_legal_configurations(self._model)
+            with timeit(logger.debug, "Generalized equations initialized"):
+                self._initialize_generalized_equations(confs)
+        else:
+            logger.info("Generalized equations reloaded from state")
+        self.checkpoint()
+
+        if self._equations is None:
+            with timeit(logger.debug, "Equations initialized"):
+                self._initialize_equations()
+        else:
+            logger.info("Equations reloaded from state")
+        self.checkpoint()
+
+        with timeit(logger.debug, "Final checks"):
+            self._final_checks()
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
@@ -342,266 +415,64 @@ class System:
             (k, w) coefficient. Default is None.
         """
 
-        eqs_dict = self.generalized_equations if generalized \
-            else self.equations
+        eqs_dict = (
+            self._generalized_equations if generalized else self._equations
+        )
         od = OrderedDict(sorted(eqs_dict.items(), reverse=True))
-        for n_bosons, eqs in od.items():
-            print(f"{n_bosons}")
+        for n_phonons, eqs in od.items():
+            print(f"{n_phonons}")
             print("-" * 60)
             for eq in eqs:
                 eq.visualize(full=full, coef=coef)
             print("\n")
 
-    def generate_unique_terms(self):
-        """Constructs the basis for the problem, which is a mapping between
-        the short identifiers and the index of the basis. Also, run a sanity
-        check on the unique keys, which should equal the number of equations.
-        """
-
-        t0 = time.time()
-        all_terms_rhs = set()
-        for n_bosons, equations in self.equations.items():
-            for eq in equations:
-                self.unique_short_identifiers.add(eq.index_term.identifier())
-                for term in eq.terms_list:
-                    all_terms_rhs.add(term.identifier())
-        dt = time.time() - t0
-
-        if self.unique_short_identifiers == all_terms_rhs:
-            dlog.info(f"({dt:.02f}s) Closure is valid")
-        else:
-            dlog.critical("Invalid closure!")
-            print(self.unique_short_identifiers - all_terms_rhs)
-            print(all_terms_rhs - self.unique_short_identifiers)
-            raise RuntimeError("Invalid closure!")
-
-    def prime_solver(self):
+    def get_basis(self, full_basis=False):
         """Prepares the solver-specific information.
 
-        Recursive method:
-            We need a mapping, for a given n_bosons, the identifier and the
-        basis index. Note that the basis index resets every time we move to
-        a new number of total bosons. This is why organizing the equations
-        hierarchically by total bosons was a sensible earlier choice.
+        Returns the non-zero elements of the matrix in the following format.
+        The returned quantity is a dictionary indexed by the order of the
+        hierarchy (in this case, the number of phonons contained). Each
+        element of this dictionary is another dictionary, with the keys being
+        the index term identifier (basically indexing the row of the matrix),
+        and the values a list of tuples, where the first element of each
+        is the identifier (a string) and the second is a callable function of
+        k and omega, representing the coefficient at that point.
+
+        Parameters
+        ----------
+        full_basis : bool, optional
+            If True, returns the full basis mapping. If False, returns the
+            local basis mapping, which is used in the continued fraction
+            solver. (The default is False).
+
+        Returns
+        -------
+        dict
+            The dictionary objects containing the basis.
         """
 
-        t0 = time.time()
-        for n_bosons, equations in self.equations.items():
-            self.recursion_solver_basis[n_bosons] = {
-                eq.index_term.identifier(): ii
-                for ii, eq in enumerate(equations)
-            }
-        cc = 0
-        for _, equations in self.equations.items():
-            for eq in equations:
-                self.basis[eq.index_term.identifier()] = cc
-                cc += 1
-        dt = time.time() - t0
-        dlog.info(f"({dt:.02f}s) Solvers primed")
+        # The basis object maps each unique identifier to a unique number.
+        # The local_basis object maps each unique identifier to a unique
+        # number within the manifold of some number of phonons.
+        basis = dict()
 
-    def one_shot_sparse_solve(self, k, w, eta=None):
-        """Executes a oneshot sparse solver. Each row/column corresponds to a
-        different f_n(delta) function."""
+        if full_basis:
 
-        meta = {
-            'alphas': [],
-            'betas': [],
-            'inv': [],
-            'time': []
-        }
+            # Set the overall basis. Each unique identifier gets its own .
+            cc = 0
+            for _, equations in self._equations.items():
+                for eq in equations:
+                    basis[eq.index_term.id()] = cc
+                    cc += 1
 
-        t0_all = time.time()
-
-        # Initialize the sparse matrix to solve
-        row_ind = []
-        col_ind = []
-        dat = []
-        total_bosons = np.sum(self.system_params.N)
-        for n_bosons in range(total_bosons + 1):
-            for eq in self.equations[n_bosons]:
-                row_dict = dict()
-                index_term_id = eq.index_term.identifier()
-                ii_basis = self.basis[index_term_id]
-                for term in eq.terms_list + [eq.index_term]:
-                    jj = self.basis[term.identifier()]
-                    try:
-                        row_dict[jj] += term.coefficient(k, w, eta)
-                    except KeyError:
-                        row_dict[jj] = term.coefficient(k, w, eta)
-
-                row_ind.extend([ii_basis for _ in range(len(row_dict))])
-                col_ind.extend([key for key, _ in row_dict.items()])
-                dat.extend([value for _, value in row_dict.items()])
-
-        X = coo_matrix((
-            np.array(dat, dtype=np.complex64),
-            (np.array(row_ind), np.array(col_ind))
-        )).tocsr()
-
-        size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
-
-        dlog.debug(f"\tMemory usage of sparse X is {size:.02f} MB")
-
-        # Initialize the corresponding sparse vector
-        # {G}(0)
-        row_ind = np.array([self.basis['{G}(0.0)']])
-        col_ind = np.array([0])
-        v = coo_matrix((
-            np.array(
-                [self.equations[0][0].bias(k, w, eta)],
-                dtype=np.complex64
-            ), (row_ind, col_ind)
-        )).tocsr()
-
-        res = spsolve(X, v)
-        G = res[self.basis['{G}(0.0)']]
-
-        if -G.imag / np.pi < 0.0:
-            dlog.error(
-                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
-            )
-
-        dt = time.time() - t0_all
-        dlog.debug(f"Sparse matrices solved in {dt:.02f} s")
-
-        meta['time'] = [dt]
-        meta['inv'] = [len(self.basis)]
-
-        return G, meta
-
-    def _compute_alpha_beta_(self, n_bosons, n_shift, k, w, mat, eta=None):
-        """Computes the auxiliary matrices alpha_n (n_shift = -1) and beta_n
-        (n_shift = 1). Modifies the matrix mat in place. Note that mat should
-        be a complex matrix of zeros before being passed to this method."""
-
-        n_bosons_shift = n_bosons + n_shift
-
-        equations_n = self.equations[n_bosons]
-        for ii, eq in enumerate(equations_n):
-            index_term_id = eq.index_term.identifier()
-            ii_basis = self.recursion_solver_basis[n_bosons][index_term_id]
-
-            for term in eq.terms_list:
-                if term.get_total_bosons() != n_bosons_shift:
-                    continue
-                t_id = term.identifier()
-                jj_basis = self.recursion_solver_basis[n_bosons_shift][t_id]
-                mat[ii_basis, jj_basis] += term.coefficient(k, w, eta)
-
-    def _compute_mat_to_invert(self, n_bosons, k, w, beta_n, A, eta=None):
-
-        # Fill beta
-        t0 = time.time()
-        self._compute_alpha_beta_(n_bosons, 1, k, w, beta_n, eta)
-        dt = time.time() - t0
-        dlog.debug(f"({dt:.02f}s) Filled beta {beta_n.shape}")
-
-        identity = np.eye(beta_n.shape[0], A.shape[1])
-
-        t0 = time.time()
-        initial_A_shape = A.shape
-
-        return identity - beta_n @ A, initial_A_shape
-
-    def _log_solve_info(self):
-        """Pipes some of the current solving information to the outstream."""
-
-        d = copy.deepcopy(vars(self.system_params))
-        d['terms'] = len(d['terms'])
-        dlog.debug(f"Solving recursively: {d}")
-
-    def continued_fraction_dense_solve(self, k, w, eta=None):
-        """Executes the solution for some given k, w. Also returns the shapes
-        of all computed matrices."""
-
-        t0_all = time.time()
-
-        self._log_solve_info()
-
-        meta = {
-            'alphas': [],
-            'betas': [],
-            'inv': [],
-            'time': []
-        }
-
-        total_bosons = np.sum(self.system_params.N)
-
-        for n_bosons in range(total_bosons, 0, -1):
-
-            t0 = time.time()
-            d_n = len(self.recursion_solver_basis[n_bosons])
-            d_n_m_1 = len(self.recursion_solver_basis[n_bosons - 1])
-
-            if n_bosons == total_bosons:
-                A = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
-                self._compute_alpha_beta_(n_bosons, -1, k, w, A, eta)
-                continue
-
-            d_n_p_1 = len(self.recursion_solver_basis[n_bosons + 1])
-            alpha_n = np.zeros((d_n, d_n_m_1), dtype=np.complex64)
-            meta['alphas'].append((d_n, d_n_m_1))
-
-            beta_n = np.zeros((d_n, d_n_p_1), dtype=np.complex64)
-            meta['betas'].append((d_n, d_n_p_1))
-            to_inv, initial_A_shape = \
-                self._compute_mat_to_invert(n_bosons, k, w, beta_n, A, eta)
-
-            # Fill alpha
-            t0 = time.time()
-            self._compute_alpha_beta_(n_bosons, -1, k, w, alpha_n, eta)
-            dt = time.time() - t0
-            dlog.debug(f"({dt:.02f}s) Filled alpha {alpha_n.shape}")
-
-            # This is the rate-limiting step ##################################
-            t0 = time.time()
-            A = linalg.solve(to_inv, alpha_n)
-            dt = time.time() - t0
-            ###################################################################
-
-            dlog.debug(
-                f"({dt:.02f}s inv) A2 {initial_A_shape} -> A1 {A.shape}"
-            )
-            meta['inv'].append(to_inv.shape[0])
-            meta['time'].append(dt)
-
-        # The final answer is actually A_1. It is related to G via the vector
-        # equation V_1 = A_1 G, where G is a scalar. It turns out that the
-        # sum over the terms in this final A are actually -Sigma, where
-        # Sigma is the self-energy!
-        self_energy_times_G0 = 0.0
-        A = np.atleast_1d(A.squeeze())
-        for term in self.equations[0][0].terms_list:
-            basis_idx = self.recursion_solver_basis[1][term.identifier()]
-            self_energy_times_G0 += A[basis_idx] * term.coefficient(k, w, eta)
-
-        # The Green's function is of course given by Dyson's equation.
-        eom = self.equations[0]
-        if len(eom) != 1:
-            dlog.critical("More than one EOM!")
-            raise RuntimeError("More than one EOM!")
-        G0 = eom[0].bias(k, w, eta)  # Convenient way to access G0...
-        G = G0 / (1.0 - self_energy_times_G0)
-
-        if -G.imag / np.pi < 0.0:
-            dlog.error(
-                f"Negative A({k:.02f}, {w:.02f}): {(-G.imag / np.pi):.02f}"
-            )
-
-        dt_all = time.time() - t0_all
-        meta['time'].append(dt_all)  # Last entry is the total
-
-        dlog.debug(f"({dt_all:.02f}s) Done: G({k:.02f}, {w:.02f})")
-
-        return G, meta
-
-    def solve(self, k, w, solver, eta=None):
-        """Can override the specified eta in the input file by making eta in
-        the arguments not None."""
-
-        if solver == 0:
-            return self.continued_fraction_dense_solve(k, w, eta)
-        elif solver == 1:
-            return self.one_shot_sparse_solve(k, w, eta)
         else:
-            raise RuntimeError(f"Unknown solver type {solver}")
+
+            # Set the local basis, in which each identifier gets its own
+            # relative to the n-phonon manifold.
+            for n_phonons, list_of_equations in self._equations.items():
+                basis[n_phonons] = {
+                    eq.index_term.id(): ii
+                    for ii, eq in enumerate(list_of_equations)
+                }
+
+        return basis
