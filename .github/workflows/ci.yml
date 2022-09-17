@@ -9,7 +9,7 @@ on:
       - 'master'
 
 jobs:
-  build:
+  tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -25,26 +25,11 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Setup and install standard requirements
-      shell: bash -l {0}
-      run: |
-        set -vxeuo pipefail
-        python3 -m pip install --upgrade pip setuptools wheel
-        python3 -m pip install .
-        python3 -m pip list
-
-    - name: Install dev requirements
-      shell: bash -l {0}
-      run: |
-        set -vxeuo pipefail
-        python3 -m pip install '.[dev]'
-        python3 -m pip list
+    - name: Install requirements 
+      run: bash scripts/install_requirements.sh core tests
 
     - name: Run tests
-      shell: bash -l {0}
-      run: |
-        set -vxeuo pipefail
-        pytest -v --cov --cov-report xml ggce/_tests
+      run: pytest -v --cov --cov-report xml ggce/_tests
 
     - name: Upload code coverage
       uses: codecov/codecov-action@v2
