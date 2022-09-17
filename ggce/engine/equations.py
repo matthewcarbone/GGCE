@@ -278,7 +278,7 @@ class Equation(MSONable):
                 if s > self._model.phonon_number[bt]:
                     continue
 
-                if any([xx - ae > 0 for xx in self._index_term.config.shape]):
+                if any([xx > ae for xx in self._index_term.config.shape[1:]]):
                     logger.critical(
                         f"Absolute extent {ae} cannot be smaller than any "
                         "config spatial dimension: "

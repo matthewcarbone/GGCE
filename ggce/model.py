@@ -682,9 +682,9 @@ class Model(MSONable):
         rounded."""
 
         print("Hamiltonian parameters:")
-        print(f"  Hopping (t)          = {self.hopping:.02f}")
-        print(f"  Lattice constant (a) = {self.lattice_constant:.02f}")
-        print(f"  Temperature (T)      = {self.temperature:.02f}")
+        print(f"  Hopping (t)          = {self.hopping:.02e}")
+        print(f"  Lattice constant (a) = {self.lattice_constant:.02e}")
+        print(f"  Temperature (T)      = {self.temperature:.02e}")
         print(f"  Max bosons per site  = {self.phonon_max_per_site}")
         print(f"  Absolute extent      = {self.phonon_absolute_extent}")
         if len(self._phonon_extent) == 0:
@@ -905,7 +905,7 @@ class Model(MSONable):
         phonon_index += 1
 
         # Add the finite-temperature term to the Hamiltonian
-        if V_tilde_pf > 0.0:
+        if self.temperature > 0.0:
             self._hamiltonian.add_(
                 coupling_type,
                 phonon_index,
@@ -914,12 +914,6 @@ class Model(MSONable):
                 dimensionless_coupling_strength,
                 coupling_multiplier=V_tilde_pf,
             )
-            # coupling_type,
-            # phonon_index,
-            # phonon_frequency,
-            # coupling_strength=None,
-            # dimensionless_coupling_strength=None,
-            # coupling_multiplier=1.0,
 
             assert phonon_extent_tfd is not None
             assert phonon_number_tfd is not None

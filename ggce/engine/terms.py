@@ -467,7 +467,7 @@ class Config(MSONable):
         # Now, for each of the spatial dimensions we determine the padding
         pad = pad + [
             (0, 0)
-            if 0 <= index < self._config.shape[ii] - 1
+            if 0 <= index < self._config.shape[ii + 1] - 1
             else (-index, 0)
             if index < 0
             else (0, index - self._config.shape[ii + 1] + 1)
