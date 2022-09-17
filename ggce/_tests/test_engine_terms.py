@@ -284,7 +284,7 @@ class TestConfig:
         config = Config(arr.copy())
         shift = config.add_phonon_(1, -4)
         arr2 = np.array([[0, 0, 0, 0, 1, 2, 3], [1, 0, 0, 0, 4, 5, 6]])
-        assert np.all(shift == np.array([-4]))
+        assert np.all(shift == np.array([4]))
         assert np.all(config.config == arr2)
 
     @staticmethod
