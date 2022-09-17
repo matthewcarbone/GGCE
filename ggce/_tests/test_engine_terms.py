@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import warnings
 
-from ggce import _testing_mode
+from ggce.logger import _testing_mode
 from ggce.engine.terms import Config
 
 
