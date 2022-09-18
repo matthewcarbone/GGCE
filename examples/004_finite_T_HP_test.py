@@ -24,8 +24,24 @@ if __name__ == "__main__":
 
     # Check the true T=epsilon case
     model = Model.from_parameters(hopping=0.1, temperature=1e-6)
-    model.add_("Holstein", 1.25, 2, 2, dimensionless_coupling_strength=2.5)
-    model.add_("Peierls", 2.25, 2, 2, dimensionless_coupling_strength=2.5)
+    model.add_(
+        "Holstein",
+        1.25,
+        2,
+        2,
+        phonon_extent_tfd=2,
+        phonon_number_tfd=3,
+        dimensionless_coupling_strength=2.5,
+    )
+    model.add_(
+        "Peierls",
+        2.25,
+        2,
+        2,
+        phonon_extent_tfd=2,
+        phonon_number_tfd=3,
+        dimensionless_coupling_strength=2.5,
+    )
     solver = DenseSolver(System(model))
     results = solver.spectrum(k, w, eta=0.005, pbar=False).squeeze()
     np.savetxt("Tepsilon.txt", np.array([w, -results.imag / np.pi]).T)
