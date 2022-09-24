@@ -115,15 +115,7 @@ def generate_all_legal_configurations(model):
 
 class System:
     """Defines a list of Equations (a system of equations, so to speak) and
-    operations on that system.
-
-    Attributes
-    ----------
-    generalized_equations : List[Equation]
-        A list of equations constituting the system; in general form, meaning
-        all except for the Green's function are not defined for specific
-        delta values.
-    """
+    operations on that system."""
 
     @property
     def model(self):
@@ -131,6 +123,16 @@ class System:
 
     @property
     def generalized_equations(self):
+        """A list of equations constituting the system; in general form,
+        meaning all except for the Green's function are not defined for
+        specific delta values.
+
+        Returns
+        -------
+        list
+            A list of :class:`Equation` objects.
+        """
+
         return self._generalized_equations
 
     @property

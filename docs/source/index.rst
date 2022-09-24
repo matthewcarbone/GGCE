@@ -12,5 +12,5 @@ GGCE Documentation
 
    overview
    installation
-   usage
+   modules
 

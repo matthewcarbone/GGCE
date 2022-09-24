@@ -185,13 +185,15 @@ class SparseSolver(SerialSolver):
     calculation being performed is quite cheap. Note that there are a variety
     of checkpointing features automatically executed when paths are provided.
 
-    - When a ``System`` and path are provided, the system's root directory is
-      overwritten and that object immediately checkpointed to the provided
+    - When a ``System`` and path are provided, the system's root directory
+      is overwritten and that object immediately checkpointed to the provided
       directory.
+
     - If only a ``System`` object is provided, no checkpointing will be
       performed.
+
     - If only a path is provided, the solver will attempt to instantiate the
-    ``System`` object. Checkpointing will the proceed as normal.
+      ``System`` object. Checkpointing will the proceed as normal.
     """
 
     def __init__(self, *args, **kwargs):

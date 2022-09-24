@@ -550,38 +550,21 @@ class Model(MSONable):
 
     .. warning::
 
-        Note it is highly recommended to use the
-        :class:`from_parameters` classmethod instead, since the constructor is
-        primarily designed to be used with MSONable and not all parameters are
-        intended to be manually modified.
-
-    Attributes
-    ----------
-    hamiltonian : Hamiltonian
-        The Hamiltonian object for this model.
-    hopping : float
-        The nearest-neighbor hopping term (the default is 1.0).
-    lattice_constant : float
-        The lattice constant (the default is 1.0).
-    n_phonon_types : int
-        A counter which keeps track of the number of phonon types that are
-        contained in the model
-    phonon_absolute_extent : int
-        The absolute extent value. Controls how much the clouds can overlap.
-    phonon_extent : list of int
-        The list of phonon extents. Commonly referred to as `M`.
-    phonon_max_per_site : int
-        Controls the hard-boson constraint. Essentially restrains the number
-        of phonons that can be on each site. If None, there is no restriction.
-    phonon_number : list of int
-        The list of max phonons. Commonly referred to as `N`.
-    temperature : float
-        The temperature for a TFD simulation, if requested (the default is
-        0.0).
+        Note it is highly recommended to use the :class:`from_parameters`
+        classmethod instead, since the constructor is primarily designed to be
+        used with MSONable and not all parameters are intended to be manually
+        modified.
     """
 
     @property
     def temperature(self):
+        """The temperature for a TFD simulation, if requested (the default is
+        0.0).
+
+        Returns
+        -------
+        float
+        """
         return self._temperature
 
     @temperature.setter
@@ -596,10 +579,24 @@ class Model(MSONable):
 
     @property
     def hopping(self):
+        """The nearest-neighbor hopping term (the default is 1.0).
+
+        Returns
+        -------
+        float
+        """
+
         return self._hamiltonian._hopping
 
     @property
     def lattice_constant(self):
+        """The lattice constant (the default is 1.0).
+
+        Returns
+        -------
+        float
+        """
+
         return self._lattice_constant
 
     @lattice_constant.setter
@@ -616,6 +613,15 @@ class Model(MSONable):
 
     @property
     def phonon_absolute_extent(self):
+        """The absolute extent value. Controls how much the clouds can overlap.
+        Indicates the largest possible cloud size when multi-phonon mode
+        calculations are run.
+
+        Returns
+        -------
+        int
+        """
+
         if self._phonon_absolute_extent is None:
             if len(self._phonon_extent) > 0:
                 return np.max(self._phonon_extent).item()
@@ -633,6 +639,14 @@ class Model(MSONable):
 
     @property
     def n_phonon_types(self):
+        """A counter which keeps track of the number of phonon types that are
+        contained in the model
+
+        Returns
+        -------
+        int
+        """
+
         return self._n_phonon_types
 
     @n_phonon_types.setter
@@ -642,6 +656,14 @@ class Model(MSONable):
 
     @property
     def phonon_max_per_site(self):
+        """Controls the hard-boson constraint. Essentially restrains the number
+        of phonons that can be on each site. If None, there is no restriction.
+
+        Returns
+        -------
+        int
+        """
+
         return self._phonon_max_per_site
 
     @phonon_max_per_site.setter
@@ -652,6 +674,13 @@ class Model(MSONable):
 
     @property
     def hamiltonian(self):
+        """The Hamiltonian object for this model.
+
+        Returns
+        -------
+        Hamiltonian
+        """
+
         return self._hamiltonian
 
     @hamiltonian.setter
@@ -661,6 +690,13 @@ class Model(MSONable):
 
     @property
     def phonon_extent(self):
+        """The list of phonon extents. Commonly referred to as ``M``.
+
+        Returns
+        -------
+        list
+        """
+
         return self._phonon_extent
 
     @phonon_extent.setter
@@ -670,6 +706,13 @@ class Model(MSONable):
 
     @property
     def phonon_number(self):
+        """The list of max phonons. Commonly referred to as ``N``.
+
+        Returns
+        -------
+        list
+        """
+
         return self._phonon_number
 
     @phonon_number.setter
