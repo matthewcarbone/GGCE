@@ -15,11 +15,15 @@ authors:
   - name: Stepan Fomichev
     equal-contrib: true
     affiliation: 2
+  - name: John Sous
+    affiliation: 3
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
    index: 1
  - name: Department of Physics and Astronomy, University of British Columbia, Vancouver, British Columbia V6T 1Z1, Canada
    index: 2
+ - name: Department of Physics, Stanford University, ...
+   index: 3
 date: TODO
 bibliography: paper.bib
 # Optional fields if submitting to a AAS journal too, see this blog post:
@@ -29,12 +33,9 @@ bibliography: paper.bib
 ---
 
 # Summary
-
-The electron-phonon interaction is of pivotal importance both for the theoretical understanding of key physical phenomena e.g. superconductivty, and for targeted new materials design. Our proposed software solves lattice model Hamiltonians, toy systems which capture these physics, in a numerically exact fashion. It is fully documented and tested, open source and can be used either for fast benchmarking, or for massively parallel high-performance calculations in challenging parameter regimes.
+We present a Python software package, called the Generalized Green's Function Cluster Expansion (GGCE) for computing fundamental properties of polarons in electron-phonon Hamiltonians. The software is built on the Momentum Average family of methods and based entirely on the software used in Carbone _et al_ [@carbone2021numerically; @carbone2021bond].
 
 # Statement of need
-TODO
-Stream of thought form JS:
 The electron-phonon problem is of both fundamental relevance and practical importance in materials science. Electron-phonon interactions promote a variety of novel states in low-temperature phases and high-temperature transport in quantum materials, and are essential to the understanding of the behavior of solar cells and semiconductors.  In the dilute carrier density limit, electron-phonon coupling gives rise to polarons whose properties encode the physics of applied materials all the way from low to high temperatures.  Current reasearch on polarons is broadly divided into two themes, fundamental research carried out in theoretical physics departments and applied research in applied physics and materials science departments.  The former focuses on the many-body aspects of the polaron problem, while the latter focuses on the materials and ab initio aspects of it.  But, the two cannot be separated.  This paper provides a scientific software whose goal is to bridge this gap.  This software allows the treatment of polarons statics and dynamics in (almost) arbitary models of electron-phonon coupling.  It presents a first step towards a multiyear effort to combine ab initio understanding of materials and exact many-body analysis of polaron states. The software allows the computation of both ground-state and spectral response of polaron systems described by arbitary electron density and/or hopping-phonon coupling.  We provide a detailed manual and tutorials to aid users in the use of this software package.
 
 # Acknowledgements
