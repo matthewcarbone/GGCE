@@ -12,44 +12,18 @@ from petsc4py import PETSc
 from ggce.logger import logger, disable_logger
 from ggce.utils.physics import G0_k_omega
 from ggce.utils.utils import chunk_jobs, float_to_list
+from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
 
-class MassiveSolver(ABC):
+class MassSolver(Solver):
     """A base class to connect to PETSc's powerful parallel sparse solver tools, to
-    calculate G(k,w) in parallel. This is an abstract base class.
+    calculate G(k,w) in parallel. This is an abstract base class built on top of
+    the abstract Solver class.
     This base class has fundamental methods such as matrix construction.
     The solve methods, as well as convergence and
     memory tracking are implemented in the inherited classes, while some
     basic routines like spectrum() that are method-agnostic are implemented here."""
-
-    @property
-    def system(self):
-        return self._system
-
-    @property
-    def root(self):
-        return self._root
-
-    @property
-    def basis(self):
-        return self._basis
-
-    @property
-    def mpi_comm(self):
-        return self._mpi_comm
-
-    @property
-    def mpi_rank(self):
-        if self._mpi_comm is not None:
-            return self._mpi_comm.Get_rank()
-        return 0
-
-    @property
-    def mpi_world_size(self):
-        if self._mpi_comm is not None:
-            return self._mpi_comm.Get_size()
-        return 1
 
     @property
     def mpi_brigade(self):
@@ -80,23 +54,27 @@ class MassiveSolver(ABC):
         return self.mpi_rank
 
     @property
-    def basis_dir(self):
-        logger.warning(f"This is basis dir, and I don't like being here. Fix me!")
-        return None
+    def matr_dir(self):
+        '''This property sets the directory where the method
+        _scaffold_from_disk looks for pickled matrices (in CSR format).
+        It is set in __init__
+        '''
+        if self._matr_dir is None:
+            logger.warning(f"matr_dir not set -- GGCE will construct matrices.")
+        return self._matr_dir
 
-    def __init__(self, system=None, root=None, basis=None, mpi_comm=None, brigade_size=None):
-        self._system = system
-        self._root = root
-        self._basis = basis
-        self._mpi_comm = mpi_comm
+    def __init__(self,brigade_size=None,matr_dir=None,*args,**kwargs):
+
+        super().__init__(*args, **kwargs)
+        self._matr_dir = matr_dir
+
         if self._mpi_comm is None:
             logger.critical(f"PETSc solver cannot run with "\
                                 f"mpi_comm=None. Pass MPI_COMM when "\
-                                f"instantiating the Solver.")
-
-        self._brigade_size = brigade_size
+                                f"instantiating the MassSolver.")
 
         # brigade split
+        self._brigade_size = brigade_size
         if self._brigade_size is not None:
             self.split_into_brigades()
         else:
@@ -104,33 +82,22 @@ class MassiveSolver(ABC):
                                                 "Using original MPI_COMM.")
             self._mpi_comm_brigadier = self._mpi_comm
 
-        if self._system is None and self._root is None:
-            logger.critical("Either system, root or both must be provided")
-
-        if self._root is not None:
-            # We allow checkpointing
-            self._root = Path(self._root)
-            self._results_directory = self._root / Path("results")
-            self._results_directory.mkdir(exist_ok=True, parents=True)
-
-        else:
-            logger.warning("root not provided - checkpointing disabled")
-            self._results_directory = None
-
-        if self._system is None:
-            # Attempt to load the system from its checkpoint... the system
-            # will now be initialized or an error will be thrown
-            self._system = System.from_checkpoint(self._root)
-
-        # Force checkpoint the system, which at this point must be initialized
-        with disable_logger():
-            self._system.checkpoint()
-
-        # checkpoint confirmation
-        if self._system is None and self._root is None:
-            logger.critical("Either system, root or both must be provided")
-
     def split_into_brigades(self):
+        """Splits the MPI_COMM provided into 'brigades' of ranks operating
+        together. Does this on the basis of the provided _brigade_size,
+        by assigning a process to a brigade on the basis of its global
+        rank modulo the brigade size. mpi_brigade is automatically
+        evaluated as a @property of the class.
+
+        If the ranks cannot be evenly divided into brigades, raises an error
+        and terminates the calculation. In future releases brigade splits
+        will be able to handle non-even division and/or adjust on the fly.
+
+        Returns
+        -------
+        None
+            New mpi_comm_brigadier are set as attributes of the class.
+        """
 
         ## for now the implementation has limitations: must have worldsize evenly divided into brigades
         try:
@@ -163,15 +130,16 @@ class MassiveSolver(ABC):
 
         return chunk_jobs(jobs, self.brigades, self.mpi_brigade)
 
-    def set_input_dir(self, dir):
-
-        self.basis_dir = dir
-
     def _setup_petsc_structs(self):
         """This function serves to initialize the various vectors and matrices
         (using PETSc data types) that are needed to solve the linear problem.
-        They are setup using the sparse scheme, in parallel, so that each
-        process owns only a small chunk of it."""
+        They are set up using the sparse scheme, in parallel, so that each
+        process owns only a small chunk of it.
+
+        _mpi_comm_brigadier is used throughout to make sure that separate
+        brigades work on separate (k,w) points, as is intended by the double-
+        parallelization scheme.
+        """
 
         # Initialize the parallel vector b from Ax = b
         self._vector_b = PETSc.Vec().create(comm=self._mpi_comm_brigadier)
@@ -190,7 +158,9 @@ class MassiveSolver(ABC):
 
         # Figure out what the given process owns
         self._rstart, self._rend = self._vector_b.getOwnershipRange()
-        # logger.debug(f"I am rank {self.mpi_rank} in brigade {self.mpi_brigade} and got range {self._rstart} to {self._rend}")
+        logger.debug(f"I am rank {self.mpi_rank} in brigade "\
+                     f"{self.mpi_brigade} and got range "\
+                     f"{self._rstart} to {self._rend}")
 
         # Create the matrix for the linear problem
         self._mat_X = PETSc.Mat().create(comm=self._mpi_comm_brigadier)
@@ -262,9 +232,8 @@ class MassiveSolver(ABC):
 
         return row_ind, col_ind, dat
 
-    # @profile
     def _scaffold(self, k, w, eta):
-        """The function uses the GGCE equation sparse format data to construct
+        """This function uses the GGCE equation sparse format data to construct
         a sparse matrix in the PETSc scheme.
 
         Parameters
@@ -326,7 +295,6 @@ class MassiveSolver(ABC):
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                # logger.debug(f"I am rank {self.mpi_rank} and I am setting the values at {(row_start, col_pos)}")
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -349,7 +317,7 @@ class MassiveSolver(ABC):
         dt = time.time() - t0
         logger.debug("PETSc matrix assembled", elapsed=dt)
 
-    def _scaffold_from_disk(self, k, w, eta, basis_dir):
+    def _scaffold_from_disk(self, k, w, eta, matr_dir):
         """The function uses the GGCE equation sparse format data to construct
         a sparse matrix in the PETSc scheme. Instead of using the basis,
         it loads the CSR elements from disk. The passed parameters
@@ -363,6 +331,8 @@ class MassiveSolver(ABC):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        matr_dir : string (path)
+            The absolute path of the location of the matrices to be loaded.
 
         Returns
         -------
@@ -370,14 +340,13 @@ class MassiveSolver(ABC):
         nothing is returned.
         """
 
-        logger.info(f"Matrices are loaded from disk. "\
-                            f"We will not re-compute the basis.")
+        logger.info(f"Matrices are loaded from disk. GGCE will not re-compute them.")
 
         # Get the total size of the linear system -- needed by PETSc
-        assert self.basis_dir is not None
-        self._linsys_size = self._get_matr_size(self.basis_dir)
+        assert matr_dir is not None
+        self._linsys_size = self._get_matr_size(matr_dir)
 
-        matrix_loc = os.path.join(basis_dir, f"k_{k}_w_{w}_e_{eta}.bss")
+        matrix_loc = os.path.join(matr_dir, f"k_{k}_w_{w}_e_{eta}.bss")
         with open(matrix_loc, "rb") as datafile:
             row_ind, col_ind, dat = pickle.load(datafile)
 
@@ -441,23 +410,7 @@ class MassiveSolver(ABC):
         ## presently not wrapped for Python
 
         dt = time.time() - t0
-        logger.debug("PETSc matrix assembled", elapsed=dt)
-
-    def _get_matr_size(self, matr_dir):
-
-        """For use with the _matrix_from_disk method. Helps figure
-           out the ultimate matrix size before loading all in."""
-
-        all_files = os.listdir(matr_dir)
-        all_files = [elem for elem in all_files if ".bss" in elem]
-        random_matr = np.random.choice(all_files)
-        sample_matrix = os.path.join(matr_dir, random_matr)
-        with open(sample_matrix, "rb") as datafile:
-            row_ind, col_ind, dat = pickle.load(datafile)
-
-        matrsize = max(row_ind) + 1
-
-        return matrsize
+        logger.debug(f"PETSc matrix assembled, built from disk at: {self._matr_dir}", elapsed=dt)
 
     def check_conv_manual(self, pc, rtol):
         """This helper function checks PETSC convergence manually, by computing
@@ -496,7 +449,7 @@ class MassiveSolver(ABC):
         if self.mpi_rank == 0:
             if self.tol_excess > 0:
                 logger.warning(
-                    f"Rank {self.mpi_rank} in brigade {self.mpi_brigade} Solution failed residual relative tolerance check. "
+                    f"Solution failed residual relative tolerance check. "
                     "Solutions likely not fully converged: "
                     f"res_norm ({_vector_res_norm:.02e}) > "
                     f"rtol * b_norm ({rtol*_vector_b_norm:.02e})"
@@ -534,29 +487,24 @@ class MassiveSolver(ABC):
         jobs = [(_k, _w) for _k in k for _w in w]
 
         ## there are limitations: the number of jobs has to be evenly divisible by all the brigades
-        # if not (1-len(jobs) % self.brigades):
-        #     logger.critical(f"Jobs ({len(jobs)}) cannot be equally divided"
-        #                     f" between brigades ({self.brigades}).")
+        ## this will be improved in future releases
+        if not (1-len(jobs) % self.brigades):
+            logger.critical(f"Jobs ({len(jobs)}) cannot be equally divided"
+                            f" between brigades ({self.brigades}).")
 
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
         jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
         self._total_jobs_on_this_brigade = len(jobs_on_brigade)
-        # logger.warning(f"for brigade {self.mpi_brigade} these are all the jobs {jobs_on_brigade}")
 
         # Get the results on this rank.
         s = []
         for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
-        print(s)
-        self._mpi_comm_brigadier.barrier()
-        self._mpi_comm.barrier()
         # Gather the results from the sergeants to "the general" (global rank 0)
         all_results = self._mpi_comm.gather(s, root=0)
-        exit()
-        # logger.info(all_results)
-        # logger.info(f"I am rank {self.brigade_rank} in brigade {self.mpi_brigade} and I return {all_results} ")
+
         ## need to get rid of duplicates, since each rank in a brigade sends
         ## a copy of the results from the brigade
         if self.mpi_rank == 0:
@@ -573,7 +521,7 @@ class MassiveSolver(ABC):
             s = [xx[0] for xx in results]
             meta = [xx[1] for xx in results]
             res = np.array(s)
-            # logger.error(f"s = {s} and \n meta = {meta}")
+
             # Ensure the returned array has the proper shape
             res = res.reshape(len(k), len(w))
             if return_meta:
@@ -584,6 +532,23 @@ class MassiveSolver(ABC):
     def _k_omega_eta_to_str(k, omega, eta):
         # Note this will have to be redone when k is a vector in 2 and 3D!
         return f"{k:.10f}_{omega:.10f}_{eta:.10f}"
+
+    @staticmethod
+    def _get_matr_size(self, matr_dir):
+
+        """For use with the _scaffold_from_disk method. Helps figure
+           out the ultimate matrix size before loading all in."""
+
+        all_files = os.listdir(matr_dir)
+        all_files = [elem for elem in all_files if ".bss" in elem]
+        random_matr = np.random.choice(all_files)
+        sample_matrix = os.path.join(matr_dir, random_matr)
+        with open(sample_matrix, "rb") as datafile:
+            row_ind, col_ind, dat = pickle.load(datafile)
+
+        matrsize = max(row_ind) + 1
+
+        return matrsize
 
     @abstractmethod
     def _pre_solve(self):

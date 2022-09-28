@@ -4,12 +4,12 @@ import time, pickle
 
 from petsc4py import PETSc
 
-from ggce.executors.petsc4py.base import MassiveSolver
+from ggce.executors.petsc4py.base import MassSolver
 from ggce.logger import logger, disable_logger
 
 BYTES_TO_GB = 1073741274
 
-class MassiveSolverMUMPS(MassiveSolver):
+class MassSolverMUMPS(MassSolver):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
     calculate G(k,w) in parallel, using a one-shot sparse solver MUMPS.
     This inherits the matrix construction strategies of the BaseExecutorPETSC
@@ -114,7 +114,6 @@ class MassiveSolverMUMPS(MassiveSolver):
         if self._results_directory is not None:
             pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
-    # @profile
     def solve(self, k, w, eta, rtol=1.0e-10):
         """Solve the sparse-represented system using PETSc's KSP context.
         Note that this method only returns values on MPI rank = 0. All other
@@ -142,12 +141,12 @@ class MassiveSolverMUMPS(MassiveSolver):
         # first check if you already calculated this
         result, path = self._pre_solve(k, w, eta)
         if result is not None:
-            return result
+            return [result, {}]
 
-        if self.basis_dir is None:
+        if self._matr_dir is None:
             self._scaffold(k, w, eta)
         else:
-            self._scaffold_from_disk(k, w, eta, basis_dir = self.basis_dir)
+            self._scaffold_from_disk(k, w, eta, matr_dir = self._matr_dir)
 
         t0 = time.time()
 
@@ -205,6 +204,7 @@ class MassiveSolverMUMPS(MassiveSolver):
         G_vec = self._mpi_comm_brigadier.gather(self._vector_x.getArray(), root=0)
 
         # since we grabbed the Green's func value, destroy the data structs
+        # not strictly necessary
         # self._vector_x.destroy()
         # self._vector_b.destroy()
         # self._mat_X.destroy()
