@@ -2,7 +2,6 @@
 GGCE
 ====
 
-
 .. image:: https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O
    :target: https://codecov.io/gh/x94carbone/GGCE
    :alt: codecov
@@ -13,7 +12,7 @@ Generalized Green's function Cluster Expansion
 Installation
 ------------
 
-Please see the `INSTALLATION.md <INSTALLATION.md>`_ file for detailed instructions on installing the GGCE package.
+We provide detailed information on how to install the GGCE package in our documentation (link TK).
 
 Acknowledgements
 ----------------
@@ -28,17 +27,30 @@ This material is based upon work supported by the U.S. Department of Energy, Off
 Citation
 --------
 
-If you use this code for your own work, we ask that you please cite the following `manuscript <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`_\ :
+If you use this software, please cite our JOSS manuscript **(JOSS manuscript currently in prep)**.
+
+If you make references to the theory or application of the GGCE methodology, please consider citing the following two manuscripts: `Carbone, Reichman et al. <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`__ and `Carbone, Millis et al <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.L140307>`__:
 
 .. code-block::
 
    @article{carbone2021,
      title={Numerically exact generalized Green's function cluster expansions for electron-phonon problems},
      author={Carbone, Matthew R and Reichman, David R and Sous, John},
-     journal={Phys. Rev. B},
+     journal={Phys. Rev. B.},
      volume={104},
      number={3},
      pages={035106},
+     year={2021},
+     publisher={APS}
+   }
+
+   @article{carbone2021bond,
+     title={Bond-Peierls polaron: Moderate mass enhancement and current-carrying ground state},
+     author={Carbone, Matthew R and Millis, Andrew J and Reichman, David R and Sous, John},
+     journal={Phys. Rev. B.},
+     volume={104},
+     number={14},
+     pages={L140307},
      year={2021},
      publisher={APS}
    }
