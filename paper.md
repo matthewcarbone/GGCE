@@ -17,13 +17,16 @@ authors:
     affiliation: 2
   - name: John Sous
     affiliation: 3
+    affiliation: 4
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
    index: 1
  - name: Department of Physics and Astronomy, University of British Columbia, Vancouver, British Columbia V6T 1Z1, Canada
    index: 2
- - name: Department of Physics, Stanford University, ...
+ - name: Department of Physics, Stanford University, Stanford, CA 93405, USA
    index: 3
+ - name: Geballe Laboratory for Advanced Materials, Stanford University, Stanford, California 94305, USA
+   index: 4
 date: TODO
 bibliography: paper.bib
 # Optional fields if submitting to a AAS journal too, see this blog post:
