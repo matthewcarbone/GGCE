@@ -20,7 +20,7 @@ Acknowledgements
 
 .. inclusion-marker-acknowledgements-begin
 
-This material is based upon work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research, Department of Energy Computational Science Graduate Fellowship under Award Number DE-FG02-97ER25308.
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research, Department of Energy Computational Science Graduate Fellowship under Award Number DE-FG02-97ER25308. This work also used theory and computational resources of the Center for Functional Nanomaterials, which is a U.S. Department of Energy Office of Science User Facility, and the Scientific Data and Computing Center, a component of the Computational Science Initiative, at Brookhaven National Laboratory under Contract No. DE-SC0012704.
 
 .. inclusion-marker-acknowledgements-end
 

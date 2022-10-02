@@ -69,9 +69,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "ggce"
-copyright = (
-    "2022, the respective contributors, as shown by the AUTHORS.md file"
-)
+copyright = "2022, Matthew R. Carbone, Stepan Fomichev & John Sous"
 author = "Matthew R. Carbone"
 
 # The version info for the project you're documenting, acts as replacement for
