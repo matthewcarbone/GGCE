@@ -16,8 +16,7 @@ authors:
     equal-contrib: true
     affiliation: 2
   - name: John Sous
-    affiliation: 3
-    affiliation: 4
+    affiliation: 3, 4
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
    index: 1
