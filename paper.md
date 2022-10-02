@@ -1,8 +1,8 @@
 ---
-title: 'GGCE: an efficient solver for lattice model Hamiltonians in the polaron limit'
+title: 'GGCE-Pol:  A software package for studying polarons and their dynamics'
 tags:
   - Python
-  - computational spectroscopy
+  - computational quantum physics
   - condensed matter physics
   - materials science
 authors:
@@ -16,6 +16,7 @@ authors:
     equal-contrib: true
     affiliation: 2
   - name: John Sous
+    corresponding: true
     affiliation: 3, 4
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
@@ -35,12 +36,12 @@ bibliography: paper.bib
 ---
 
 # Summary
-The Generalized Green's Function Cluster Expansion (GGCE)
+Efficient, computational implementation of the Generalized Green's Function Cluster Expansion (GGCE) for models of polarons.
 
 # Statement of need
-The electron-phonon problem is of both fundamental relevance and practical importance in materials science. Electron-phonon interactions promote a variety of novel states in low-temperature phases and high-temperature transport in quantum materials, and are essential to the understanding of the behavior of solar cells and semiconductors. In the dilute carrier density limit, electron-phonon coupling gives rise to polarons whose properties encode the physics of applied materials all the way from low to high temperatures. Current reasearch on polarons is broadly divided into two themes, fundamental research carried out in theoretical physics departments and applied research in applied physics and materials science departments. The former focuses on the many-body aspects of the polaron problem, while the latter focuses on the materials and ab initio aspects of it. However, the two cannot be separated.
+The electron-phonon problem is of both fundamental relevance and practical importance in materials science[@ephReview1,ephReview2]. Electron-phonon interactions promote a variety of novel states, low-temperature phases and high-temperature transport in quantum materials, and are essential to the understanding of the behavior of solar cells[@solarcells] and semiconductors[@semiconductors]. In the dilute carrier density limit, electron-phonon coupling gives rise to quasiparticles called polarons whose properties encode the physics of materials all the way from low to high temperatures. Current reasearch on polarons is broadly divided into two themes, fundamental research carried out in theoretical physics departments and applied research in applied physics and materials science departments. The former focuses on the many-body aspects of the polaron problem[@Mahan], while the latter focuses on the materials and _ab initio_ aspects of it[@Guistino]. However, the two cannot be separated.
 
-This paper provides a scientific software whose goal is to bridge this gap. This software allows the treatment of polarons statics and dynamics in (almost) arbitary models of electron-phonon coupling. It presents a first step towards a multiyear effort to combine _ab initio_ understanding of materials and exact many-body analysis of polaron states. The software allows for the _numerically exact_ computation of both ground-state and spectral response of polaron systems described by arbitary electron density and/or hopping-phonon coupling.
+This paper provides a scientific software whose goal is to bridge this gap. This software allows the treatment of polarons' statics and dynamics in models of electron-phonon coupling of (almost) arbitary form. It presents a first step towards a multiyear effort to combine _ab initio_ understanding of materials and exact many-body analysis of polaron states. The software allows for a _numerically exact_ computation of both ground-state and spectral response of polaron systems described by arbitary electron density and/or hopping phonon coupling[@GGCE].
 
 
 # Software summary
