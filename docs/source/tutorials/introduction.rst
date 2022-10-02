@@ -53,3 +53,55 @@ The next step is extremely simple. Initializing the ``System`` object will trigg
 .. note::
 
     The GGCE code implements a comprehensive logger through Loguru. Debugging mode can be controlled using the :class:`ggce.logger.debug` context manager.
+
+While working in some sort of interactive environment such as iPython or Jupyter, you can use 
+
+.. code-block:: python
+
+    model.visualize()
+
+to visualize the current state of the model. For example, in the current system, calling ``model.visualize()`` produces the following output
+
+.. code-block::
+
+    Hamiltonian parameters:
+      Hopping (t)          = 0.10
+      Lattice constant (a) = 1.00
+      Temperature (T)      = 0.00
+      Max bosons per site  = None
+      Absolute extent      = 3
+    Terms:
+      Phonon type = 0 (M = 3; N = 9)
+        EdwardsFermionBoson: 2.50 x ([1] [1] +) | 0 (1.25)
+        EdwardsFermionBoson: 2.50 x ([-1] [-1] +) | 0 (1.25)
+        EdwardsFermionBoson: 2.50 x ([1] [0] -) | 0 (1.25)
+        EdwardsFermionBoson: 2.50 x ([-1] [0] -) | 0 (1.25)
+
+The output contains Hamiltonian parameters and terms. The hopping, lattice constant and temperature should be self-explanatory. The max bosons per site is used to limit the number of total phonons per site in any auxiliary Green's function, and the absolute extent is only relevant in multi-phonon-mode models (more on finite-temperature and multi-phonon-mode models later). The terms index the type of couplings beign used in the model. First listed is the type of coulpling, then the value of the prefactor :math:`g`, and then some more complicated information about the phonon interactions. These extra data are usually just used for debugging, but can be interpreted.
+
+TK
+
+Step 3: solve the system
+------------------------
+
+GGCE offers multiple ways to solve an initialized ``System`` object. In this tutorial, we will use the most efficient method for relatively small matrices (or sets of equations): a direct, dense solver. Specifically, we will leverage SciPy's solver engines to do this, and these engines are based on e.g. BLAS, and as such are extremely fast and multi-threaded, being able to take advantage of multi-core machines. 
+
+First, initialize the ``Solver`` itself.
+
+.. code-block:: python
+
+    from ggce import DenseSolver
+    solver = DenseSolver(system)
+
+
+Next, we solve the system. 
+
+.. code-block:: python
+
+    k = np.array([0.0, np.pi / 2.0, np.pi])
+    w = np.linspace(-6.0, -2.0, 100)
+    solver = DenseSolver(system)
+    G = solver.spectrum(k, w, eta=0.005, pbar=True)
+    A = -G.imag / np.pi
+
+Calling the ``spectrum`` method actually returns the full Green's function at the level of theory specified in the ``Model``. One can easily obtain the spectral function by just taking :math:`-\mathrm{Im} \: G(k, \omega) / \pi`.
