@@ -139,6 +139,8 @@ class MassSolverMUMPS(MassSolver):
         """
 
         # first check if you already calculated this
+        # if self.brigade_rank == 0:
+        #     logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
         result, path = self._pre_solve(k, w, eta)
         if result is not None:
             return [result, {}]
@@ -151,7 +153,11 @@ class MassSolverMUMPS(MassSolver):
         t0 = time.time()
 
         # Now construct the desired solver instance
-        ksp = PETSc.KSP().create()
+        ksp = PETSc.KSP().create() ### THIS IS WHERE THE MPI GETS STUCK FOR UNEVEN NUMBER OF JOBS!!!
+                                   ### TODO: FIX THIS!!!
+                                   ### ONE WAY IS TO PAD THE JOBS_ON_BRIGADE WITH BULLSHIT JOBS
+        if self.brigade_rank == 0:
+            logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
 
         # "preonly" for e.g. mumps and other external solvers
         ksp.setType('preonly')
@@ -180,8 +186,6 @@ class MassSolverMUMPS(MassSolver):
         self._vector_x.assemblyBegin()
         self._vector_x.assemblyEnd()
 
-        self._mpi_comm_brigadier.barrier()
-
         # call manual residual check, as well as check MUMPS INFO
         # if the MUMPS solver call was successful
         # to get access to MUMPS error codes, get the factored matrix from PC
@@ -199,8 +203,8 @@ class MassSolverMUMPS(MassSolver):
 
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
-        # use a gather operation, called by all ranks, to construct the full
-        # vector (currently not used but will be later)
+        # use a gather operation, called by all ranks in a brigade, to
+        # construct the full vector (currently not used but will be later)
         G_vec = self._mpi_comm_brigadier.gather(self._vector_x.getArray(), root=0)
 
         # since we grabbed the Green's func value, destroy the data structs
@@ -216,6 +220,8 @@ class MassSolverMUMPS(MassSolver):
             G_val = None
 
         # and bcast to all processes in your brigade
+        # self._mpi_comm_brigadier.Barrier()
+        # self._mpi_comm.Abort()
         G_val = self._mpi_comm_brigadier.bcast(G_val, root=0)
 
         # only checkpoint if you are the sergeant

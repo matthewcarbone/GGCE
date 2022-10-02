@@ -2,6 +2,7 @@ import numpy as np
 
 from ggce.executors.serial import SerialDenseExecutor
 from ggce.utils.utils import float_to_list
+from ggce.logger import logger, disable_logger
 
 
 class ParallelDenseExecutor(SerialDenseExecutor):
@@ -11,7 +12,7 @@ class ParallelDenseExecutor(SerialDenseExecutor):
     def prime(self):
 
         if self.mpi_comm is None:
-            self._logger.error("Prime failed, no MPI communicator provided")
+            logger.error("Prime failed, no MPI communicator provided")
             return
 
         self._dense_prime_helper()

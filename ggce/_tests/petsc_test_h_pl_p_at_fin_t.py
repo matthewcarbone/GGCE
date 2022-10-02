@@ -4,7 +4,7 @@ import numpy as np
 
 import sys
 
-sys.path.append("../..")
+sys.path.append("..")
 
 from ggce import Model, System, DenseSolver  # noqa
 from ggce.executors.petsc4py.parallel import MassSolverMUMPS
@@ -20,7 +20,7 @@ if __name__ == "__main__":
                f"fixing_h_pl_p_bug/scripts/petsc_test"
 
     k = 0.5 * np.pi
-    w = np.linspace(-2, 5, 8)
+    w = np.linspace(-2, 5, 9)
 
     COMM = MPI.COMM_WORLD
 
@@ -37,33 +37,33 @@ if __name__ == "__main__":
         plt.plot(w, -results.imag / np.pi, label = f"Tzero")
 
     # Check the true T=epsilon case
-    model = Model.from_parameters(hopping=1., temperature=1e-6)
-    model.add_(
-        "Holstein",
-        0.5,
-        2,
-        2,
-        phonon_extent_tfd=1,
-        phonon_number_tfd=1,
-        dimensionless_coupling_strength=1.,
-    )
-    model.add_(
-        "Peierls",
-        1.,
-        2,
-        2,
-        phonon_extent_tfd=1,
-        phonon_number_tfd=1,
-        dimensionless_coupling_strength=1.,
-    )
-    solver = MassSolverMUMPS(system=System(model), mpi_comm = COMM, \
-                                                    brigade_size = 2)
-    results = solver.spectrum(k, w, eta=0.05, pbar=False)
-
-    if COMM.Get_rank() == 0:
-        results = results.squeeze()
-        np.savetxt("Tepsilon.txt", np.array([w, -results.imag / np.pi]).T)
-        plt.plot(w, -results.imag / np.pi, label = "Tepsilon")
+    # model = Model.from_parameters(hopping=1., temperature=1e-6)
+    # model.add_(
+    #     "Holstein",
+    #     0.5,
+    #     2,
+    #     2,
+    #     phonon_extent_tfd=1,
+    #     phonon_number_tfd=1,
+    #     dimensionless_coupling_strength=1.,
+    # )
+    # model.add_(
+    #     "Peierls",
+    #     1.,
+    #     2,
+    #     2,
+    #     phonon_extent_tfd=1,
+    #     phonon_number_tfd=1,
+    #     dimensionless_coupling_strength=1.,
+    # )
+    # solver = MassSolverMUMPS(system=System(model), mpi_comm = COMM, \
+    #                                                 brigade_size = 2)
+    # results = solver.spectrum(k, w, eta=0.05, pbar=False)
+    #
+    # if COMM.Get_rank() == 0:
+    #     results = results.squeeze()
+    #     np.savetxt("Tepsilon.txt", np.array([w, -results.imag / np.pi]).T)
+    #     plt.plot(w, -results.imag / np.pi, label = "Tepsilon")
 
         plt.legend()
 

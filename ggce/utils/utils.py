@@ -30,8 +30,14 @@ class Buffer:
 
 
 def chunk_jobs(jobs, world_size, rank):
-    return np.array_split(jobs, world_size)[rank].tolist()
-
+    jobs_for_all = sorted(np.array_split(jobs, world_size),key=len,reverse=True)
+    equal_jobs = []
+    for ii, jobs in enumerate(jobs_for_all):
+        jobs_equalized = jobs.tolist()
+        if len(jobs) < len(jobs_for_all[0]):
+            jobs_equalized.append([np.nan, np.nan])
+        equal_jobs.append(np.array(jobs_equalized))
+    return equal_jobs[rank]
 
 def float_to_list(val):
     if isinstance(val, float):

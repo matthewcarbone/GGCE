@@ -121,13 +121,12 @@ class MassSolver(Solver):
         Returns
         -------
         list
-            The jobs assigned to this rank.
+            The jobs assigned to this brigade.
         """
 
         if self.brigades == 1:
             logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
-
         return chunk_jobs(jobs, self.brigades, self.mpi_brigade)
 
     def _setup_petsc_structs(self):
@@ -488,20 +487,22 @@ class MassSolver(Solver):
 
         ## there are limitations: the number of jobs has to be evenly divisible by all the brigades
         ## this will be improved in future releases
-        if not (1-len(jobs) % self.brigades):
-            logger.critical(f"Jobs ({len(jobs)}) cannot be equally divided"
-                            f" between brigades ({self.brigades}).")
+        # if not (1-len(jobs) % self.brigades):
+        #     logger.critical(f"Jobs ({len(jobs)}) cannot be equally divided"
+        #                     f" between brigades ({self.brigades}).")
 
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
         jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
+        logger.info(f"\nI am brigade {self.mpi_brigade} and these are my jobs {jobs_on_brigade}.\n")
         self._total_jobs_on_this_brigade = len(jobs_on_brigade)
-
+        # logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
         # Get the results on this rank.
         s = []
         for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
+        # logger.info(f"\nI am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I have finished solve.\n")
         # Gather the results from the sergeants to "the general" (global rank 0)
         all_results = self._mpi_comm.gather(s, root=0)
 
@@ -521,6 +522,9 @@ class MassSolver(Solver):
             s = [xx[0] for xx in results]
             meta = [xx[1] for xx in results]
             res = np.array(s)
+
+            # remove nans from the padding
+            res = res[~np.isnan(res)]
 
             # Ensure the returned array has the proper shape
             res = res.reshape(len(k), len(w))

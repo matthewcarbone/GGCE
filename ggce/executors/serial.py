@@ -6,6 +6,7 @@ import time
 
 from ggce.executors.base import BaseExecutor
 from ggce.engine.physics import G0_k_omega
+from ggce.logger import logger, disable_logger
 
 
 BYTES_TO_MB = 1048576
@@ -73,12 +74,12 @@ class SerialSparseExecutor(BaseExecutor):
                 dat.extend([value for _, value in row_dict.items()])
 
         dt = time.time() - t0
-        self._logger.debug("Sparse matrix initialized", elapsed=dt)
+        logger.debug("Sparse matrix initialized", elapsed=dt)
 
         # estimate sparse matrix memory usage
         # (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
         est_mem_used = 24 * len(dat) / BYTES_TO_MB
-        self._logger.debug(
+        logger.debug(
             f"Estimated memory needed is {est_mem_used:.02f} MB"
         )
 
@@ -113,7 +114,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
 
-        self._logger.debug(f"Memory usage of sparse X is {size:.01f} MB")
+        logger.debug(f"Memory usage of sparse X is {size:.01f} MB")
 
         # Initialize the corresponding sparse vector
         # {G}(0)
@@ -128,7 +129,7 @@ class SerialSparseExecutor(BaseExecutor):
 
         dt = time.time() - t0
 
-        self._logger.debug("Scaffold complete", elapsed=dt)
+        logger.debug("Scaffold complete", elapsed=dt)
 
         return X, v
 
@@ -222,7 +223,7 @@ class SerialDenseExecutor(BaseExecutor):
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, -1, eta)
         dt = time.time() - t0
-        self._logger.debug("Filled alpha", elapsed=dt)
+        logger.debug("Filled alpha", elapsed=dt)
         return A
 
     def _get_beta(self, k, w, n_phonons, eta):
@@ -230,7 +231,7 @@ class SerialDenseExecutor(BaseExecutor):
         t0 = time.time()
         A = self._fill_matrix(k, w, n_phonons, 1, eta)
         dt = time.time() - t0
-        self._logger.debug("Filled beta", elapsed=dt)
+        logger.debug("Filled beta", elapsed=dt)
         return A
 
     def solve(self, k, w, eta, index=None, **kwargs):
@@ -287,7 +288,7 @@ class SerialDenseExecutor(BaseExecutor):
             t0 = time.time()
             R = linalg.solve(X, alpha)
             dt = time.time() - t0
-            self._logger.debug(
+            logger.debug(
                 f"Inverted [{X.shape}, {alpha.shape}]", elapsed=dt
             )
             meta["time"].append(dt)
