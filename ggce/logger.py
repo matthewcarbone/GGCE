@@ -121,7 +121,7 @@ def configure_loggers(
     if COMM is None:
         logger.add(lambda _: sys.exit(1), level="CRITICAL")
     else:
-        logger.add(lambda _: COMM.MPI_Abort(), level="CRITICAL")
+        logger.add(lambda _: COMM.Abort(), level="CRITICAL")
 
     if enable_python_standard_warnings:
         logger.add(lambda _: warn("DUMMY WARNING"), level="WARNING")
