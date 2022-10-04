@@ -1,6 +1,3 @@
-from abc import ABC, abstractmethod
-from pathlib import Path
-
 import numpy as np
 import time
 import os
@@ -9,26 +6,27 @@ from tqdm import tqdm
 
 from petsc4py import PETSc
 
-from ggce.logger import logger, disable_logger
+from ggce.logger import logger
 from ggce.utils.physics import G0_k_omega
 from ggce.utils.utils import chunk_jobs, float_to_list
 from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
 
+
 class MassSolver(Solver):
-    """A base class to connect to PETSc's powerful parallel sparse solver tools, to
-    calculate G(k,w) in parallel. This is an abstract base class built on top of
-    the abstract Solver class.
-    This base class has fundamental methods such as matrix construction.
-    The solve methods, as well as convergence and
-    memory tracking are implemented in the inherited classes, while some
-    basic routines like spectrum() that are method-agnostic are implemented here."""
+    """A base class to connect to PETSc's powerful parallel sparse solver
+    tools, to calculate G(k,w) in parallel. This is an abstract base class
+    built on top of the abstract Solver class. This base class has fundamental
+    methods such as matrix construction. The solve methods, as well as
+    convergence and memory tracking are implemented in the inherited classes,
+    while some basic routines like spectrum() that are method-agnostic are
+    implemented here."""
 
     @property
     def mpi_brigade(self):
         if self._brigade_size is not None:
-            return int( self.mpi_rank / self._brigade_size )
+            return int(self.mpi_rank / self._brigade_size)
         return 0
 
     @property
@@ -44,7 +42,7 @@ class MassSolver(Solver):
     @property
     def brigades(self):
         if self._brigade_size is not None:
-            return int( self._mpi_comm.Get_size() / self._brigade_size )
+            return int(self._mpi_comm.Get_size() / self._brigade_size)
         return 1
 
     @property
@@ -55,31 +53,35 @@ class MassSolver(Solver):
 
     @property
     def matr_dir(self):
-        '''This property sets the directory where the method
+        """This property sets the directory where the method
         _scaffold_from_disk looks for pickled matrices (in CSR format).
         It is set in __init__
-        '''
+        """
         if self._matr_dir is None:
-            logger.warning(f"matr_dir not set -- GGCE will construct matrices.")
+            logger.warning("matr_dir not set -- GGCE will construct matrices.")
         return self._matr_dir
 
-    def __init__(self,brigade_size=None,matr_dir=None,*args,**kwargs):
+    def __init__(self, brigade_size=None, matr_dir=None, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
         self._matr_dir = matr_dir
 
         if self._mpi_comm is None:
-            logger.critical(f"PETSc solver cannot run with "\
-                                f"mpi_comm=None. Pass MPI_COMM when "\
-                                f"instantiating the MassSolver.")
+            logger.critical(
+                "PETSc solver cannot run with "
+                "mpi_comm=None. Pass MPI_COMM when "
+                "instantiating the MassSolver."
+            )
 
         # brigade split
         self._brigade_size = brigade_size
         if self._brigade_size is not None:
             self.split_into_brigades()
         else:
-            logger.warning("Only one brigade, no splitting required. "\
-                                                "Using original MPI_COMM.")
+            logger.warning(
+                "Only one brigade, no splitting required. "
+                "Using original MPI_COMM."
+            )
             self._mpi_comm_brigadier = self._mpi_comm
 
     def split_into_brigades(self):
@@ -99,14 +101,18 @@ class MassSolver(Solver):
             New mpi_comm_brigadier are set as attributes of the class.
         """
 
-        ## for now the implementation has limitations: must have worldsize evenly divided into brigades
+        # for now the implementation has limitations: must have worldsize
+        # evenly divided into brigades
         try:
-            assert (1-self.mpi_world_size % self._brigade_size)
+            assert 1 - self.mpi_world_size % self._brigade_size
         except AssertionError:
-            logger.critical(f"Number of MPI ranks cannot be equally divided into brigades.")
+            logger.critical(
+                "Number of MPI ranks cannot be equally divided into brigades."
+            )
 
-        self._mpi_comm_brigadier = self._mpi_comm.Split(self.mpi_brigade,\
-                                                                self.mpi_rank)
+        self._mpi_comm_brigadier = self._mpi_comm.Split(
+            self.mpi_brigade, self.mpi_rank
+        )
 
     def get_jobs_on_this_brigade(self, jobs):
         """Get's the jobs assigned to this group of ranks. Note this method
@@ -157,9 +163,11 @@ class MassSolver(Solver):
 
         # Figure out what the given process owns
         self._rstart, self._rend = self._vector_b.getOwnershipRange()
-        logger.debug(f"I am rank {self.mpi_rank} in brigade "\
-                     f"{self.mpi_brigade} and got range "\
-                     f"{self._rstart} to {self._rend}")
+        logger.debug(
+            f"I am rank {self.mpi_rank} in brigade "
+            f"{self.mpi_brigade} and got range "
+            f"{self._rstart} to {self._rend}"
+        )
 
         # Create the matrix for the linear problem
         self._mat_X = PETSc.Mat().create(comm=self._mpi_comm_brigadier)
@@ -256,41 +264,43 @@ class MassSolver(Solver):
 
         # quickly report the sparsity of the matrix
         self._lengthdat = len(dat)
-        self._sparsity = (self._linsys_size**2 - len(dat)) / self._linsys_size**2
+        self._sparsity = (
+            self._linsys_size**2 - len(dat)
+        ) / self._linsys_size**2
         self._edge_sparsity = len(dat) / self._linsys_size
 
         t0 = time.time()
 
-        ## parse out the nonzero (nnz) matrix structure across rows
-        ## so we can pre-allocate enough space for the matrix
-        ## avoid wasting space and speed up assembly ~ 20x
+        # parse out the nonzero (nnz) matrix structure across rows
+        # so we can pre-allocate enough space for the matrix
+        # avoid wasting space and speed up assembly ~ 20x
 
         # Call structs to initialize the PETSc vectors and matrices
         self._setup_petsc_structs()
 
-        ## set up arrays of length equal to space owned by a given MPI process
-        ## diag and offdiag store the number of nonzero entries in a given row
-        ## in the diagonal or off-diagonal block of the matrix
-        diag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
-        offdiag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
+        # set up arrays of length equal to space owned by a given MPI process
+        # diag and offdiag store the number of nonzero entries in a given row
+        # in the diagonal or off-diagonal block of the matrix
+        diag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+        offdiag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
 
-        ## iterate through coo notation arrays to identify the nonzero entry
-        ## number in each row
+        # iterate through coo notation arrays to identify the nonzero entry
+        # number in each row
         for i, elem in enumerate(row_ind):
             # check if this row / column is owned by this MPI process
             if self._rstart <= elem and elem < self._rend:
                 if self._rstart <= col_ind[i] and col_ind[i] < self._rend:
-                    diag_nnz[elem-self._rstart] += 1
+                    diag_nnz[elem - self._rstart] += 1
                 else:
-                    offdiag_nnz[elem-self._rstart] += 1
+                    offdiag_nnz[elem - self._rstart] += 1
 
-        ## pass the nnz arrays to PETSC matrix
-        self._mat_X.setPreallocationNNZ((diag_nnz,offdiag_nnz))
+        # pass the nnz arrays to PETSC matrix
+        self._mat_X.setPreallocationNNZ((diag_nnz, offdiag_nnz))
 
-        ## now populate the matrix with actual values
-        row_start = np.zeros(1, dtype='i4')
-        col_pos = np.zeros(1, dtype='i4')
-        val = np.zeros(1, dtype='complex128')
+        # now populate the matrix with actual values
+        row_start = np.zeros(1, dtype="i4")
+        col_pos = np.zeros(1, dtype="i4")
+        val = np.zeros(1, dtype="complex128")
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
@@ -310,8 +320,8 @@ class MassSolver(Solver):
         self._vector_b.assemblyBegin()
         self._vector_b.assemblyEnd()
 
-        ## TODO: check memory usage
-        ## presently not wrapped for Python
+        # TODO: check memory usage
+        # presently not wrapped for Python
 
         dt = time.time() - t0
         logger.debug("PETSc matrix assembled", elapsed=dt)
@@ -339,7 +349,9 @@ class MassSolver(Solver):
         nothing is returned.
         """
 
-        logger.info(f"Matrices are loaded from disk. GGCE will not re-compute them.")
+        logger.info(
+            "Matrices are loaded from disk. GGCE will not re-compute them."
+        )
 
         # Get the total size of the linear system -- needed by PETSc
         assert matr_dir is not None
@@ -349,47 +361,49 @@ class MassSolver(Solver):
         with open(matrix_loc, "rb") as datafile:
             row_ind, col_ind, dat = pickle.load(datafile)
 
-
         # quickly report the sparsity of the matrix
         self._lengthdat = len(dat)
-        self._sparsity = (self._linsys_size**2 - len(dat)) / self._linsys_size**2
+        self._sparsity = (
+            self._linsys_size**2 - len(dat)
+        ) / self._linsys_size**2
         self._edge_sparsity = len(dat) / self._linsys_size
         t0 = time.time()
 
-        ## parse out the nonzero (nnz) matrix structure across rows
-        ## so we can pre-allocate enough space for the matrix
-        ## avoid wasting space and speed up assembly ~ 20x
+        # parse out the nonzero (nnz) matrix structure across rows
+        # so we can pre-allocate enough space for the matrix
+        # avoid wasting space and speed up assembly ~ 20x
 
         # Call structs to initialize the PETSc vectors and matrices
         self._setup_petsc_structs()
 
-        ## set up arrays of length equal to space owned by a given MPI process
-        ## diag and offdiag store the number of nonzero entries in a given row
-        ## in the diagonal or off-diagonal block of the matrix
-        diag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
-        offdiag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
+        # set up arrays of length equal to space owned by a given MPI process
+        # diag and offdiag store the number of nonzero entries in a given row
+        # in the diagonal or off-diagonal block of the matrix
+        diag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+        offdiag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
 
-        ## iterate through coo notation arrays to identify the nonzero entry
-        ## number in each row
+        # iterate through coo notation arrays to identify the nonzero entry
+        # number in each row
         for i, elem in enumerate(row_ind):
             # check if this row / column is owned by this MPI process
             if self._rstart <= elem and elem < self._rend:
                 if self._rstart <= col_ind[i] and col_ind[i] < self._rend:
-                    diag_nnz[elem-self._rstart] += 1
+                    diag_nnz[elem - self._rstart] += 1
                 else:
-                    offdiag_nnz[elem-self._rstart] += 1
+                    offdiag_nnz[elem - self._rstart] += 1
 
-        ## pass the nnz arrays to PETSC matrix
-        self._mat_X.setPreallocationNNZ((diag_nnz,offdiag_nnz))
+        # pass the nnz arrays to PETSC matrix
+        self._mat_X.setPreallocationNNZ((diag_nnz, offdiag_nnz))
 
-        ## now populate the matrix with actual values
-        row_start = np.zeros(1, dtype='i4')
-        col_pos = np.zeros(1, dtype='i4')
-        val = np.zeros(1, dtype='complex128')
+        # now populate the matrix with actual values
+        row_start = np.zeros(1, dtype="i4")
+        col_pos = np.zeros(1, dtype="i4")
+        val = np.zeros(1, dtype="complex128")
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                # logger.debug(f"I am rank {self.mpi_rank} and I am setting the values at {(row_start, col_pos)}")
+                # logger.debug(f"I am rank {self.mpi_rank} and I am setting
+                # the values at {(row_start, col_pos)}")
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -405,11 +419,14 @@ class MassSolver(Solver):
         self._vector_b.assemblyBegin()
         self._vector_b.assemblyEnd()
 
-        ## TODO: check memory usage
-        ## presently not wrapped for Python
+        # TODO: check memory usage
+        # presently not wrapped for Python
 
         dt = time.time() - t0
-        logger.debug(f"PETSc matrix assembled, built from disk at: {self._matr_dir}", elapsed=dt)
+        logger.debug(
+            f"PETSc matrix assembled, built from disk at: {self._matr_dir}",
+            elapsed=dt,
+        )
 
     def check_conv_manual(self, pc, rtol):
         """This helper function checks PETSC convergence manually, by computing
@@ -438,7 +455,7 @@ class MassSolver(Solver):
         # to be preconditioned
         _vector_b_condt = self._vector_b.duplicate()
         pc.apply(self._vector_b, _vector_b_condt)
-        _vector_b_norm  = _vector_b_condt.norm(PETSc.NormType.NORM_2)
+        _vector_b_norm = _vector_b_condt.norm(PETSc.NormType.NORM_2)
 
         # create variable measuring how much tolerance is met / exceeded
         # if positive, we are in trouble
@@ -502,23 +519,23 @@ class MassSolver(Solver):
         for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
-        # logger.info(f"\nI am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I have finished solve.\n")
-        # Gather the results from the sergeants to "the general" (global rank 0)
+        # Gather the results from the sergeants to "the general"
+        # (global rank 0)
         all_results = self._mpi_comm.gather(s, root=0)
 
-        ## need to get rid of duplicates, since each rank in a brigade sends
-        ## a copy of the results from the brigade
+        # need to get rid of duplicates, since each rank in a brigade sends
+        # a copy of the results from the brigade
         if self.mpi_rank == 0:
             results = []
             if self.brigade_size > 1:
                 for n in range(self.brigades):
-                    results.append(all_results[int(n*self.brigade_size)])
+                    results.append(all_results[int(n * self.brigade_size)])
             else:
                 results = all_results
 
             results = [xx[ii] for xx in results for ii in range(len(xx))]
 
-            ## a copy of the results of the whole brigade
+            # a copy of the results of the whole brigade
             s = [xx[0] for xx in results]
             meta = [xx[1] for xx in results]
             res = np.array(s)
@@ -541,7 +558,7 @@ class MassSolver(Solver):
     def _get_matr_size(self, matr_dir):
 
         """For use with the _scaffold_from_disk method. Helps figure
-           out the ultimate matrix size before loading all in."""
+        out the ultimate matrix size before loading all in."""
 
         all_files = os.listdir(matr_dir)
         all_files = [elem for elem in all_files if ".bss" in elem]
@@ -553,16 +570,3 @@ class MassSolver(Solver):
         matrsize = max(row_ind) + 1
 
         return matrsize
-
-    @abstractmethod
-    def _pre_solve(self):
-        ...
-
-    @abstractmethod
-    def _post_solve(self):
-        ...
-
-    @abstractmethod
-    def solve(self, k, w, eta):
-        """Takes, ``k, w, eta`` and returns the Green's function."""
-        ...

@@ -9,8 +9,13 @@ try:
     from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
+    MPI_WORLD_SIZE = COMM.Get_size()
+    MPI_RANK = COMM.Get_rank()
+
 except ImportError:
     COMM = None
+    MPI_WORLD_SIZE = 1
+    MPI_RANK = 0
 
 
 def generic_filter(names):
@@ -23,23 +28,14 @@ def generic_filter(names):
     return f
 
 
-if COMM is None:
-    RANK = " "
-else:
-    RANK = str(COMM.Get_rank()).zfill(3)
-    RANK = f" ({RANK}) "
+rank_string = str(MPI_RANK).zfill(3)
+rank_string = f" ({rank_string}) "
 
 DEBUG_FMT_WITH_MPI_RANK = (
     "<fg #808080>{time:YYYY-MM-DD HH:mm:ss.SSS} "
     "{name}:{function}:{line}</> "
-    "|<lvl>{level: <10}</>|%s<lvl>{message}</>" % RANK
+    "|<lvl>{level: <10}</>|%s<lvl>{message}</>" % rank_string
 )
-
-# DEBUG_FMT_WITHOUT_MPI_RANK = (
-#     "<fg #808080>{time:YYYY-MM-DD HH:mm:ss.SSS} "
-#     "{name}:{function}:{line}</> "
-#     "|<lvl>{level: <10}</>| <lvl>{message}</>"
-# )
 
 DEBUG_FMT_WITHOUT_MPI_RANK = (
     "<fg #808080>{time:YYYY-MM-DD HH:mm:ss}</> <lvl>{message}</>"
@@ -55,10 +51,10 @@ WARN_FMT_WITHOUT_MPI_RANK = (
 def configure_loggers(
     stdout_filter=["INFO", "SUCCESS"],
     stdout_debug_fmt=DEBUG_FMT_WITH_MPI_RANK,
+    stderr_filter_warnings=["WARNING"],
+    stderr_filter=["ERROR", "CRITICAL"],
     stdout_fmt=DEBUG_FMT_WITHOUT_MPI_RANK,
-    stderr_filter=["WARNING", "ERROR", "CRITICAL"],
     stderr_fmt=WARN_FMT_WITHOUT_MPI_RANK,
-    run_as_mpi=False,
     enable_python_standard_warnings=False,
 ):
     """Configures the ``loguru`` loggers. Note that the loggers are initialized
@@ -82,9 +78,6 @@ def configure_loggers(
         List of logging levels to include in the standard error stream.
     stderr_fmt : str, optional
         Loguru format for the rest of the standard error stream.
-    run_as_mpi : bool, optional
-        If True, critical errors will run ``COMM.MPI_Abort()``. Otherwise,
-        ``sys.exit(1)`` is called.
     enable_python_standard_warnings : bool, optional
         Raises dummy warnings on ``logger.warning`` and ``logger.error``.
     """
@@ -101,13 +94,22 @@ def configure_loggers(
             format=stdout_debug_fmt,
         )
 
-    logger.add(
-        sys.stdout,
-        colorize=True,
-        filter=generic_filter(stdout_filter),
-        format=stdout_fmt,
-    )
+    # Only log info, success and warnings on RANK == 0
+    if MPI_WORLD_SIZE == 1:
+        logger.add(
+            sys.stdout,
+            colorize=True,
+            filter=generic_filter(stdout_filter),
+            format=stdout_fmt,
+        )
+        logger.add(
+            sys.stdout,
+            colorize=True,
+            filter=generic_filter(stderr_filter_warnings),
+            format=stderr_fmt,
+        )
 
+    # Log errors and criticals on every rank
     logger.add(
         sys.stderr,
         colorize=True,
@@ -116,7 +118,7 @@ def configure_loggers(
     )
 
     # We always exit on critical
-    if not run_as_mpi:
+    if COMM is None:
         logger.add(lambda _: sys.exit(1), level="CRITICAL")
     else:
         logger.add(lambda _: COMM.MPI_Abort(), level="CRITICAL")

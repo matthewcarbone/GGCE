@@ -1,13 +1,15 @@
 from pathlib import Path
 import numpy as np
-import time, pickle
+import time
+import pickle
 
 from petsc4py import PETSc
 
 from ggce.executors.petsc4py.base import MassSolver
-from ggce.logger import logger, disable_logger
+from ggce.logger import logger
 
 BYTES_TO_GB = 1073741274
+
 
 class MassSolverMUMPS(MassSolver):
     """A class to connect to PETSc powerful parallel sparse solver tools, to
@@ -91,8 +93,9 @@ class MassSolverMUMPS(MassSolver):
 
         # set up memory usage tracking, report to the logger on head node only
         # total memory across all processes
-        self.total_mem_used = factored_mat.getMumpsInfog(31) * 1e6 \
-            / BYTES_TO_GB
+        self.total_mem_used = (
+            factored_mat.getMumpsInfog(31) * 1e6 / BYTES_TO_GB
+        )
         if self.mpi_rank == 0:
             logger.debug(
                 f"Total MUMPS memory usage is {self.total_mem_used:.02f} GB"
@@ -148,7 +151,7 @@ class MassSolverMUMPS(MassSolver):
         if self._matr_dir is None:
             self._scaffold(k, w, eta)
         else:
-            self._scaffold_from_disk(k, w, eta, matr_dir = self._matr_dir)
+            self._scaffold_from_disk(k, w, eta, matr_dir=self._matr_dir)
 
         t0 = time.time()
 
@@ -160,15 +163,15 @@ class MassSolverMUMPS(MassSolver):
             logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
 
         # "preonly" for e.g. mumps and other external solvers
-        ksp.setType('preonly')
+        ksp.setType("preonly")
 
         # Define the linear system matrix and its preconditioner
         ksp.setOperators(self._mat_X, self._mat_X)
 
         # Set preconditioner options (see PETSc manual for details)
         pc = ksp.getPC()
-        pc.setType('lu')
-        pc.setFactorSolverType('mumps')
+        pc.setType("lu")
+        pc.setFactorSolverType("mumps")
 
         # Set tolerance and options
         ksp.setTolerances(rtol=rtol)
@@ -203,9 +206,11 @@ class MassSolverMUMPS(MassSolver):
 
         # The last rank has the end of the solution vector, which contains G
         # G is the last entry aka "the last equation" of the matrix
-        # use a gather operation, called by all ranks in a brigade, to
-        # construct the full vector (currently not used but will be later)
-        G_vec = self._mpi_comm_brigadier.gather(self._vector_x.getArray(), root=0)
+        # use a gather operation, called by all ranks, to construct the full
+        # vector (currently not used but will be later)
+        G_vec = self._mpi_comm_brigadier.gather(
+            self._vector_x.getArray(), root=0
+        )
 
         # since we grabbed the Green's func value, destroy the data structs
         # not strictly necessary
@@ -215,7 +220,7 @@ class MassSolverMUMPS(MassSolver):
 
         # Now select only the final value from the array
         if self.brigade_rank == 0:
-            G_val = G_vec[self.brigade_size-1][-1]
+            G_val = G_vec[self.brigade_size - 1][-1]
         else:
             G_val = None
 
@@ -229,8 +234,8 @@ class MassSolverMUMPS(MassSolver):
             self._post_solve(G_val, k, w, path)
 
         return np.array(G_val), {
-            'time': [dt],
-            'mumps_exit_code': [self.mumps_conv_ind],
-            'mumps_mem_tot': [self.total_mem_used],
-            'manual_tolerance_excess': [self.tol_excess]
+            "time": [dt],
+            "mumps_exit_code": [self.mumps_conv_ind],
+            "mumps_mem_tot": [self.total_mem_used],
+            "manual_tolerance_excess": [self.tol_excess],
         }
