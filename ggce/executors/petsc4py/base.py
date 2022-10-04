@@ -164,8 +164,8 @@ class MassSolver(Solver):
         # Figure out what the given process owns
         self._rstart, self._rend = self._vector_b.getOwnershipRange()
         logger.debug(
-            f"I am rank {self.mpi_rank} in brigade "
-            f"{self.mpi_brigade} and got range "
+            f"I am rank {self.mpi_rank} in brigade "\
+            f"{self.mpi_brigade} and got range "\
             f"{self._rstart} to {self._rend}"
         )
 
@@ -402,8 +402,8 @@ class MassSolver(Solver):
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                # logger.debug(f"I am rank {self.mpi_rank} and I am setting
-                # the values at {(row_start, col_pos)}")
+                logger.debug(f"I am rank {self.mpi_rank} and I am setting"\
+                f" the values at {(row_start, col_pos)}")
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -502,26 +502,21 @@ class MassSolver(Solver):
         # Generate a list of tuples for the (k, w) points to calculate.
         jobs = [(_k, _w) for _k in k for _w in w]
 
-        ## there are limitations: the number of jobs has to be evenly divisible by all the brigades
-        ## this will be improved in future releases
-        # if not (1-len(jobs) % self.brigades):
-        #     logger.critical(f"Jobs ({len(jobs)}) cannot be equally divided"
-        #                     f" between brigades ({self.brigades}).")
-
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
         jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
-        logger.info(f"\nI am brigade {self.mpi_brigade} and these are my jobs {jobs_on_brigade}.\n")
         self._total_jobs_on_this_brigade = len(jobs_on_brigade)
-        # logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
         # Get the results on this rank.
         s = []
         for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
-        # Gather the results from the sergeants to "the general"
+        # Gather the results from the brigade commanders to "the general"
         # (global rank 0)
         all_results = self._mpi_comm.gather(s, root=0)
+        # create placeholder variables for final bcast of results
+        res = None
+        meta = None
 
         # need to get rid of duplicates, since each rank in a brigade sends
         # a copy of the results from the brigade
@@ -545,9 +540,15 @@ class MassSolver(Solver):
 
             # Ensure the returned array has the proper shape
             res = res.reshape(len(k), len(w))
-            if return_meta:
-                return (res, meta)
-            return res
+
+        # Broadcast the final result to all ranks
+        # memory intensive but intuitive
+        res = self._mpi_comm.bcast(res, root=0)
+        meta = self._mpi_comm.bcast(meta, root=0)
+
+        if return_meta:
+            return (res, meta)
+        return res
 
     @staticmethod
     def _k_omega_eta_to_str(k, omega, eta):

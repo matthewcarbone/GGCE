@@ -142,8 +142,6 @@ class MassSolverMUMPS(MassSolver):
         """
 
         # first check if you already calculated this
-        # if self.brigade_rank == 0:
-        #     logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
         result, path = self._pre_solve(k, w, eta)
         if result is not None:
             return [result, {}]
@@ -156,11 +154,7 @@ class MassSolverMUMPS(MassSolver):
         t0 = time.time()
 
         # Now construct the desired solver instance
-        ksp = PETSc.KSP().create() ### THIS IS WHERE THE MPI GETS STUCK FOR UNEVEN NUMBER OF JOBS!!!
-                                   ### TODO: FIX THIS!!!
-                                   ### ONE WAY IS TO PAD THE JOBS_ON_BRIGADE WITH BULLSHIT JOBS
-        if self.brigade_rank == 0:
-            logger.info(f"I am rank {self.mpi_rank} on brigade {self.mpi_brigade} and I am about to solve.")
+        ksp = PETSc.KSP().create()
 
         # "preonly" for e.g. mumps and other external solvers
         ksp.setType("preonly")
@@ -229,7 +223,7 @@ class MassSolverMUMPS(MassSolver):
         # self._mpi_comm.Abort()
         G_val = self._mpi_comm_brigadier.bcast(G_val, root=0)
 
-        # only checkpoint if you are the sergeant
+        # only checkpoint if you are the brigade commander
         if self.brigade_rank == 0:
             self._post_solve(G_val, k, w, path)
 
