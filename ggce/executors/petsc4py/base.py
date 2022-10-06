@@ -1,76 +1,116 @@
-#!/usr/bin/env python3
-
 import numpy as np
 import time
 import os
 import pickle
+from tqdm import tqdm
 
 from petsc4py import PETSc
 
-from ggce.executors.serial import SerialSparseExecutor
-from ggce.engine.physics import G0_k_omega
-from ggce.utils.logger import Logger
-from ggce.utils.utils import peak_location_and_weight, chunk_jobs, \
-    float_to_list
+from ggce.logger import logger
+from ggce.utils.physics import G0_k_omega
+from ggce.utils.utils import chunk_jobs_equalize, float_to_list
+from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
 
-class BaseExecutorPETSC(SerialSparseExecutor):
-    """A base class to connect to PETSc powerful parallel sparse solver tools, to
-    calculate G(k,w) in parallel. This is built on top of the SerialSparseExecutor.
-    This base class has fundamental methods such as matrix construction.
-    The solve methods, as well as convergence and
-    memory tracking are implemented in the inherited classes."""
 
-    def __init__(
-        self, model, default_console_logging_level='INFO',
-        log_file=None, mpi_comm=None, brigade_size="default", log_every=1
-    ):
-        # Initialize the executor's logger and adjust the default logging level
-        # for the console output
-        self.mpi_comm = None
-        self.mpi_rank = 0
-        self.mpi_brigade = 1
-        self.mpi_world_size = 1
-        if mpi_comm is not None:
-            self.mpi_comm = mpi_comm
-            self.mpi_rank = mpi_comm.Get_rank()
-            self.mpi_world_size = mpi_comm.Get_size()
-            if brigade_size == "default":
-                self.brigade_size = self.mpi_world_size
-            else:
-                self.brigade_size = brigade_size
-            self.brigades = int( self.mpi_world_size / self.brigade_size )
-            self.mpi_brigade = int( self.mpi_rank / self.brigade_size )
-        self._logger = Logger(log_file, mpi_rank=self.mpi_rank)
-        self._logger.adjust_logging_level(default_console_logging_level)
-        self._model = model
-        self._system = None
-        self._basis = None
-        self._log_every = log_every
-        self._total_jobs_on_this_brigade = 1
+class MassSolver(Solver):
+    """A base class to connect to PETSc's powerful parallel sparse solver
+    tools, to calculate G(k,w) in parallel. This is an abstract base class
+    built on top of the abstract Solver class. This base class has fundamental
+    methods such as matrix construction. The solve methods, as well as
+    convergence and memory tracking are implemented in the inherited classes,
+    while some basic routines like spectrum() that are method-agnostic are
+    implemented here."""
 
-        ## for now the implementation has limitations: must have worldsize evenly divided into brigades
-        try:
-            assert (1-self.mpi_world_size % self.brigade_size)
-        except AssertionError:
-            self._logger.error(f"Number of MPI ranks cannot be equally divided into brigades. Exiting.")
-            exit()
+    @property
+    def mpi_brigade(self):
+        if self._brigade_size is not None:
+            return int(self.mpi_rank / self._brigade_size)
+        return 0
 
-        if mpi_comm is not None:
+    @property
+    def mpi_comm_brigadier(self):
+        return self._mpi_comm_brigadier
+
+    @property
+    def brigade_size(self):
+        if self._brigade_size is not None:
+            return self._brigade_size
+        return self._mpi_comm.Get_size()
+
+    @property
+    def brigades(self):
+        if self._brigade_size is not None:
+            return int(self._mpi_comm.Get_size() / self._brigade_size)
+        return 1
+
+    @property
+    def brigade_rank(self):
+        if self._brigade_size is not None:
+            return self._mpi_comm_brigadier.Get_rank()
+        return self.mpi_rank
+
+    @property
+    def matr_dir(self):
+        """This property sets the directory where the method
+        _scaffold_from_disk looks for pickled matrices (in CSR format).
+        It is set in __init__
+        """
+        if self._matr_dir is None:
+            logger.warning("matr_dir not set -- GGCE will construct matrices.")
+        return self._matr_dir
+
+    def __init__(self, brigade_size=None, matr_dir=None, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+        self._matr_dir = matr_dir
+
+        if self._mpi_comm is None:
+            logger.critical(
+                "PETSc solver cannot run with "
+                "mpi_comm=None. Pass MPI_COMM when "
+                "instantiating the MassSolver."
+            )
+
+        # brigade split
+        self._brigade_size = brigade_size
+        if self._brigade_size is not None:
             self.split_into_brigades()
-            self.mpi_rank = self.mpi_comm_brigadier.Get_rank()
-
+        else:
+            logger.warning(
+                "Only one brigade, no splitting required. "
+                "Using original MPI_COMM."
+            )
+            self._mpi_comm_brigadier = self._mpi_comm
 
     def split_into_brigades(self):
+        """Splits the MPI_COMM provided into 'brigades' of ranks operating
+        together. Does this on the basis of the provided _brigade_size,
+        by assigning a process to a brigade on the basis of its global
+        rank modulo the brigade size. mpi_brigade is automatically
+        evaluated as a @property of the class.
 
-        if self.brigades > 1:
-            self.mpi_comm_brigadier = self.mpi_comm.Split(self.mpi_brigade,\
-                                                            self.mpi_rank)
-        else:
-            self._logger.warning("Only one brigade, no splitting required. "\
-                                                    "Using original MPI_COMM.")
-            self.mpi_comm_brigadier = self.mpi_comm
+        If the ranks cannot be evenly divided into brigades, raises an error
+        and terminates the calculation. In future releases brigade splits
+        will be able to handle non-even division and/or adjust on the fly.
+
+        Returns
+        -------
+        None
+            New mpi_comm_brigadier are set as attributes of the class.
+        """
+
+        # for now the implementation has limitations: must have worldsize
+        # evenly divided into brigades
+        assert 1 - self.mpi_world_size % self._brigade_size, logger.error(
+                f"Number of MPI ranks {self.mpi_world_size} cannot be "\
+                f"equally divided into brigades with size {self._brigade_size}."
+            )
+
+        self._mpi_comm_brigadier = self._mpi_comm.Split(
+            self.mpi_brigade, self.mpi_rank
+        )
 
     def get_jobs_on_this_brigade(self, jobs):
         """Get's the jobs assigned to this group of ranks. Note this method
@@ -85,27 +125,27 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         Returns
         -------
         list
-            The jobs assigned to this rank.
+            The jobs assigned to this brigade.
         """
 
-        if self.mpi_comm_brigadier is None:
-            self._logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
+        if self.brigades == 1:
+            logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
-
-        return chunk_jobs(jobs, self.brigades, self.mpi_brigade)
-
-    def set_input_dir(self, dir):
-
-        self.basis_dir = dir
+        return chunk_jobs_equalize(jobs, self.brigades, self.mpi_brigade)
 
     def _setup_petsc_structs(self):
         """This function serves to initialize the various vectors and matrices
         (using PETSc data types) that are needed to solve the linear problem.
-        They are setup using the sparse scheme, in parallel, so that each
-        process owns only a small chunk of it."""
+        They are set up using the sparse scheme, in parallel, so that each
+        process owns only a small chunk of it.
+
+        _mpi_comm_brigadier is used throughout to make sure that separate
+        brigades work on separate (k,w) points, as is intended by the double-
+        parallelization scheme.
+        """
 
         # Initialize the parallel vector b from Ax = b
-        self._vector_b = PETSc.Vec().create(comm=self.mpi_comm_brigadier)
+        self._vector_b = PETSc.Vec().create(comm=self._mpi_comm_brigadier)
 
         # Need to set the total size of the vector
         self._vector_b.setSizes(self._linsys_size)
@@ -121,10 +161,14 @@ class BaseExecutorPETSC(SerialSparseExecutor):
 
         # Figure out what the given process owns
         self._rstart, self._rend = self._vector_b.getOwnershipRange()
-        # self._logger.debug(f"I am rank {self.mpi_rank} in brigade {self.mpi_brigade} and got range {self._rstart} to {self._rend}")
+        logger.debug(
+            f"I am rank {self.mpi_rank} in brigade "\
+            f"{self.mpi_brigade} and got range "\
+            f"{self._rstart} to {self._rend}"
+        )
 
         # Create the matrix for the linear problem
-        self._mat_X = PETSc.Mat().create(comm=self.mpi_comm_brigadier)
+        self._mat_X = PETSc.Mat().create(comm=self._mpi_comm_brigadier)
 
         # set the matrix dimensions
         # input format is [(n,N),(m,M)] where capitals are total matrix
@@ -138,49 +182,63 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         # This sets all the other PETSc options as defaults
         self._mat_X.setFromOptions()
 
-        # This is needed for some reason before PETSc matrix can be used
+        # This actually creates the matrix
         self._mat_X.setUp()
 
-    def prime(self):
-        """Prepare the executor for running by finding the system of equations
-        and basis. Requires a communicator be provided at instantiation."""
+    def _sparse_matrix_from_equations(self, k, w, eta):
+        """This function iterates through the GGCE equations dicts to extract
+        the row, column coordiante and value of the nonzero entries in the
+        matrix. This is subsequently used to construct the parallel sparse
+        system matrix. This is exactly the same as in the Serial class: however
+        that method returns X, v whereas here we need row_ind/col_ind_dat.
 
-        ## needed so that sole method does not fail
-        self.basis_dir = None
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
 
-        if self.mpi_comm_brigadier is None:
-            self._logger.error("Prime failed, no MPI communicator provided")
-            return
+        Returns
+        -------
+        list, list, list
+            The row and column coordinate lists, as well as a list of values of
+            the matrix that are nonzero.
+        """
 
-        self._sparse_prime_helper()
+        row_ind = []
+        col_ind = []
+        dat = []
 
-        # Get the total size of the linear system -- needed by PETSc
-        self._linsys_size = len(self._basis)
+        total_bosons = np.sum(self._system.model.phonon_number)
+        for n_bosons in range(total_bosons + 1):
+            for eq in self._system.equations[n_bosons]:
+                row_dict = dict()
+                index_term_id = eq.index_term.id()
+                ii_basis = self._basis[index_term_id]
 
-        # Call structs to initialize the PETSc vectors and matrices
-        self._setup_petsc_structs()
+                for term in eq._terms_list + [eq.index_term]:
+                    jj = self._basis[term.id()]
+                    try:
+                        row_dict[jj] += term.coefficient(k, w, eta)
+                    except KeyError:
+                        row_dict[jj] = term.coefficient(k, w, eta)
 
-    def prime_from_disk(self):
-        """Prepare the executor for running by loading the system of equations
-        from disk. Requires a communicator be provided at instantiation."""
+                row_ind.extend([ii_basis for _ in range(len(row_dict))])
+                col_ind.extend([key for key, _ in row_dict.items()])
+                dat.extend([value for _, value in row_dict.items()])
 
-        if self.mpi_comm_brigadier is None:
-            self._logger.error("Prime failed, no MPI communicator provided")
-            return
+        # estimate sparse matrix memory usage
+        # (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
+        est_mem_used = 24 * len(dat) / BYTES_TO_GB
+        logger.debug(f"Estimated memory needed is {est_mem_used:.02f} MB")
 
-        self._logger.info(f"Matrices are loaded from disk. "\
-                            f"We will not re-compute the basis.")
+        return row_ind, col_ind, dat
 
-        # Get the total size of the linear system -- needed by PETSc
-        assert self.basis_dir is not None
-        self._linsys_size = self._get_matr_size(self.basis_dir)
-
-        # Call structs to initialize the PETSc vectors and matrices
-        self._setup_petsc_structs()
-
-    # @profile
-    def _assemble_matrix(self, k, w, eta):
-        """The function uses the GGCE equation sparse format data to construct
+    def _scaffold(self, k, w, eta):
+        """This function uses the GGCE equation sparse format data to construct
         a sparse matrix in the PETSc scheme.
 
         Parameters
@@ -198,46 +256,52 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         nothing is returned.
         """
 
+        self._linsys_size = len(self._basis)
+
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
 
         # quickly report the sparsity of the matrix
         self._lengthdat = len(dat)
-        self._sparsity = (self._linsys_size**2 - len(dat)) / self._linsys_size**2
+        self._sparsity = (
+            self._linsys_size**2 - len(dat)
+        ) / self._linsys_size**2
         self._edge_sparsity = len(dat) / self._linsys_size
 
         t0 = time.time()
 
-        ## parse out the nonzero (nnz) matrix structure across rows
-        ## so we can pre-allocate enough space for the matrix
-        ## avoid wasting space and speed up assembly ~ 20x
+        # parse out the nonzero (nnz) matrix structure across rows
+        # so we can pre-allocate enough space for the matrix
+        # avoid wasting space and speed up assembly ~ 20x
 
-        ## set up arrays of length equal to space owned by a given MPI process
-        ## diag and offdiag store the number of nonzero entries in a given row
-        ## in the diagonal or off-diagonal block of the matrix
-        diag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
-        offdiag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
+        # Call structs to initialize the PETSc vectors and matrices
+        self._setup_petsc_structs()
 
-        ## iterate through coo notation arrays to identify the nonzero entry
-        ## number in each row
+        # set up arrays of length equal to space owned by a given MPI process
+        # diag and offdiag store the number of nonzero entries in a given row
+        # in the diagonal or off-diagonal block of the matrix
+        diag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+        offdiag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+
+        # iterate through coo notation arrays to identify the nonzero entry
+        # number in each row
         for i, elem in enumerate(row_ind):
             # check if this row / column is owned by this MPI process
             if self._rstart <= elem and elem < self._rend:
                 if self._rstart <= col_ind[i] and col_ind[i] < self._rend:
-                    diag_nnz[elem-self._rstart] += 1
+                    diag_nnz[elem - self._rstart] += 1
                 else:
-                    offdiag_nnz[elem-self._rstart] += 1
+                    offdiag_nnz[elem - self._rstart] += 1
 
-        ## pass the nnz arrays to PETSC matrix
-        self._mat_X.setPreallocationNNZ((diag_nnz,offdiag_nnz))
+        # pass the nnz arrays to PETSC matrix
+        self._mat_X.setPreallocationNNZ((diag_nnz, offdiag_nnz))
 
-        ## now populate the matrix with actual values
-        row_start = np.zeros(1, dtype='i4')
-        col_pos = np.zeros(1, dtype='i4')
-        val = np.zeros(1, dtype='complex128')
+        # now populate the matrix with actual values
+        row_start = np.zeros(1, dtype="i4")
+        col_pos = np.zeros(1, dtype="i4")
+        val = np.zeros(1, dtype="complex128")
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                # self._logger.debug(f"I am rank {self.mpi_rank} and I am setting the values at {(row_start, col_pos)}")
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -245,21 +309,22 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         self._mat_X.assemblyEnd(self._mat_X.AssemblyType.FINAL)
 
         # Assign values for the b vector
-        finfo = self._model.get_fFunctionInfo()
-        G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
+        a = self._system.model.lattice_constant
+        t = self._system.model.hopping
+        G0 = G0_k_omega(k, w, a, eta, t)
         self._vector_b.setValues(self._linsys_size - 1, G0)
 
         # Need to assemble before use
         self._vector_b.assemblyBegin()
         self._vector_b.assemblyEnd()
 
-        ## TODO: check memory usage
-        ## presently not wrapped for Python
+        # TODO: check memory usage
+        # presently not wrapped for Python
 
         dt = time.time() - t0
-        self._logger.debug("PETSc matrix assembled", elapsed=dt)
+        logger.debug("PETSc matrix assembled", elapsed=dt)
 
-    def _matrix_from_disk(self, k, w, eta, basis_dir):
+    def _scaffold_from_disk(self, k, w, eta, matr_dir):
         """The function uses the GGCE equation sparse format data to construct
         a sparse matrix in the PETSc scheme. Instead of using the basis,
         it loads the CSR elements from disk. The passed parameters
@@ -273,6 +338,8 @@ class BaseExecutorPETSC(SerialSparseExecutor):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
+        matr_dir : string (path)
+            The absolute path of the location of the matrices to be loaded.
 
         Returns
         -------
@@ -280,48 +347,61 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         nothing is returned.
         """
 
-        matrix_loc = os.path.join(basis_dir, f"k_{k}_w_{w}_e_{eta}.bss")
+        logger.info(
+            "Matrices are loaded from disk. GGCE will not re-compute them."
+        )
+
+        # Get the total size of the linear system -- needed by PETSc
+        assert matr_dir is not None
+        self._linsys_size = self._get_matr_size(matr_dir)
+
+        matrix_loc = os.path.join(matr_dir, f"k_{k}_w_{w}_e_{eta}.bss")
         with open(matrix_loc, "rb") as datafile:
             row_ind, col_ind, dat = pickle.load(datafile)
 
-
         # quickly report the sparsity of the matrix
         self._lengthdat = len(dat)
-        self._sparsity = (self._linsys_size**2 - len(dat)) / self._linsys_size**2
+        self._sparsity = (
+            self._linsys_size**2 - len(dat)
+        ) / self._linsys_size**2
         self._edge_sparsity = len(dat) / self._linsys_size
         t0 = time.time()
 
-        ## parse out the nonzero (nnz) matrix structure across rows
-        ## so we can pre-allocate enough space for the matrix
-        ## avoid wasting space and speed up assembly ~ 20x
+        # parse out the nonzero (nnz) matrix structure across rows
+        # so we can pre-allocate enough space for the matrix
+        # avoid wasting space and speed up assembly ~ 20x
 
-        ## set up arrays of length equal to space owned by a given MPI process
-        ## diag and offdiag store the number of nonzero entries in a given row
-        ## in the diagonal or off-diagonal block of the matrix
-        diag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
-        offdiag_nnz = np.zeros(self._rend-self._rstart, dtype='i4')
+        # Call structs to initialize the PETSc vectors and matrices
+        self._setup_petsc_structs()
 
-        ## iterate through coo notation arrays to identify the nonzero entry
-        ## number in each row
+        # set up arrays of length equal to space owned by a given MPI process
+        # diag and offdiag store the number of nonzero entries in a given row
+        # in the diagonal or off-diagonal block of the matrix
+        diag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+        offdiag_nnz = np.zeros(self._rend - self._rstart, dtype="i4")
+
+        # iterate through coo notation arrays to identify the nonzero entry
+        # number in each row
         for i, elem in enumerate(row_ind):
             # check if this row / column is owned by this MPI process
             if self._rstart <= elem and elem < self._rend:
                 if self._rstart <= col_ind[i] and col_ind[i] < self._rend:
-                    diag_nnz[elem-self._rstart] += 1
+                    diag_nnz[elem - self._rstart] += 1
                 else:
-                    offdiag_nnz[elem-self._rstart] += 1
+                    offdiag_nnz[elem - self._rstart] += 1
 
-        ## pass the nnz arrays to PETSC matrix
-        self._mat_X.setPreallocationNNZ((diag_nnz,offdiag_nnz))
+        # pass the nnz arrays to PETSC matrix
+        self._mat_X.setPreallocationNNZ((diag_nnz, offdiag_nnz))
 
-        ## now populate the matrix with actual values
-        row_start = np.zeros(1, dtype='i4')
-        col_pos = np.zeros(1, dtype='i4')
-        val = np.zeros(1, dtype='complex128')
+        # now populate the matrix with actual values
+        row_start = np.zeros(1, dtype="i4")
+        col_pos = np.zeros(1, dtype="i4")
+        val = np.zeros(1, dtype="complex128")
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                # self._logger.debug(f"I am rank {self.mpi_rank} and I am setting the values at {(row_start, col_pos)}")
+                logger.debug(f"I am rank {self.mpi_rank} and I am setting"\
+                f" the values at {(row_start, col_pos)}")
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -337,27 +417,14 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         self._vector_b.assemblyBegin()
         self._vector_b.assemblyEnd()
 
-        ## TODO: check memory usage
-        ## presently not wrapped for Python
+        # TODO: check memory usage
+        # presently not wrapped for Python
 
         dt = time.time() - t0
-        self._logger.debug("PETSc matrix assembled", elapsed=dt)
-
-    def _get_matr_size(self, matr_dir):
-
-        """For use with the _matrix_from_disk method. Helps figure
-           out the ultimate matrix size before loading all in."""
-
-        all_files = os.listdir(matr_dir)
-        all_files = [elem for elem in all_files if ".bss" in elem]
-        random_matr = np.random.choice(all_files)
-        sample_matrix = os.path.join(matr_dir, random_matr)
-        with open(sample_matrix, "rb") as datafile:
-            row_ind, col_ind, dat = pickle.load(datafile)
-
-        matrsize = max(row_ind) + 1
-
-        return matrsize
+        logger.debug(
+            f"PETSc matrix assembled, built from disk at: {self._matr_dir}",
+            elapsed=dt,
+        )
 
     def check_conv_manual(self, pc, rtol):
         """This helper function checks PETSC convergence manually, by computing
@@ -386,7 +453,7 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         # to be preconditioned
         _vector_b_condt = self._vector_b.duplicate()
         pc.apply(self._vector_b, _vector_b_condt)
-        _vector_b_norm  = _vector_b_condt.norm(PETSc.NormType.NORM_2)
+        _vector_b_norm = _vector_b_condt.norm(PETSc.NormType.NORM_2)
 
         # create variable measuring how much tolerance is met / exceeded
         # if positive, we are in trouble
@@ -395,18 +462,16 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         # do a manual residual check on head node
         if self.mpi_rank == 0:
             if self.tol_excess > 0:
-                self._logger.warning(
-                    f"Rank {self.mpi_rank} in brigade {self.mpi_brigade} Solution failed residual relative tolerance check. "
+                logger.warning(
+                    f"Solution failed residual relative tolerance check. "
                     "Solutions likely not fully converged: "
                     f"res_norm ({_vector_res_norm:.02e}) > "
                     f"rtol * b_norm ({rtol*_vector_b_norm:.02e})"
                 )
             else:
-                self._logger.debug("Solution passed manual residual check.")
+                logger.debug("Solution passed manual residual check.")
 
-    def spectrum(
-        self, k, w, eta, return_G=False, return_meta=False, **solve_kwargs\
-        ):
+    def spectrum(self, k, w, eta, return_meta=False, pbar=False):
         """Solves for the spectrum using the PETSc solver backend. Computation
         is serial over k,w, but for each k,w it is massively paralle.
 
@@ -418,11 +483,6 @@ class BaseExecutorPETSC(SerialSparseExecutor):
             The frequency grid point of the calculation.
         eta : float
             The artificial broadening parameter of the calculation.
-        **solve_kwargs
-            Extra arguments to pass to solve().
-        return_G : bool
-            If True, returns the Green's function as opposed to the spectral
-            function.
         return_meta : bool
             If True, returns a tuple of the Green's function and the dictionary
             containing meta information. If False, returns just the Green's
@@ -431,32 +491,81 @@ class BaseExecutorPETSC(SerialSparseExecutor):
         Returns
         -------
         np.ndarray
-            The resultant spectrum.
+            The resultant Green's function array of shape nk by nw.
         """
 
         k = float_to_list(k)
         w = float_to_list(w)
 
-        # All of the jobs run "on the same rank" in this context, whereas in
-        # reality self.solve is parallel for every k,w point
-        self._total_jobs_on_this_rank = len(k) * len(w)
+        # Generate a list of tuples for the (k, w) points to calculate.
+        jobs = [(_k, _w) for _k in k for _w in w]
 
-        s = np.array([[
-            self.solve(_k, _w, eta, **solve_kwargs)
-            for ii, _w in enumerate(w)
-        ] for jj, _k in enumerate(k)])
+        # Chunk the jobs appropriately. Each of these lists look like the jobs
+        # list above.
+        jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
+        self._total_jobs_on_this_brigade = len(jobs_on_brigade)
+        # Get the results on this rank.
+        s = []
+        for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
+            s.append(self.solve(_k, _w, eta))
 
-        # Separate meta information
-        s_vals = s[:,:,0]
-        meta = s[:,:,1]
+        # Gather the results from the brigade commanders to "the general"
+        # (global rank 0)
+        all_results = self._mpi_comm.gather(s, root=0)
+        # create placeholder variables for final bcast of results
+        res = None
+        meta = None
 
-        if return_G:
-            return_vals = s_vals
-        else:
-            return_vals = [[-s_val.imag / np.pi for s_val in s_vals_array]\
-                                                    for s_vals_array in s_vals]
+        # need to get rid of duplicates, since each rank in a brigade sends
+        # a copy of the results from the brigade
+        if self.mpi_rank == 0:
+            results = []
+            if self.brigade_size > 1:
+                for n in range(self.brigades):
+                    results.append(all_results[int(n * self.brigade_size)])
+            else:
+                results = all_results
+
+            results = [xx[ii] for xx in results for ii in range(len(xx))]
+
+            # a copy of the results of the whole brigade
+            s = [xx[0] for xx in results]
+            meta = [xx[1] for xx in results]
+            res = np.array(s)
+
+            # remove nans from the padding
+            res = res[~np.isnan(res)]
+
+            # Ensure the returned array has the proper shape
+            res = res.reshape(len(k), len(w))
+
+        # Broadcast the final result to all ranks
+        # memory intensive but intuitive
+        res = self._mpi_comm.bcast(res, root=0)
+        meta = self._mpi_comm.bcast(meta, root=0)
 
         if return_meta:
-            return (return_vals, meta)
+            return (res, meta)
+        return res
 
-        return return_vals
+    @staticmethod
+    def _k_omega_eta_to_str(k, omega, eta):
+        # Note this will have to be redone when k is a vector in 2 and 3D!
+        return f"{k:.10f}_{omega:.10f}_{eta:.10f}"
+
+    @staticmethod
+    def _get_matr_size(self, matr_dir):
+
+        """For use with the _scaffold_from_disk method. Helps figure
+        out the ultimate matrix size before loading all in."""
+
+        all_files = os.listdir(matr_dir)
+        all_files = [elem for elem in all_files if ".bss" in elem]
+        random_matr = np.random.choice(all_files)
+        sample_matrix = os.path.join(matr_dir, random_matr)
+        with open(sample_matrix, "rb") as datafile:
+            row_ind, col_ind, dat = pickle.load(datafile)
+
+        matrsize = max(row_ind) + 1
+
+        return matrsize
