@@ -391,21 +391,18 @@ class System:
         if self._root is not None:
             Path(root).mkdir(exist_ok=True, parents=True)
 
-        if model is not None:
-            self._model = deepcopy(model)
-            self._save_model()
+        self._model = deepcopy(model)
+        self._save_model()
 
         self._generalized_equations = generalized_equations
         self._f_arg_list = f_arg_list
         self._equations = equations
         self._chkpt_lim = chkpt_lim
 
-        if autoprime and model is not None:
+        if autoprime:
         # Get all of the allowed configurations - additionally checkpoint the
         # generalized configurations in a root directory if its provided
             self._prime_system()
-        elif autoprime and model is None:
-            logger.warning(f"Model object is not provided. System cannot be primed.")
         else:
             logger.warning(f"System has not been primed. Load from disk "\
                            f"or prime explicitly with _prime_system.")
