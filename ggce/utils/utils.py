@@ -45,8 +45,7 @@ def chunk_jobs_equalize(jobs, world_size, rank):
     for ii, jobs in enumerate(jobs_for_all):
         jobs_equalized = jobs.tolist()
         if len(jobs) < len(jobs_for_all[0]):
-            fake_jobs = np.empty(len(jobs_for_all[0,0]))
-            jobs_equalized.append(fake_jobs)
+            jobs_equalized.append([np.nan, np.nan])
         equal_jobs.append(np.array(jobs_equalized))
     return equal_jobs[rank]
 

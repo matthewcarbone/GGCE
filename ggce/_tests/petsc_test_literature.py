@@ -276,11 +276,11 @@ EFB_Figure6_k2_params = {
     "p",
     [
         EFB_Figure5_k0_params,
-        # EFB_Figure6_k0_params,
-        # EFB_Figure5_k1_params,
-        # EFB_Figure6_k1_params,
-        # EFB_Figure5_k2_params,
-        # EFB_Figure6_k2_params,
+        EFB_Figure6_k0_params,
+        EFB_Figure5_k1_params,
+        EFB_Figure6_k1_params,
+        EFB_Figure5_k2_params,
+        EFB_Figure6_k2_params,
     ],
 )
 def test_prb_82_085116_2010(p):

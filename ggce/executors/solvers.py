@@ -62,7 +62,7 @@ class Solver(ABC):
             self._results_directory.mkdir(exist_ok=True, parents=True)
 
         else:
-            logger.warning("root not provided - checkpointing disabled")
+            logger.warning("root not provided to Solver - Solver checkpointing disabled")
             self._results_directory = None
 
         if self._system is None:
@@ -75,7 +75,7 @@ class Solver(ABC):
             self._system.checkpoint()
 
         if self._root is not None:
-            logger.info(f"System checkpointed to {self._root}")
+            logger.info(f"System checkpointed to '/{self._root}'")
 
     def get_jobs_on_this_rank(self, jobs):
         """Gets the jobs assigned to this rank. Note this method silently
@@ -126,7 +126,7 @@ class SerialSolver(Solver):
         result = None
         path = None
         if self._results_directory is not None:
-            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.pckl"
+            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.pkl"
             path = self._results_directory / Path(ckpt_path)
             if path.exists():
                 result = np.array(pickle.load(open(path, "rb")))

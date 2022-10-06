@@ -105,7 +105,7 @@ class MassSolverMUMPS(MassSolver):
         result = None
         path = None
         if self._results_directory is not None:
-            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.pckl"
+            ckpt_path = f"{self._k_omega_eta_to_str(k, w, eta)}.pkl"
             path = self._results_directory / Path(ckpt_path)
             if path.exists():
                 result = np.array(pickle.load(open(path, "rb")))

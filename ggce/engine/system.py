@@ -298,10 +298,31 @@ class System:
         """Runs the checkpoint protocol to attempt and save the current
         state of the system. This method will only run if a root directory is
         defined at class instantiation. Note that existing checkpoints will
-        never be overwritten."""
+        never be overwritten.
+
+        If the number of equations is larger than a pre-specified cutoff
+        (by default 1,000,000), then checkpointing raises a warning and
+        does not work.
+        """
 
         if self._root is None:
+            logger.warning("root not provided to System - System checkpointing disabled")
             return
+
+        # check how many equations there are -- if too many, checkpointing
+        # will be disabled
+        try:
+            L = sum([len(val) for val in self._equations.values()])
+            if L > self._chkpt_lim:
+                logger.warning(f"\nMatrices have size {L}, which is larger than the"\
+                               f" checkpoint limit {self._chkpt_lim:.0f}.\nPickle "\
+                               f"performance expected to be slow for such large"\
+                               f" files. System checkpointing is disabled.\n"\
+                               f"To override the preset, pass a value for chkpt_lim"\
+                               f" to System object.")
+                return
+        except AttributeError: ## just means no equations generated yet
+            pass
 
         for attr in ["generalized_equations", "f_arg_list", "equations"]:
             obj = eval(f"self._{attr}")
@@ -357,26 +378,44 @@ class System:
 
     def __init__(
         self,
-        model,
+        model=None,
         generalized_equations=None,
         f_arg_list=None,  # TODO: pool f_arg_list into generalized_equations
         equations=None,
         root=None,
         mpi_comm=None,
+        chkpt_lim=1e6,
+        autoprime=True
     ):
         self._root = root
         if self._root is not None:
             Path(root).mkdir(exist_ok=True, parents=True)
 
-        self._model = deepcopy(model)
-        self._save_model()
+        if model is not None:
+            self._model = deepcopy(model)
+            self._save_model()
 
         self._generalized_equations = generalized_equations
         self._f_arg_list = f_arg_list
         self._equations = equations
+        self._chkpt_lim = chkpt_lim
 
+        if autoprime and model is not None:
         # Get all of the allowed configurations - additionally checkpoint the
         # generalized configurations in a root directory if its provided
+            self._prime_system()
+        elif autoprime and model is None:
+            logger.warning(f"Model object is not provided. System cannot be primed.")
+        else:
+            logger.warning(f"System has not been primed. Load from disk "\
+                           f"or prime explicitly with _prime_system.")
+
+    def _prime_system(self):
+        """Helper function that facilitates the construction of configs,
+        generalized and total equations. By default it is called during
+        init, but it can be disabled by passing autoprime=False, in case a
+        user wants to initialize the system from disk or save initialization
+        for later."""
         if self._generalized_equations is None:
             with timeit(logger.debug, "Legal configurations generated"):
                 confs = generate_all_legal_configurations(self._model)
@@ -395,6 +434,7 @@ class System:
 
         with timeit(logger.debug, "Final checks"):
             self._final_checks()
+
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't

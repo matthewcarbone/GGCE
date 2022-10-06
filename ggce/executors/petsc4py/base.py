@@ -8,7 +8,7 @@ from petsc4py import PETSc
 
 from ggce.logger import logger
 from ggce.utils.physics import G0_k_omega
-from ggce.utils.utils import chunk_jobs, float_to_list
+from ggce.utils.utils import chunk_jobs_equalize, float_to_list
 from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
@@ -103,11 +103,9 @@ class MassSolver(Solver):
 
         # for now the implementation has limitations: must have worldsize
         # evenly divided into brigades
-        try:
-            assert 1 - self.mpi_world_size % self._brigade_size
-        except AssertionError:
-            logger.critical(
-                "Number of MPI ranks cannot be equally divided into brigades."
+        assert 1 - self.mpi_world_size % self._brigade_size, logger.error(
+                f"Number of MPI ranks {self.mpi_world_size} cannot be "\
+                f"equally divided into brigades with size {self._brigade_size}."
             )
 
         self._mpi_comm_brigadier = self._mpi_comm.Split(
@@ -133,7 +131,7 @@ class MassSolver(Solver):
         if self.brigades == 1:
             logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
-        return chunk_jobs(jobs, self.brigades, self.mpi_brigade)
+        return chunk_jobs_equalize(jobs, self.brigades, self.mpi_brigade)
 
     def _setup_petsc_structs(self):
         """This function serves to initialize the various vectors and matrices
