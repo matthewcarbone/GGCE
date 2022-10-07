@@ -81,8 +81,69 @@ for a typical Linux cluster (tested on the LISA cluster at University of British
 Columbia's Quantum Matter Institute and the Institutional Cluster at the Scientific Data and Computing Center, Brookhaven National Laboratory).
 
 
-LISA cluster installation
-"""""""""""""""""""""""""
+Institutional Cluster installation (Brookhaven National Lab)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Unlike other examples as presented here, we will use ``pip``'s software environment manager, as often times ``conda`` does not play nice with many high performance computing clusters. 
+
+#. Load the correct modules and create a software environment.
+
+    .. code-block:: bash
+
+        module load python/3.7
+        python3 -m pip install --user virtualenv
+        python3 -m venv ggce_env
+        source ggce_env/bin/activate
+
+#. Load the *correct* ``openmpi`` module.
+   
+    .. code-block:: bash
+
+        module load openmpi
+
+   This will probably be something like ``/hpcgpfs01/software/openmpi/3.1.1-gnu/bin/mpicc`` (at least as of July 2021).
+
+#. Using ``pip``, install ``mpi4py``.
+   
+    .. code-block:: bash
+
+        pip install mpi4py
+
+   This should result in something like the following when checking the ``mpi4py`` config in Python:
+
+    .. code-block:: python
+
+        import mpi4py
+        mpi4py.get_config()
+        {
+            'mpicc': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpicc',    
+            'mpicxx': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpicxx',
+            'mpifort': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpifort',
+            'mpif90': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpif90',
+            'mpif77': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpif77'
+        }
+
+#. Set required environment variables.
+   
+    .. code-block:: bash
+
+        export PETSC_CONFIGURE_OPTIONS="--with-scalar-type=complex --download-mumps --download-scalapack"
+
+    .. warning::
+
+        This step is extremely important. For example, if the scalar type is not set to complex, PESTc will compute all quantities using real numbers only *but will not warn the user*. This can cause all spectral functions to inadvertently be 0, and of course the Green's functions will be totally incorrect as well.
+
+#. Finally, install both ``petsc`` and ``petsc4py``.
+   
+    .. code-block:: bash
+
+        pip install petsc petsc4py
+
+   This step might fail quite a few times as ``pip`` tries to figure out the right files to use to build these packages, but usually it succeeds in the end.
+
+
+LISA cluster installation (University of British Columbia)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 #. Again, make sure to be in your freshly installed conda environment, with the
    correct MPI packages and their corresponding compilers loaded. Either MPICH or
