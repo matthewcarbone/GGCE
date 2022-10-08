@@ -2,9 +2,11 @@ import pytest
 
 import numpy as np
 import shutil, os, json
+from pathlib import Path
+import pickle
 
 from ggce.logger import _testing_mode
-from ggce import Model, System
+from ggce import Model, System, SparseSolver
 
 model_h = {
     "model_params": dict(
@@ -30,8 +32,8 @@ model_p = {
     "model_add_params": dict(
         coupling_type="Peierls",
         phonon_frequency=2.35,
-        phonon_extent=5,
-        phonon_number=9,
+        phonon_extent=3,
+        phonon_number=4,
         dimensionless_coupling_strength=1.3,
     ),
     "k": 1.46,
@@ -47,15 +49,15 @@ model_hp = {
     "model_add_params": dict(
         coupling_type="Holstein",
         phonon_frequency=1.23,
-        phonon_extent=4,
-        phonon_number=7,
+        phonon_extent=2,
+        phonon_number=4,
         dimensionless_coupling_strength=0.6,
     ),
     "model_add_params2": dict(
         coupling_type="Peierls",
         phonon_frequency=0.69,
         phonon_extent=2,
-        phonon_number=13,
+        phonon_number=3,
         dimensionless_coupling_strength=2.3,
     ),
     "k": 0.46,
@@ -209,6 +211,42 @@ def test_model_chkpt(p):
 
     assert model == model_disk
 
-def test_res_chkpt():
-    #TODO test the checkpointing of results
-    pass
+    shutil.rmtree(root)
+
+@pytest.mark.parametrize(
+    "p",
+    [
+        model_h,
+        model_p,
+        model_hp,
+        model_ht,
+        model_pt,
+        model_hpt,
+    ],
+)
+def test_res_chkpt(p):
+    model = Model.from_parameters(**p["model_params"])
+    model.add_(**p["model_add_params"])
+    # accommodate double-parameter case
+    try:
+        model.add_(**p["model_add_params2"])
+    except KeyError:
+        pass
+
+    root = p["root_res"]
+    executor = SparseSolver(System(model),root=root)
+    w_grid = np.linspace(-3,-2,10)
+
+    results = executor.spectrum(p["k"], w_grid, eta=p["eta"]).squeeze()
+
+    # load results from disk and confirm
+    results_disk = []
+    for w in w_grid:
+        pathstr = executor._k_omega_eta_to_str(p["k"], w, p["eta"])
+        ckpt_path = f"{pathstr}.pkl"
+        path = executor._results_directory / Path(ckpt_path)
+        results_disk.append(np.array(pickle.load(open(path, "rb"))))
+
+    assert (results == results_disk).all()
+
+    shutil.rmtree(root)
