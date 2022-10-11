@@ -15,18 +15,30 @@ authors:
   - name: Stepan Fomichev
     equal-contrib: true
     affiliation: 2
+  - name: Andrew J. Millis
+    affiliation: "3, 4" # (Multiple affiliations must be quoted)
+  - name: Mona Berciu
+    affiliation: 2 # (Multiple affiliations must be quoted)
+  - name: David R. Reichman
+    affiliation: 5 # (Multiple affiliations must be quoted)
   - name: John Sous
     corresponding: true
-    affiliation: "3,4"
+    affiliation: "6, 7"
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
    index: 1
  - name: Department of Physics and Astronomy, University of British Columbia, Vancouver, British Columbia V6T 1Z1, Canada
    index: 2
- - name: Department of Physics, Stanford University, Stanford, CA 93405, USA
+ - name: Department of Physics, Columbia University, New York, New York 10027, USA
    index: 3
- - name: Geballe Laboratory for Advanced Materials, Stanford University, Stanford, California 94305, USA
+ - name: Center for Computational Quantum Physics, Flatiron Institute, New York, New York 10010, USA
    index: 4
+ - name: Department of Chemistry, Columbia University, New York, New York 10027, USA
+   index: 5
+ - name: Department of Physics, Stanford University, Stanford, California 93405, USA
+   index: 6
+ - name: Geballe Laboratory for Advanced Materials, Stanford University, Stanford, California 94305, USA
+   index: 7
 date: TODO
 bibliography: paper.bib
 # Optional fields if submitting to a AAS journal too, see this blog post:
