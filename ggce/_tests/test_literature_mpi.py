@@ -4,7 +4,13 @@ import numpy as np
 
 from ggce import Model, System, SparseSolver, DenseSolver
 
-from mpi4py import MPI
+mpi4py_imported = False
+try:
+    from mpi4py import MPI
+
+    mpi4py_imported = True
+except ImportError:
+    pass
 
 ATOL = 1.0e-4
 
@@ -273,6 +279,7 @@ EFB_Figure6_k2_params = {
 }
 
 
+@pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
 @pytest.mark.mpi(min_size=1)
 @pytest.mark.parametrize(
     "p",
