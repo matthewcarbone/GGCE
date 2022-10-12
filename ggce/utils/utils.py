@@ -28,26 +28,33 @@ class Buffer:
         if self.counter >= self.nbuff:
             self.flush()
 
-
 def chunk_jobs(jobs, world_size, rank):
     return np.array_split(jobs, world_size)[rank].tolist()
 
-def chunk_jobs_equalize(jobs, world_size, rank):
-    '''Key difference from the chunk_jobs function is that
-       if jobs are found to be chunked into unequal-length arrays
-       then this function equalizes them by padding with redundant
-       copies of np.nan.
-       This is needed by the MPI brigade double parallelization scheme
-       of PETSc to not hang when job numbers are unequal due to present
-       clunkiness of the PETSc Python wrapper.'''
-    jobs_for_all = sorted(np.array_split(jobs, world_size),key=len,reverse=True)
-    equal_jobs = []
-    for ii, jobs in enumerate(jobs_for_all):
-        jobs_equalized = jobs.tolist()
-        if len(jobs) < len(jobs_for_all[0]):
-            jobs_equalized.append([np.nan, np.nan])
-        equal_jobs.append(np.array(jobs_equalized))
-    return equal_jobs[rank]
+def padded_kw(k, w, num_brig, ext=20):
+    '''For two arrays of given width and chunk size,
+       this gives the optimal padding amount. ext
+       fixes how far are we willing to go.'''
+
+    # if w is not 1, pad w, otherwise pad k
+    if len(w) > 1:
+        rems = (len(k) * np.array([len(w)+ii for ii in range(ext)])) % num_brig
+        num_pads = np.where(rems == 0)[0][0]
+        w_new = np.zeros(len(w) + num_pads)
+        dw = w[-1] - w[-2]
+        pad_arr = np.array([w[-1] + ii*dw for ii in range(num_pads)])
+        w_new[:len(w)] = w
+        w_new[len(w):] = pad_arr
+        return k, w_new
+    else:
+        rems = (np.array([len(k)+ii for ii in range(ext)]) * len(w)) % num_brig
+        num_pads = np.where(rems == 0)[0][0]
+        k_new = np.zeros(len(k) + num_pads)
+        dk = k[-1] - k[-2]
+        pad_arr = np.array([k[-1] + ii*dk for ii in range(num_pads)])
+        k_new[:len(k)] = k
+        k_new[len(k):] = pad_arr
+        return k_new, w
 
 def float_to_list(val):
     if isinstance(val, float):
