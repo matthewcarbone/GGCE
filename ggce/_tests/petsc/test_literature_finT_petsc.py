@@ -183,6 +183,8 @@ def test_prb_102_165155_2020(p):
 ## accurate performance (as tested against literature data above)
 ## but in a small cloud regime -- so the result does not agree with the
 ## literature exactly, but it would if it was run at higher theory levels
+@pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
+@pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
 @pytest.mark.parametrize(
     "p",
     [
