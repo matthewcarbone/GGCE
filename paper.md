@@ -24,6 +24,7 @@ authors:
     affiliation: 6 # (Multiple affiliations must be quoted)
   - name: John Sous
     corresponding: true
+    orcid: 0000-0002-9994-5789
     affiliation: "7, 8"
 affiliations:
  - name: Computational Science Initiative, Brookhaven National Laboratory, Upton, New York 11973, USA
