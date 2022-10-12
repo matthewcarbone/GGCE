@@ -1,9 +1,16 @@
 import pytest
 
 import numpy as np
-from mpi4py import MPI
 
 from ggce import Model, System
+
+mpi4py_imported = False
+try:
+    from mpi4py import MPI
+
+    mpi4py_imported = True
+except ImportError:
+    pass
 
 petsc_imported = False
 try:
