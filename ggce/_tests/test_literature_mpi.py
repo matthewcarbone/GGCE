@@ -2,8 +2,9 @@ import pytest
 
 import numpy as np
 
-from ggce import Model, System#, MassSolverMUMPS
-from ggce.executors.petsc4py.solvers import MassSolverMUMPS
+from ggce import Model, System, SparseSolver, DenseSolver
+
+from mpi4py import MPI
 
 ATOL = 1.0e-4
 
@@ -271,7 +272,8 @@ EFB_Figure6_k2_params = {
     "eta": 0.005,
 }
 
-@pytest.mark.mpi(min_size=2)
+
+@pytest.mark.mpi(min_size=1)
 @pytest.mark.parametrize(
     "p",
     [
@@ -284,16 +286,23 @@ EFB_Figure6_k2_params = {
     ],
 )
 def test_prb_82_085116_2010(p):
-    from mpi4py import MPI
+
     COMM = MPI.COMM_WORLD
+
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])
     model.add_(**p["model_add_params"])
-
-    executor_petsc = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
+    executor_dense = DenseSolver(system=System(model),mpi_comm=COMM)
+    executor_sparse = SparseSolver(system=System(model),mpi_comm=COMM)
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 
-    results_petsc = executor_petsc.spectrum(p["k"], w_grid, eta=p["eta"])
-    results_petsc = (-results_petsc.imag / np.pi).squeeze()
-    assert np.allclose(results_petsc, A_gt, atol=ATOL)
+    results_dense = executor_dense.spectrum(p["k"], w_grid, eta=p["eta"])
+    results_sparse = executor_sparse.spectrum(p["k"], w_grid, eta=p["eta"])
+
+    if COMM.Get_rank() == 0:
+        results_dense = (-results_dense.imag / np.pi).squeeze()
+        results_sparse = (-results_sparse.imag / np.pi).squeeze()
+
+        assert np.allclose(results_dense, results_sparse, atol=ATOL)
+        assert np.allclose(results_sparse, A_gt, atol=ATOL)

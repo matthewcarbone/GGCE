@@ -121,7 +121,7 @@ class Solver(ABC):
         ...
 
 
-class SerialSolver(Solver):
+class BasicSolver(Solver):
     def _pre_solve(self, k, w, eta):
         result = None
         path = None
@@ -139,7 +139,8 @@ class SerialSolver(Solver):
             pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
     def spectrum(self, k, w, eta, pbar=False):
-        """Solves for the spectrum in serial.
+        """Solves for the spectrum in serial or in parallel, depending on
+        whether MPI_COMM is provided to the Solver at instantiation.
 
         Parameters
         ----------
@@ -173,14 +174,19 @@ class SerialSolver(Solver):
 
             # Only rank 0 returns the result
             if self.mpi_rank == 0:
-                return np.array(all_results).reshape(len(k), len(w))
+                ## all_results is a list of arrays of different length
+                ## need to parse it properly into an array
+                all_results = [xx[ii] for xx in all_results \
+                                                    for ii in range(len(xx))]
+                s = np.array([xx for xx in all_results])
+                return s.reshape(len(k), len(w))
             else:
                 return None
 
         return np.array(s).reshape(len(k), len(w))
 
 
-class SparseSolver(SerialSolver):
+class SparseSolver(BasicSolver):
     """A sparse, serial solver for the Green's function. Useful for when the
     calculation being performed is quite cheap. Note that there are a variety
     of checkpointing features automatically executed when paths are provided.
@@ -335,7 +341,7 @@ class SparseSolver(SerialSolver):
         return np.array(G)
 
 
-class DenseSolver(SerialSolver):
+class DenseSolver(BasicSolver):
     """A sparse, dense solver for the Green's function. Note that there are a
     variety of checkpointing features automatically executed when paths are
     provided. Uses the SciPy dense solver engine to solve for G(k, w) in
