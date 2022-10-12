@@ -83,9 +83,9 @@ Provided with a root directory, System will also automatically checkpoint the ba
 
 ## Solvers
 
-At the heart of the GGCE engine are the solvers, which implement different approaches to solving the linear systems of equations obtained by a System object. The simplest of these use NumPy's dense solver, which solves the equation-of-motion matrix using a continued fraction approach [@Goodvin2006prb], or SciPy's sparse solver. For truly large-scale computations with sizable phonon clouds and/or many different electron-phonon coupling operating simultaneously, GGCE interfaces with the powerful, massively parallel PESTc sparse solver engine. Even the non-PETSc version of GGCE is MPI enabled, and allows for a variety of parallelization schemes, all of which are detailed in our documentation.
+At the heart of the GGCE engine are the solvers, which implement different approaches to solving the linear systems of equations obtained by a System object. The simplest of these use NumPy's dense solver, which solves the equation-of-motion matrix using a continued fraction approach [@Goodvin2006prb], or SciPy's sparse solver. For truly large-scale computations with sizable phonon clouds and/or many different electron-phonon coupling operating simultaneously, GGCE interfaces with the powerful, massively parallel PESTc sparse solver engine. All GGCE Solvers are MPI-enabled, and allow for a variety of parallelization schemes, all of which are detailed in our documentation. At the extreme, the PETSc interface can parallelize runs both across momentum-energy points and also parallelize the solution of a single large sparse matrix at each point, and thus allowing for straightforward use of all available cluster resources.
 
-The spectrum Solver method allows the user to quickly evaluate the Green's function at a specified range of momenta and energies.
+The spectrum Solver method allows the user to quickly evaluate the Green's function at a specified range of momenta and energies. Like the System, it automatically checkpoints the solution (Green's function value) at every momentum-energy point using pickle, allowing for restart in case of failure or time limits on cluster jobs.
 
 # Acknowledgements
 
