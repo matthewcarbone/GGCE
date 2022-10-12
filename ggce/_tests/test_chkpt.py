@@ -1,16 +1,18 @@
+import json
+import os
 import pytest
+import shutil
 
 import numpy as np
-import shutil, os, json
+
 from pathlib import Path
 import pickle
 
-from ggce.logger import _testing_mode
 from ggce import Model, System, SparseSolver
 
 model_h = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -22,12 +24,12 @@ model_h = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_p = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -39,12 +41,12 @@ model_p = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hp = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -63,12 +65,12 @@ model_hp = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_ht = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.6
+        hopping=1.0, phonon_max_per_site=None, temperature=0.6
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -82,12 +84,12 @@ model_ht = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_pt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=1.3
+        hopping=1.0, phonon_max_per_site=None, temperature=1.3
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -101,12 +103,12 @@ model_pt = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hpt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=2.1
+        hopping=1.0, phonon_max_per_site=None, temperature=2.1
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -129,8 +131,9 @@ model_hpt = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
+
 
 @pytest.mark.parametrize(
     "p",
@@ -153,7 +156,7 @@ def test_sys_chkpt(p):
         pass
 
     root = p["root_sys"]
-    sys = System(model=model,root=root)
+    sys = System(model=model, root=root)
     sys.checkpoint()
 
     sys_disk = System.from_checkpoint(root)
@@ -182,6 +185,7 @@ def test_sys_chkpt(p):
 
     shutil.rmtree(root)
 
+
 @pytest.mark.parametrize(
     "p",
     [
@@ -202,16 +206,17 @@ def test_model_chkpt(p):
     except KeyError:
         pass
     root = p["root_sys"]
-    sys = System(model=model,root=root,autoprime=False)
+    System(model=model, root=root, autoprime=False)
 
-    with open( os.path.join(root, "model.json"), "rb") as f:
+    with open(os.path.join(root, "model.json"), "rb") as f:
         model_disk = json.load(f)
 
-    model = json.loads(model.to_json()) # convert to str for comparison
+    model = json.loads(model.to_json())  # convert to str for comparison
 
     assert model == model_disk
 
     shutil.rmtree(root)
+
 
 @pytest.mark.parametrize(
     "p",
@@ -234,8 +239,8 @@ def test_res_chkpt(p):
         pass
 
     root = p["root_res"]
-    executor = SparseSolver(System(model),root=root)
-    w_grid = np.linspace(-3,-2,10)
+    executor = SparseSolver(System(model), root=root)
+    w_grid = np.linspace(-3, -2, 10)
 
     results = executor.spectrum(p["k"], w_grid, eta=p["eta"]).squeeze()
 

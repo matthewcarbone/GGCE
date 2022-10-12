@@ -271,8 +271,10 @@ EFB_Figure6_k2_params = {
     "eta": 0.005,
 }
 
-@pytest.mark.skipif(importlib.util.find_spec('petsc4py') is None, \
-                                                reason = "PETSc not installed")
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("petsc4py") is None, reason="PETSc not installed"
+)
 @pytest.mark.mpi(min_size=2)
 @pytest.mark.parametrize(
     "p",
@@ -287,12 +289,14 @@ EFB_Figure6_k2_params = {
 )
 def test_prb_82_085116_2010(p):
     from mpi4py import MPI
+
     COMM = MPI.COMM_WORLD
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])
     model.add_(**p["model_add_params"])
 
     from ggce.executors.petsc4py.solvers import MassSolverMUMPS
+
     executor_petsc = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]

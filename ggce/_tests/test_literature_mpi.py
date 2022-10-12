@@ -292,8 +292,8 @@ def test_prb_82_085116_2010(p):
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])
     model.add_(**p["model_add_params"])
-    executor_dense = DenseSolver(system=System(model),mpi_comm=COMM)
-    executor_sparse = SparseSolver(system=System(model),mpi_comm=COMM)
+    executor_dense = DenseSolver(system=System(model), mpi_comm=COMM)
+    executor_sparse = SparseSolver(system=System(model), mpi_comm=COMM)
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 

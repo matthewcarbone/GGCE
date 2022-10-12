@@ -1,19 +1,25 @@
 import pytest
-import importlib
 
 import numpy as np
+from mpi4py import MPI
 
 from ggce import Model, System
-from ggce.executors.petsc4py.solvers import MassSolverMUMPS
 
-from mpi4py import MPI
+petsc_imported = False
+try:
+    from ggce.executors.petsc4py.solvers import MassSolverMUMPS
+
+    petsc_imported = True
+except ImportError:
+    pass
+
 
 ATOL = 1.0e-6
 TEPS = 1.0e-6
 
 model_h = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -25,12 +31,12 @@ model_h = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_p = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -42,12 +48,12 @@ model_p = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hp = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -66,12 +72,12 @@ model_hp = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_ht = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -85,12 +91,12 @@ model_ht = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_pt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -104,12 +110,12 @@ model_pt = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hpt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -132,21 +138,18 @@ model_hpt = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
-@pytest.mark.skipif(importlib.util.find_spec('petsc4py') is None, \
-                                                reason = "PETSc not installed")
+
+@pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
 @pytest.mark.mpi(min_size=2)
 @pytest.mark.parametrize(
     "p",
     [
-        [model_h,
-        model_ht],
-        [model_p,
-        model_pt],
-        [model_hp,
-        model_hpt],
+        [model_h, model_ht],
+        [model_p, model_pt],
+        [model_hp, model_hpt],
     ],
 )
 def test_zero_vs_tiny_T(p):
@@ -166,7 +169,7 @@ def test_zero_vs_tiny_T(p):
     except KeyError:
         pass
 
-    solver = MassSolverMUMPS(system=System(model), mpi_comm = COMM)
+    solver = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
     results = solver.spectrum(k, w, eta=p[0]["eta"]).squeeze()
 
     # Check the true T=epsilon case
@@ -179,7 +182,7 @@ def test_zero_vs_tiny_T(p):
     except KeyError:
         pass
 
-    solver = MassSolverMUMPS(system=System(model), mpi_comm = COMM)
+    solver = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
     results_t = solver.spectrum(k, w, eta=p[1]["eta"]).squeeze()
 
     assert np.allclose(results, results_t, atol=ATOL)

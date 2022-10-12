@@ -9,7 +9,7 @@ TEPS = 1.0e-6
 
 model_h = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -21,12 +21,12 @@ model_h = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_p = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -38,12 +38,12 @@ model_p = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hp = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=0.0
+        hopping=1.0, phonon_max_per_site=None, temperature=0.0
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -62,12 +62,12 @@ model_hp = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_ht = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -81,12 +81,12 @@ model_ht = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_pt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Peierls",
@@ -100,12 +100,12 @@ model_pt = {
     "k": 1.46,
     "eta": 0.5,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 model_hpt = {
     "model_params": dict(
-        hopping=1., phonon_max_per_site=None, temperature=TEPS
+        hopping=1.0, phonon_max_per_site=None, temperature=TEPS
     ),
     "model_add_params": dict(
         coupling_type="Holstein",
@@ -128,25 +128,19 @@ model_hpt = {
     "k": 0.46,
     "eta": 0.005,
     "root_sys": "sys_chkpt",
-    "root_res": "res_chkpt"
+    "root_res": "res_chkpt",
 }
 
 
 @pytest.mark.parametrize(
     "p",
     [
-        [model_h,
-        model_ht],
-        [model_p,
-        model_pt],
-        [model_hp,
-        model_hpt],
+        [model_h, model_ht],
+        [model_p, model_pt],
+        [model_hp, model_hpt],
     ],
 )
 def test_zero_vs_tiny_T(p):
-    root_dir = f"/mnt/c/Users/bobst/Documents/University_of_British_Columbia/"\
-               f"Physics/Mona_Berciu/Generalized_Green_function_cluster_expansion/"\
-               f"fixing_h_pl_p_bug/scripts/petsc_test"
 
     k = p[0]["k"]
     w = np.linspace(-2, 0, 10)
