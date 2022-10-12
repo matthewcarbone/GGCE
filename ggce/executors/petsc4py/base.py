@@ -473,7 +473,8 @@ class MassSolver(Solver):
 
     def spectrum(self, k, w, eta, return_meta=False, pbar=False):
         """Solves for the spectrum using the PETSc solver backend. Computation
-        is serial over k,w, but for each k,w it is massively paralle.
+        is massively parallel over k,w and for each matrix at a
+        given (k,w) point.
 
         Parameters
         ----------
