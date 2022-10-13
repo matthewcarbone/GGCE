@@ -95,7 +95,7 @@ def configure_loggers(
         )
 
     # Only log info, success and warnings on RANK == 0
-    if MPI_WORLD_SIZE == 1:
+    if MPI_RANK == 0:
         logger.add(
             sys.stdout,
             colorize=True,
@@ -118,7 +118,7 @@ def configure_loggers(
     )
 
     # We always exit on critical
-    if COMM is None:
+    if MPI_WORLD_SIZE == 1:
         logger.add(lambda _: sys.exit(1), level="CRITICAL")
     else:
         logger.add(lambda _: COMM.Abort(), level="CRITICAL")
