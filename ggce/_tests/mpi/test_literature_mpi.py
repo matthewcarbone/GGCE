@@ -280,7 +280,7 @@ EFB_Figure6_k2_params = {
 
 
 @pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
-@pytest.mark.mpi(min_size=1)
+@pytest.mark.mpi(min_size=2)
 @pytest.mark.parametrize(
     "p",
     [
