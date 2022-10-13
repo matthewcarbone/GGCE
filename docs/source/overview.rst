@@ -2,4 +2,4 @@
 Overview
 ========
 
-Describe GGCE here!
+GGCE is a fantastic module full of excellent methods.

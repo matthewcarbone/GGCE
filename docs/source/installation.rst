@@ -2,11 +2,11 @@
 Installation
 ============
 
-The following text documents how one should install the GGCE package. Note that currently only support for **Linux** and **MacOS (Intel)** is supported. 
+The following text documents how one should install the GGCE package. Note that currently only support for **Linux** and **MacOS (Intel)** is supported.
 
 .. warning::
 
-   We cannot guarantee that the package works correctly on Windows operating systems. We also cannot guarantee that the package will work correctly on ARM-based Mac M1 or M2 machines, as these are still quite new, and occasionally some packages that GGCE depends on may break.
+   We cannot guarantee that the package works correctly on Windows operating systems (although it has been tested in [https://learn.microsoft.com/en-us/windows/wsl/about](URL "Windows Subsystem for Linux") (WSL/WSL2)). We also cannot guarantee that the package will work correctly on ARM-based Mac M1 or M2 machines, as these are still quite new, and occasionally some packages that GGCE depends on may break.
 
 Standard installation
 ---------------------
@@ -28,7 +28,7 @@ TK
 
    pip install e ".[dev]"
 
-which will also install all the optional development requirements in ``requirements-dev.txt``. We generally recommend using a virtual environment via e.g. ``conda`` to ensure reproducibility and that there are no package conflicts.
+which will also install all the optional development requirements in ``requirements-dev.txt``. We generally recommend using a virtual environment via e.g. ``conda`` to ensure reproducibility and so that there are no package conflicts.
 
 Advanced installation via pip
 -----------------------------
@@ -61,7 +61,7 @@ Some of the functionality of the GGCE code can be improved by parallelizing calc
 #. Point the ``MPICC`` path to the executables corresponding to the loaded modules. This can usually be done by ``export MPICC=$(which mpicc)``, where you'll want to check via ``echo $MPICC`` that this is indeed the correct path.
 
 #. Install ``mpi4py`` using ``pip``, *not* ``conda``. ``conda`` tends to ignore the cluster executables in favor of its own locally installed versions, and then when running calculations, the correct executables will not be detected and all processes will correspond to rank 0.
-   
+
    .. code-block:: bash
 
       pip install mpi4py
@@ -75,16 +75,15 @@ Enable usage of PETSc for massively parallel computations
 
 `PETSc <https://www.mcs.anl.gov/petsc/index.html>`__ is a software library created and maintained at the Argonne National Laboratory for massively parallel solution of large linear systems of equations (e.g. finite-difference approaches to PDEs). It provides an interface to a long list of linear system solution methods (MUMPS, PARDISO, Krylov), preconditioners, and data structures that allow rapid optimization of the solution method for the problem at hand.
 
-Since PETSc relies on MPI for multi-core parallelization, the same caveats about
-using the ``conda`` package management apply. Below are installation instructions
+Since PETSc relies on MPI for multi-core parallelization, just as above, do not use ``conda`` to install mpi4py. Below are installation instructions
 for a typical Linux cluster (tested on the LISA cluster at University of British
-Columbia's Quantum Matter Institute and the Institutional Cluster at the Scientific Data and Computing Center, Brookhaven National Laboratory).
+Columbia's Stewart Blusson Quantum Matter Institute, the Cedar cluster at the WestGrid consortium (Compute Canada network) and the Institutional Cluster at the Scientific Data and Computing Center, Brookhaven National Laboratory).
 
 
-Institutional Cluster installation (Brookhaven National Lab)
+Institutional Cluster installation (Brookhaven National Lab / LISA SBQMI)
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-Unlike other examples as presented here, we will use ``pip``'s software environment manager, as often times ``conda`` does not play nice with many high performance computing clusters. 
+Unlike other examples as presented here, we will use ``pip``'s software environment manager, as often times ``conda`` does not play nice with many high performance computing clusters.
 
 #. Load the correct modules and create a software environment.
 
@@ -96,7 +95,7 @@ Unlike other examples as presented here, we will use ``pip``'s software environm
         source ggce_env/bin/activate
 
 #. Load the *correct* ``openmpi`` module.
-   
+
     .. code-block:: bash
 
         module load openmpi
@@ -104,7 +103,7 @@ Unlike other examples as presented here, we will use ``pip``'s software environm
    This will probably be something like ``/hpcgpfs01/software/openmpi/3.1.1-gnu/bin/mpicc`` (at least as of July 2021).
 
 #. Using ``pip``, install ``mpi4py``.
-   
+
     .. code-block:: bash
 
         pip install mpi4py
@@ -116,7 +115,7 @@ Unlike other examples as presented here, we will use ``pip``'s software environm
         import mpi4py
         mpi4py.get_config()
         {
-            'mpicc': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpicc',    
+            'mpicc': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpicc',
             'mpicxx': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpicxx',
             'mpifort': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpifort',
             'mpif90': '/hpcgpfs01/software/openmpi/3.1.1-gnu//bin/mpif90',
@@ -124,7 +123,7 @@ Unlike other examples as presented here, we will use ``pip``'s software environm
         }
 
 #. Set required environment variables.
-   
+
     .. code-block:: bash
 
         export PETSC_CONFIGURE_OPTIONS="--with-scalar-type=complex --download-mumps --download-scalapack"
@@ -134,7 +133,7 @@ Unlike other examples as presented here, we will use ``pip``'s software environm
         This step is extremely important. For example, if the scalar type is not set to complex, PESTc will compute all quantities using real numbers only *but will not warn the user*. This can cause all spectral functions to inadvertently be 0, and of course the Green's functions will be totally incorrect as well.
 
 #. Finally, install both ``petsc`` and ``petsc4py``.
-   
+
     .. code-block:: bash
 
         pip install petsc petsc4py
