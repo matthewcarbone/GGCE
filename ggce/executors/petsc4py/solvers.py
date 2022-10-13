@@ -21,9 +21,9 @@ class MassSolverMUMPS(MassSolver):
     to the particular solver used -- and so is the KSP context (i.e. solver)
     setup."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, autoprime=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self._basis is None:
+        if self._basis is None and autoprime:
             self._basis = self._system.get_basis(full_basis=True)
 
     def check_conv(self, factored_mat, rtol, elapsed):
