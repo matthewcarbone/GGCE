@@ -5,6 +5,22 @@ import numpy as np
 
 from ggce import Model, System
 
+mpi4py_imported = False
+try:
+    from mpi4py import MPI
+
+    mpi4py_imported = True
+except ImportError:
+    pass
+
+petsc_imported = False
+try:
+    from ggce.executors.petsc4py.solvers import MassSolverMUMPS
+
+    petsc_imported = True
+except ImportError:
+    pass
+
 ATOL = 1.0e-4
 
 EFB_Figure5_k0_params = {
@@ -272,9 +288,8 @@ EFB_Figure6_k2_params = {
 }
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("petsc4py") is None, reason="PETSc not installed"
-)
+@pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
+@pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
 @pytest.mark.mpi(min_size=2)
 @pytest.mark.parametrize(
     "p",
