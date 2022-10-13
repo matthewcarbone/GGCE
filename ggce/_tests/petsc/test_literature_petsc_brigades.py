@@ -286,6 +286,7 @@ EFB_Figure6_k2_params = {
     "eta": 0.005,
 }
 
+
 @pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
 @pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
 @pytest.mark.mpi(min_size=4)
@@ -303,25 +304,31 @@ EFB_Figure6_k2_params = {
 def test_prb_82_085116_2010(p):
     from ggce.executors.petsc4py.solvers import MassSolverMUMPS
     from mpi4py import MPI
+
     COMM = MPI.COMM_WORLD
     size = COMM.Get_size()
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])
     model.add_(**p["model_add_params"])
 
-    for brigade_size in range(1, size+1):
+    for brigade_size in range(1, size + 1):
         # test that the exception is correctly thrown for uneven split
         if size % brigade_size != 0:
             with pytest.raises(AssertionError):
-                executor_petsc = MassSolverMUMPS(system=System(model), \
-                                    mpi_comm=COMM, brigade_size = brigade_size)
+                executor_petsc = MassSolverMUMPS(
+                    system=System(model),
+                    mpi_comm=COMM,
+                    brigade_size=brigade_size,
+                )
         else:
-            executor_petsc = MassSolverMUMPS(system=System(model),
-                                    mpi_comm=COMM, brigade_size = brigade_size)
+            executor_petsc = MassSolverMUMPS(
+                system=System(model), mpi_comm=COMM, brigade_size=brigade_size
+            )
             w_grid = gt[:, 0]
             A_gt = gt[:, 1]
 
-            results_petsc = executor_petsc.spectrum(p["k"], w_grid, \
-                                                                eta=p["eta"])
+            results_petsc = executor_petsc.spectrum(
+                p["k"], w_grid, eta=p["eta"]
+            )
             results_petsc = (-results_petsc.imag / np.pi).squeeze()
-            assert np.allclose(results_petsc[:len(A_gt)], A_gt, atol=ATOL)
+            assert np.allclose(results_petsc[: len(A_gt)], A_gt, atol=ATOL)

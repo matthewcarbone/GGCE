@@ -34,8 +34,7 @@ dependencies = [
     "scipy",
     "loguru",
     "monty",
-    "tqdm",
-    "mpi4py"
+    "tqdm"
 ]
 
 dynamic = ["version"]
@@ -50,8 +49,7 @@ test = [
     "pytest-cov",
     "black",
     "nbstripout",
-    "pre-commit",
-    "pytest-mpi"
+    "pre-commit"
 ]
 doc = [
     "sphinx",
