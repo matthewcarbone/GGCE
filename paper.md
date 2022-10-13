@@ -19,6 +19,7 @@ authors:
   - name: Andrew J. Millis
     affiliation: "4, 5" # (Multiple affiliations must be quoted)
   - name: Mona Berciu
+    orcid: 0000-0002-6736-1893
     affiliation: "2, 3" # (Multiple affiliations must be quoted)
   - name: David R. Reichman
     affiliation: 6 # (Multiple affiliations must be quoted)
