@@ -42,7 +42,7 @@ def padded_kw(k, w, num_brig, ext=20):
         num_pads = np.where(rems == 0)[0][0]
         w_new = np.zeros(len(w) + num_pads)
         dw = w[-1] - w[-2]
-        pad_arr = np.array([w[-1] + ii*dw for ii in range(num_pads)])
+        pad_arr = np.array([w[-1] + ii*dw for ii in range(1,num_pads+1)])
         w_new[:len(w)] = w
         w_new[len(w):] = pad_arr
         return k, w_new
@@ -51,7 +51,7 @@ def padded_kw(k, w, num_brig, ext=20):
         num_pads = np.where(rems == 0)[0][0]
         k_new = np.zeros(len(k) + num_pads)
         dk = k[-1] - k[-2]
-        pad_arr = np.array([k[-1] + ii*dk for ii in range(num_pads)])
+        pad_arr = np.array([k[-1] + ii*dk for ii in range(1,num_pads+1)])
         k_new[:len(k)] = k
         k_new[len(k):] = pad_arr
         return k_new, w

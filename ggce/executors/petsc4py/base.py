@@ -2,6 +2,8 @@ import numpy as np
 import time
 import os
 import pickle
+from pathlib import Path
+
 from tqdm import tqdm
 
 from petsc4py import PETSc
@@ -65,6 +67,9 @@ class MassSolver(Solver):
 
         super().__init__(*args, **kwargs)
         self._matr_dir = matr_dir
+        if matr_dir is not None:
+            self._matr_dir = Path(matr_dir)
+            self._matr_dir.mkdir(exist_ok=True, parents=True)
 
         if self._mpi_comm is None:
             logger.critical(
@@ -347,15 +352,12 @@ class MassSolver(Solver):
         nothing is returned.
         """
 
-        logger.info(
-            "Matrices are loaded from disk. GGCE will not re-compute them."
-        )
-
         # Get the total size of the linear system -- needed by PETSc
         assert matr_dir is not None
         self._linsys_size = self._get_matr_size(matr_dir)
 
-        matrix_loc = os.path.join(matr_dir, f"k_{k}_w_{w}_e_{eta}.bss")
+        matrix_loc = os.path.join(matr_dir, \
+                            f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl")
         with open(matrix_loc, "rb") as datafile:
             row_ind, col_ind, dat = pickle.load(datafile)
 
@@ -409,8 +411,9 @@ class MassSolver(Solver):
         self._mat_X.assemblyEnd(self._mat_X.AssemblyType.FINAL)
 
         # Assign values for the b vector
-        finfo = self._model.get_fFunctionInfo()
-        G0 = G0_k_omega(k, w, finfo.a, eta, finfo.t)
+        a = self._system.model.lattice_constant
+        t = self._system.model.hopping
+        G0 = G0_k_omega(k, w, a, eta, t)
         self._vector_b.setValues(self._linsys_size - 1, G0)
 
         # Need to assemble before use
@@ -512,6 +515,17 @@ class MassSolver(Solver):
         # Generate a list of tuples for the (k, w) points to calculate.
         jobs = [(_k, _w) for _k in k for _w in w]
 
+
+        # check if working from disk or computing matrices on the fly
+        if self._matr_dir is not None:
+            logger.info(
+                "Matrices are being loaded from disk. GGCE will not re-compute them."
+            )
+        else:
+            logger.info(
+                "Matrices solved by the engine are being computed on the fly from the basis."
+            )
+
         # Chunk the jobs appropriately. Each of these lists look like the jobs
         # list above.
         jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
@@ -560,19 +574,95 @@ class MassSolver(Solver):
             return (res, meta)
         return res
 
+    def prepare_system(self, k, w, eta):
+        """Prepare the sparse-represented system to be solved by another
+        executor.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
+
+        Returns
+        -------
+            Nothing is returned, the matrix is dumped to disk.
+        """
+
+        row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
+        xx = [row_ind, col_ind, dat]
+
+        matr_loc = os.path.join(self.matr_dir, \
+                            f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl")
+        with open(matr_loc, "wb") as matr_file:
+            pickle.dump(xx, matr_file)
+
+    def prepare_spectrum(self, k, w, eta, return_meta=False, pbar=False):
+        """Prepares matrices for the spectrum in parallel.
+
+        Parameters
+        ----------
+        k : float
+            The momentum quantum number point of the calculation.
+        w : float
+            The frequency grid point of the calculation.
+        eta : float
+            The artificial broadening parameter of the calculation.
+
+        Returns
+        -------
+            Nothing is returned -- the saved matrices are on disk.
+        """
+
+        k = float_to_list(k)
+        w = float_to_list(w)
+
+        ## the jobs MUST be evenly divisible between brigades
+        ## we will force pad the arrays if this is not the case
+        ## and raise a warning
+        try:
+            assert len(k)*len(w) % self.brigades == 0
+        except AssertionError:
+            logger.warning(f"Number of jobs (k,w points) is not evenly "\
+                            f"divisible between brigades. Padding initiated."
+                        f" If you don't want this, change your k, w arrays.")
+            k, w = padded_kw(k, w, self.brigades)
+
+        # Generate a list of tuples for the (k, w) points to calculate.
+        jobs = [(_k, _w) for _k in k for _w in w]
+
+        # Chunk the jobs appropriately. Each of these lists look like the jobs
+        # list above.
+        jobs_on_brigade = self.get_jobs_on_this_brigade(jobs)
+        self._total_jobs_on_this_brigade = len(jobs_on_brigade)
+
+        logger.info(
+            f"Running GGCE-PETSc in matrix prep mode. "\
+            f"Matrices are being saved to {self._matr_dir}."
+        )
+
+        # Get the results on this rank.
+        for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
+            self.prepare_system(_k, _w, eta)
+
+        return
+
     @staticmethod
     def _k_omega_eta_to_str(k, omega, eta):
         # Note this will have to be redone when k is a vector in 2 and 3D!
         return f"{k:.10f}_{omega:.10f}_{eta:.10f}"
 
     @staticmethod
-    def _get_matr_size(self, matr_dir):
+    def _get_matr_size(matr_dir):
 
         """For use with the _scaffold_from_disk method. Helps figure
         out the ultimate matrix size before loading all in."""
 
         all_files = os.listdir(matr_dir)
-        all_files = [elem for elem in all_files if ".bss" in elem]
+        all_files = [elem for elem in all_files if ".pkl" in elem]
         random_matr = np.random.choice(all_files)
         sample_matrix = os.path.join(matr_dir, random_matr)
         with open(sample_matrix, "rb") as datafile:
