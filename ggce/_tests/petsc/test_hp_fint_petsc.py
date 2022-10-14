@@ -178,7 +178,7 @@ def test_zero_vs_tiny_T(p):
         pass
 
     solver = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
-    results = solver.spectrum(k, w, eta=p[0]["eta"]).squeeze()
+    results = solver.greens_function(k, w, eta=p[0]["eta"]).squeeze()
 
     # Check the true T=epsilon case
     model = Model.from_parameters(**p[1]["model_params"])
@@ -191,6 +191,6 @@ def test_zero_vs_tiny_T(p):
         pass
 
     solver = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
-    results_t = solver.spectrum(k, w, eta=p[1]["eta"]).squeeze()
+    results_t = solver.greens_function(k, w, eta=p[1]["eta"]).squeeze()
 
     assert np.allclose(results, results_t, atol=ATOL)
