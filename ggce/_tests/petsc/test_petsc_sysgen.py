@@ -336,7 +336,7 @@ def test_prb_82_085116_2010(p):
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 
-    sysgen_petsc.prepare_spectrum(p["k"], w_grid, eta=p["eta"], pbar=True)
+    sysgen_petsc.prepare_greens_function(p["k"], w_grid, eta=p["eta"])
 
     del sysgen_petsc  ## to free up memory used to store the basis
 
@@ -349,8 +349,8 @@ def test_prb_82_085116_2010(p):
         autoprime=False,
         brigade_size=1,
     )
-    results_petsc = executor_petsc.spectrum(
-        p["k"], w_grid, eta=p["eta"], pbar=True
+    results_petsc = executor_petsc.greens_function(
+        p["k"], w_grid, eta=p["eta"]
     )
     results_petsc = (-results_petsc.imag / np.pi).squeeze()
     assert np.allclose(results_petsc[: len(A_gt)], A_gt, atol=ATOL)

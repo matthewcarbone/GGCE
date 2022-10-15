@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 import pickle
+import warnings
 
 import numpy as np
 from scipy import linalg
@@ -117,7 +118,7 @@ class Solver(ABC):
         ...
 
     @abstractmethod
-    def spectrum(self, k, w, eta, pbar=False):
+    def greens_function(self, k, w, eta, pbar=False):
         ...
 
 
@@ -138,8 +139,8 @@ class BasicSolver(Solver):
         if self._results_directory is not None:
             pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
-    def spectrum(self, k, w, eta, pbar=False):
-        """Solves for the spectrum in serial or in parallel, depending on
+    def greens_function(self, k, w, eta, pbar=False):
+        """Solves for the greens_function in serial or in parallel, depending on
         whether MPI_COMM is provided to the Solver at instantiation.
 
         Parameters
@@ -154,7 +155,7 @@ class BasicSolver(Solver):
         Returns
         -------
         numpy.ndarray
-            The resulting spectrum of shape ``nk`` by ``nw``.
+            The resulting greens_function of shape ``nk`` by ``nw``.
         """
 
         k = float_to_list(k)
@@ -279,12 +280,15 @@ class SparseSolver(BasicSolver):
 
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
 
-        X = coo_matrix(
-            (
-                np.array(dat, dtype=np.complex64),
-                (np.array(row_ind), np.array(col_ind)),
-            )
-        ).tocsr()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", \
+                                category=DeprecationWarning)
+            proto_matr = (
+                            np.array(dat, dtype=np.complex64),
+                            (np.array(row_ind), np.array(col_ind)),
+                         )
+
+        X = coo_matrix( proto_matr ).tocsr()
 
         size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
 

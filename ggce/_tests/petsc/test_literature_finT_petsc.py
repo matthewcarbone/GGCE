@@ -172,8 +172,8 @@ def test_prb_102_165155_2020(p):
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 
-    results_sparse = executor_sparse.spectrum(
-        p["k"], w_grid, eta=p["eta"], pbar=True
+    results_sparse = executor_sparse.greens_function(
+        p["k"], w_grid, eta=p["eta"]
     )
     results_sparse = (-results_sparse.imag / np.pi).squeeze()
 
@@ -202,8 +202,8 @@ def test_prb_102_165155_2020_small_cloud(p):
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 
-    results_sparse = executor_sparse.spectrum(
-        p["k"], w_grid, eta=p["eta"], pbar=True
+    results_sparse = executor_sparse.greens_function(
+        p["k"], w_grid, eta=p["eta"]
     )
     results_sparse = (-results_sparse.imag / np.pi).squeeze()
     assert np.allclose(results_sparse, A_gt, atol=ATOL)

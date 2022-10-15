@@ -327,7 +327,7 @@ def test_prb_82_085116_2010(p):
             w_grid = gt[:, 0]
             A_gt = gt[:, 1]
 
-            results_petsc = executor_petsc.spectrum(
+            results_petsc = executor_petsc.greens_function(
                 p["k"], w_grid, eta=p["eta"]
             )
             results_petsc = (-results_petsc.imag / np.pi).squeeze()

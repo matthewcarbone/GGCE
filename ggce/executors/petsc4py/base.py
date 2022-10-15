@@ -22,7 +22,7 @@ class MassSolver(Solver):
     built on top of the abstract Solver class. This base class has fundamental
     methods such as matrix construction. The solve methods, as well as
     convergence and memory tracking are implemented in the inherited classes,
-    while some basic routines like spectrum() that are method-agnostic are
+    while some basic routines like greens_function() that are method-agnostic are
     implemented here."""
 
     @property
@@ -474,8 +474,8 @@ class MassSolver(Solver):
             else:
                 logger.debug("Solution passed manual residual check.")
 
-    def spectrum(self, k, w, eta, return_meta=False, pbar=False):
-        """Solves for the spectrum using the PETSc solver backend. Computation
+    def greens_function(self, k, w, eta, return_meta=False, pbar=False):
+        """Solves for the greens_function using the PETSc solver backend. Computation
         is massively parallel over k,w and for each matrix at a
         given (k,w) point.
 
@@ -600,8 +600,8 @@ class MassSolver(Solver):
         with open(matr_loc, "wb") as matr_file:
             pickle.dump(xx, matr_file)
 
-    def prepare_spectrum(self, k, w, eta, return_meta=False, pbar=False):
-        """Prepares matrices for the spectrum in parallel.
+    def prepare_greens_function(self, k, w, eta, return_meta=False, pbar=False):
+        """Prepares matrices for the greens_function in parallel.
 
         Parameters
         ----------

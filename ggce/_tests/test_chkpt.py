@@ -242,7 +242,7 @@ def test_res_chkpt(p):
     executor = SparseSolver(System(model), root=root)
     w_grid = np.linspace(-3, -2, 10)
 
-    results = executor.spectrum(p["k"], w_grid, eta=p["eta"]).squeeze()
+    results = executor.greens_function(p["k"], w_grid, eta=p["eta"]).squeeze()
 
     # load results from disk and confirm
     results_disk = []
