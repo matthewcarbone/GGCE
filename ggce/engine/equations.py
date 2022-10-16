@@ -195,12 +195,13 @@ class Equation(MSONable):
                 print("\t", id1)
 
     def _populate_f_arg_terms(self):
-        """Populates the required f_arg terms for the 'rhs' (in self._terms_list)
-        that will be needed for the non-generalized equations later.
-        Specifically, populates a dictionary all_delta_terms which maps the
-        f_vec index string to a list of integers, which correspond to the
-        needed delta values for that f_vec string. These dictionaries will be
-        combined later during production of the non-generalized f-functions."""
+        """Populates the required f_arg terms for the 'rhs'
+        (in self._terms_list) that will be needed for the non-generalized
+        equations later. Specifically, populates a dictionary all_delta_terms
+        which maps the f_vec index string to a list of integers, which
+        correspond to the needed delta values for that f_vec string. These
+        dictionaries will be combined later during production of the
+        non-generalized f-functions."""
 
         if self._f_arg_terms is not None:
             logger.error("f_args_terms is already initialized")
