@@ -78,5 +78,6 @@ exclude = '''
   | build
   | dist
   | docs/source/conf.py
+  | legacy
 )/
 '''

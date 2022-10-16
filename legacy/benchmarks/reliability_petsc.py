@@ -1,9 +1,9 @@
 ############ Stress-testing PETSc ##########
-'''
+"""
 In this script we push PETSc to the limit. We will calculate entire spectral
 slices, tracking both time to evaluate as well as saving the actual spectra.
 We are looking to evalaute convergence wiht (M,N), as well as time to calculate
-'''
+"""
 ########### ################
 
 # before we import numpy, set the number of threads for numpy multithreading
@@ -49,7 +49,9 @@ eta = 0.005
 
 # load the "grouth truth" data from https://journals.aps.org/prb/
 # abstract/10.1103/PhysRevB.82.085116, figure 5 center for comparison
-literature_data = np.loadtxt(os.path.join(ggce_head_dir, 'examples',"000_example_A.txt"))
+literature_data = np.loadtxt(
+    os.path.join(ggce_head_dir, "examples", "000_example_A.txt")
+)
 
 # define w and k grid for the calculation
 wgrid = np.linspace(-5.5, -2.5, 3)
@@ -61,16 +63,16 @@ COMM = MPI.COMM_WORLD
 
 # start by creating a folder with the text and image output in run directory
 # only head node make directories
-results_dir = os.path.join(script_dir, 'stress_test_results')
-spectra_vis_path = os.path.join(script_dir, 'stress_test_results', \
-                                                        'spectra_visuals')
-text_data_path = os.path.join(script_dir, 'stress_test_results', \
-                                                        'text_data')
+results_dir = os.path.join(script_dir, "stress_test_results")
+spectra_vis_path = os.path.join(
+    script_dir, "stress_test_results", "spectra_visuals"
+)
+text_data_path = os.path.join(script_dir, "stress_test_results", "text_data")
 
 if COMM.Get_rank() == 0:
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
-    # now create nested directories for text and image respectively
+        # now create nested directories for text and image respectively
         os.mkdir(spectra_vis_path)
         os.mkdir(text_data_path)
     else:
@@ -80,53 +82,74 @@ if COMM.Get_rank() == 0:
         os.mkdir(text_data_path)
 
 # create an array to store time to finish the calculation
-parallel_times = np.zeros((bosons_max,cloud_max))
+parallel_times = np.zeros((bosons_max, cloud_max))
 
 # start the loop over all allowed M, N
-for m in range(cloud_min,cloud_max+1):
-    for n in range(bosons_min,bosons_max+1):
+for m in range(cloud_min, cloud_max + 1):
+    for n in range(bosons_min, bosons_max + 1):
         for w in wgrid:
             # initialize the model with pre-determined parameters
             model = Model()
             model.set_parameters(hopping=hopping)
             model.add_coupling(
-                "EdwardsFermionBoson", Omega=Omega, M=m, N=n,
-                dimensionless_coupling=coupling
+                "EdwardsFermionBoson",
+                Omega=Omega,
+                M=m,
+                N=n,
+                dimensionless_coupling=coupling,
             )
 
             # initialize the Executor to manage the calculation
-            executor = ParallelSparseExecutorMUMPS(model, "info", mpi_comm=COMM)
+            executor = ParallelSparseExecutorMUMPS(
+                model, "info", mpi_comm=COMM
+            )
             executor.prime()
 
             g_func, exitcodes_dict = executor.solve(k, w, eta)
-            a_func = - g_func.imag / np.pi
+            a_func = -g_func.imag / np.pi
             ## now we print to disk (and plot, if have matplotlib) the two timings to compare
             # only collect and output results on the head node
             if COMM.Get_rank() == 0:
 
-                times = exitcodes_dict['time'][0]
-                mumps_exit_codes = exitcodes_dict['mumps_exit_code'][0]
-                mumps_mem_tot = exitcodes_dict['mumps_mem_tot'][0]
-                tol_excess = exitcodes_dict['manual_tolerance_excess'][0]
+                times = exitcodes_dict["time"][0]
+                mumps_exit_codes = exitcodes_dict["mumps_exit_code"][0]
+                mumps_mem_tot = exitcodes_dict["mumps_mem_tot"][0]
+                tol_excess = exitcodes_dict["manual_tolerance_excess"][0]
 
                 # also output the spectrum data to disk for posterity / postprocess
                 # create first entries which are momentum
-                xx = np.array([[k, w, a_func, times, mumps_exit_codes, \
-                                                mumps_mem_tot, tol_excess]])
+                xx = np.array(
+                    [
+                        [
+                            k,
+                            w,
+                            a_func,
+                            times,
+                            mumps_exit_codes,
+                            mumps_mem_tot,
+                            tol_excess,
+                        ]
+                    ]
+                )
                 # also output the spectrum data to disk for posterity / postprocess
                 # create the output file name
-                result_file = os.path.join(text_data_path, f"parallel_results_M_{m}_N_{n}.txt")
+                result_file = os.path.join(
+                    text_data_path, f"parallel_results_M_{m}_N_{n}.txt"
+                )
                 # if this is the first time then create the file with the heading
                 if not os.path.exists(result_file):
-                    np.savetxt(result_file, xx,\
-                                header = f"momentum                    omega                         "
-                                f"spectral func               time_to_compute (sec)    "
-                                f"MUMPS convergence code (0 = good)  MUMPS total memory used (Gb)  "
-                                f"Tolerance excess  (|r| - rtol*|b|)",\
-                                delimiter = '    ')
+                    np.savetxt(
+                        result_file,
+                        xx,
+                        header=f"momentum                    omega                         "
+                        f"spectral func               time_to_compute (sec)    "
+                        f"MUMPS convergence code (0 = good)  MUMPS total memory used (Gb)  "
+                        f"Tolerance excess  (|r| - rtol*|b|)",
+                        delimiter="    ",
+                    )
                 else:
                     with open(result_file, "a") as datafile:
-                        np.savetxt(datafile, xx, delimiter = '    ')
+                        np.savetxt(datafile, xx, delimiter="    ")
 
                 # # Plot to compare with "ground truth" (see https://journals.aps.org/prb/
                 # # abstract/10.1103/PhysRevB.82.085116, figure 5 center) via:

@@ -22,11 +22,13 @@ try:
     import ggce
 except ModuleNotFoundError:
     sys.path.append(head_ggce_dir)
-    import ggce  # noqa: F401
+    import ggce
 
 # Import the parallel executor and load in the MPI communicator
 from ggce.model import Model  # noqa: E402
-from ggce.executors.petsc4py.parallel import ParallelSparseExecutorMUMPS  # noqa: E402
+from ggce.executors.petsc4py.parallel import (
+    ParallelSparseExecutorGMRES,
+)  # noqa: E402
 
 COMM = MPI.COMM_WORLD
 
@@ -39,26 +41,22 @@ M, N = 3, 9
 model = Model()
 model.set_parameters(hopping=0.1)
 model.add_coupling(
-    "EdwardsFermionBoson", Omega=1.25, M=M, N=N,
-    dimensionless_coupling=2.5
+    "EdwardsFermionBoson", Omega=1.25, M=M, N=N, dimensionless_coupling=2.5
 )
 
 # Set up an executor to manage the calculation
-executor = ParallelSparseExecutorMUMPS(model, "info", mpi_comm=COMM)
+executor = ParallelSparseExecutorGMRES(model, "info", mpi_comm=COMM)
 executor.prime()
 
 # arrange a omega array and use list comprehension to execute calculations
 wgrid = np.linspace(-5.5, -2.5, 100)
-
-# Set rtol appropriately large (but still small enough) so that we don't get
-# a ton of tolerance warnings
-spectrum = executor.spectrum(0.5 * np.pi, wgrid, 0.005, rtol=1e-13)
+spectrum = [executor.solve(0.5 * np.pi, w, 0.005) for w in wgrid]
 
 # Results are returned on RANK 0 only
 if COMM.Get_rank() == 0:
     spectrum = np.array([-s[0].imag / np.pi for s in spectrum])
     xx = np.array([wgrid.squeeze(), spectrum.squeeze()]).T
-    np.savetxt(os.path.join(script_dir, "tmp_parallel_results.txt"), xx)
+    np.savetxt(os.path.join(script_dir, f"parallel_results.txt"), xx)
 
     # Compare with "ground truth" (see https://journals.aps.org/prb/
     # abstract/10.1103/PhysRevB.82.085116, figure 5 center) via:
@@ -69,4 +67,4 @@ if COMM.Get_rank() == 0:
     # ax.set_ylabel("$A(\pi/2, \omega)$ [normalized]")
     # ax.set_xlabel("$\omega$")
     # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    # plt.savefig(os.path.join(script_dir,f'petsc_mumps_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')
+    # plt.savefig(os.path.join(script_dir,f'petsc_gmres_vs_groundtruth_M_{M}_N_{N}.png'), format='png', bbox_inches='tight')

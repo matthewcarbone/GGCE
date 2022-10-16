@@ -21,4 +21,3 @@ print(f"On rank {rank}/{size}")
 A = PETSc.Mat()
 A.create(PETSc.COMM_WORLD)
 A.setSizes([100, 100])
-

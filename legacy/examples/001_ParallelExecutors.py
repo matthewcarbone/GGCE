@@ -24,6 +24,7 @@ except ModuleNotFoundError:
 # Import the parallel executor and load in the MPI communicator
 from ggce.model import Model  # noqa: E402
 from ggce.executors.parallel import ParallelDenseExecutor  # noqa: E402
+
 COMM = MPI.COMM_WORLD
 
 literature_data = np.loadtxt(os.path.join(script_dir, "000_example_A.txt"))
@@ -32,8 +33,7 @@ literature_data = np.loadtxt(os.path.join(script_dir, "000_example_A.txt"))
 model = Model()
 model.set_parameters(hopping=0.1)
 model.add_coupling(
-    "EdwardsFermionBoson", Omega=1.25, M=3, N=9,
-    dimensionless_coupling=2.5
+    "EdwardsFermionBoson", Omega=1.25, M=3, N=9, dimensionless_coupling=2.5
 )
 
 executor = ParallelDenseExecutor(model, "info", mpi_comm=COMM)
