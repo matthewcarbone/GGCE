@@ -1,3 +1,5 @@
+name: Manuscript
+
 on: [push]
 
 jobs:
