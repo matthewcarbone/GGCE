@@ -133,8 +133,8 @@ H_Figure8c_q = {
     "eta": 0.05,
 }
 
-# only run this "precise" test if you have time
-# it can take several hours
+
+# only run this "precise" test if you have time it can take several hours
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "p",

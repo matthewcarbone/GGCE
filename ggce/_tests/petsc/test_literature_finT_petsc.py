@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 
-from ggce import Model, System, SparseSolver
+from ggce import Model, System
 
 mpi4py_imported = False
 try:
@@ -150,8 +150,8 @@ H_Figure8c_q = {
     "eta": 0.05,
 }
 
-## only run this "precise" test if you have time
-## it can take several hours
+
+# only run this "precise" test if you have time it can take several hours
 @pytest.mark.slow
 @pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
 @pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
@@ -161,7 +161,6 @@ H_Figure8c_q = {
     [H_Figure8a, H_Figure8c],
 )
 def test_prb_102_165155_2020(p):
-    from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
     gt = np.array(p["gt"])
@@ -180,10 +179,10 @@ def test_prb_102_165155_2020(p):
     assert np.allclose(results_sparse, A_gt, atol=ATOL)
 
 
-## this quick test benchmarks the code against a version with known
-## accurate performance (as tested against literature data above)
-## but in a small cloud regime -- so the result does not agree with the
-## literature exactly, but it would if it was run at higher theory levels
+# this quick test benchmarks the code against a version with known
+# accurate performance (as tested against literature data above)
+# but in a small cloud regime -- so the result does not agree with the
+# literature exactly, but it would if it was run at higher theory levels
 @pytest.mark.skipif(not petsc_imported, reason="PETSc not installed")
 @pytest.mark.skipif(not mpi4py_imported, reason="mpi4py not installed")
 @pytest.mark.parametrize(

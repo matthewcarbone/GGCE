@@ -51,7 +51,7 @@ def Random3dPhononArray():
     return np.array([ptype1, ptype2, ptype3])
 
 
-## add this so slow tests are skipped by default
+# add this so slow tests are skipped by default
 def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"

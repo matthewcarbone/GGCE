@@ -314,8 +314,6 @@ EFB_Figure6_k2_params = {
     ],
 )
 def test_prb_82_085116_2010(p):
-    from ggce.executors.petsc4py.solvers import MassSolverMUMPS
-    from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
 
@@ -338,7 +336,7 @@ def test_prb_82_085116_2010(p):
 
     sysgen_petsc.prepare_greens_function(p["k"], w_grid, eta=p["eta"])
 
-    del sysgen_petsc  ## to free up memory used to store the basis
+    del sysgen_petsc  # to free up memory used to store the basis
 
     system_unprimed = System(model, autoprime=False)
     executor_petsc = MassSolverMUMPS(

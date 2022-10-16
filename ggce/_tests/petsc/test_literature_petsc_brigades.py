@@ -302,8 +302,6 @@ EFB_Figure6_k2_params = {
     ],
 )
 def test_prb_82_085116_2010(p):
-    from ggce.executors.petsc4py.solvers import MassSolverMUMPS
-    from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
     size = COMM.Get_size()
