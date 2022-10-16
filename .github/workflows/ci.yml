@@ -1,62 +1,233 @@
-name: CI pipeline
+# BSD 3-Clause License
+
+# Copyright (c) 2022, Brookhaven Science Associates, LLC, Brookhaven National Laboratory
+# All rights reserved.
+
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+
+# 3. Neither the name of the copyright holder nor the names of its contributors
+#    may be used to endorse or promote products derived from this software
+#    without specific prior written permission.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# This CI file is adapted from github.com/AI-multimodal/Lightshow
+# Permalink: https://github.com/AI-multimodal/Lightshow/blob/f7d2d6458bf7532994d4f2fe2ffdfe6d2627bdd7/.github/workflows/ci.yml
+
+name: CI
 
 on:
-  push:
-    branches:
-      - 'master'
   pull_request:
-    branches:
-      - 'master'
+    branches: ['master', '!paper.md']
+  push:
+    branches: ['master', '!paper.md']
+    tags: ["v*"]
 
 jobs:
-  tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: [3.9]
-        mpi: ["openmpi"]
 
+  black:
+    name: Run Black code quality check
+    runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+      - uses: rickstaa/action-black@v1
+        with:
+          black_args: "ggce/ --check"
+          fail_on_error: "true"
 
+  flake8_py3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Install flake8
+        run: pip install flake8
+      - name: Run flake8
+        uses: suo/flake8-github-action@releases/v1
+        with:
+          checkName: 'flake8_py3'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check_semantic_version_placeholder:
+    name: Check semantic version placeholder exists in the __init__
+    runs-on: ubuntu-latest
+    steps:
     - uses: actions/checkout@v3
+    - name: Check lines exist
+      run: |
+        grep -x "__version__ = ...  # semantic-version-placeholder" ggce/__init__.py
 
-    - name: Set up Python ${{ matrix.python-version }}
+  docs:
+    name: Build documentation test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    ###########################################################################
+    # Getting the tags like this is REQUIRED for the dynamic versioning
+    # system to work properly
+    - name: Get tags
+      if: "! startsWith(github.ref, 'refs/tags')"
+      run: git fetch --unshallow --tags
+    ###########################################################################
+    - name: Set up Python 3.9
       uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.9
+    - name: Install and build
+      run: bash scripts/build_docs.sh
 
-    - name: Install requirements
-      run: bash scripts/install_requirements.sh core tests
+  # tests:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest]
+  #       python-version: [3.7, 3.8, 3.9]
+  #       mpi: ["openmpi"]
 
-    - name: Run serial tests
-      run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
+  #   steps:
 
-    - name: Setup MPI
-      uses: mpi4py/setup-mpi@v1
-      with:
-        mpi: ${{ matrix.mpi }}
+  #   - uses: actions/checkout@v3
 
-    - name: Install mpi4py and pytest-mpi
-      run: pip install mpi4py pytest-mpi
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v2
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
 
-    - name: Run MPI tests
-      run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
+  #   - name: Install requirements
+  #     run: bash scripts/install_requirements.sh core tests
 
-    - name: Setup PETSc
-      run: pip install petsc petsc4py
-      env:
-        PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
+  #   - name: Run serial tests
+  #     run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
 
-    - name: Run PETSc tests
-      run: mpiexec -n 4 coverage run --rcfile=ggce/_tests/petsc/setup_pytest_petsc_mpi.cfg -m pytest -v --with-mpi ggce/_tests/petsc/*.py
+  #   - name: Setup MPI
+  #     uses: mpi4py/setup-mpi@v1
+  #     with:
+  #       mpi: ${{ matrix.mpi }}
 
-    - name: Combine coverage reports from all ranks and generate xml report
-      run: coverage combine && coverage xml
+  #   - name: Install mpi4py and pytest-mpi
+  #     run: pip install mpi4py pytest-mpi
 
-    - name: Upload code coverage
-      uses: codecov/codecov-action@v2
-      timeout-minutes: 10
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+  #   - name: Run MPI tests
+  #     run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
+
+  #   - name: Setup PETSc
+  #     run: pip install petsc petsc4py
+  #     env:
+  #       PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
+
+  #   - name: Run PETSc tests
+  #     run: mpiexec -n 4 coverage run --rcfile=ggce/_tests/petsc/setup_pytest_petsc_mpi.cfg -m pytest -v --with-mpi ggce/_tests/petsc/*.py
+
+  #   - name: Combine coverage reports from all ranks and generate xml report
+  #     run: coverage combine && coverage xml
+
+  #   - name: Upload code coverage
+  #     uses: codecov/codecov-action@v2
+  #     timeout-minutes: 10
+  #     with:
+  #       token: ${{ secrets.CODECOV_TOKEN }}
+  #       fail_ci_if_error: false
+
+  # build_and_publish:
+  #   name: Build and publish to PyPI
+  #   environment: deploy
+  #   if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+  #   needs:
+  #     - tests
+  #     - black
+  #     - flake8_py3
+  #     - check_semantic_version_placeholder
+  #     - docs
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+
+  #   - name: Checkout
+  #     uses: actions/checkout@v3
+
+  #   - name: Set up Python 3.9
+  #     uses: actions/setup-python@v2
+  #     with:
+  #       python-version: 3.9
+
+  #   - name: Build and apply version
+  #     run: bash scripts/build_project.sh
+
+  #   - name: Publish distribution to Test PyPI
+  #     uses: pypa/gh-action-pypi-publish@release/v1
+  #     with:
+  #       password: ${{ secrets.PYPI_API_TOKEN }}
+  #       repository_url: https://upload.pypi.org/legacy/
+
+
+  # build_and_publish_docs:
+  #   name: Build and publish documentation via GitHub Pages
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
+  #   if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+  #   needs:
+  #     - tests
+  #     - black
+  #     - flake8_py3
+  #     - check_semantic_version_placeholder
+  #     - docs
+  #     - build_and_publish
+  #   # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+  #   permissions:
+  #     contents: read
+  #     pages: write
+  #     id-token: write
+  #   # Allow one concurrent deployment
+  #   concurrency:
+  #     group: "pages"
+  #     cancel-in-progress: true
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+
+  #   - name: Checkout
+  #     uses: actions/checkout@v3
+
+  #   - name: Set up Python 3.9
+  #     uses: actions/setup-python@v2
+  #     with:
+  #       python-version: 3.9
+
+  #   - name: Build and apply version
+  #     run: |
+  #       bash scripts/build_docs.sh
+
+  #   - name: Setup Pages
+  #     uses: actions/configure-pages@v2
+
+  #   - name: Upload artifact
+  #     uses: actions/upload-pages-artifact@v1
+  #     with:
+  #       path: 'docs/build/html/'
+
+  #   - name: Deploy to GitHub Pages
+  #     id: deployment
+  #     uses: actions/deploy-pages@v1
