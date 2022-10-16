@@ -22,8 +22,8 @@ class MassSolver(Solver):
     built on top of the abstract Solver class. This base class has fundamental
     methods such as matrix construction. The solve methods, as well as
     convergence and memory tracking are implemented in the inherited classes,
-    while some basic routines like greens_function() that are method-agnostic are
-    implemented here."""
+    while some basic routines like greens_function() that are method-agnostic
+    are implemented here."""
 
     @property
     def mpi_brigade(self):
@@ -109,9 +109,9 @@ class MassSolver(Solver):
         # for now the implementation has limitations: must have worldsize
         # evenly divided into brigades
         assert self.mpi_world_size % self._brigade_size == 0, logger.error(
-                f"Number of MPI ranks {self.mpi_world_size} cannot be "\
-                f"equally divided into brigades with size {self._brigade_size}."
-            )
+            f"Number of MPI ranks {self.mpi_world_size} cannot be "
+            f"equally divided into brigades with size {self._brigade_size}."
+        )
 
         self._mpi_comm_brigadier = self._mpi_comm.Split(
             self.mpi_brigade, self.mpi_rank
@@ -167,8 +167,8 @@ class MassSolver(Solver):
         # Figure out what the given process owns
         self._rstart, self._rend = self._vector_b.getOwnershipRange()
         logger.debug(
-            f"I am rank {self.mpi_rank} in brigade "\
-            f"{self.mpi_brigade} and got range "\
+            f"I am rank {self.mpi_rank} in brigade "
+            f"{self.mpi_brigade} and got range "
             f"{self._rstart} to {self._rend}"
         )
 
@@ -356,8 +356,9 @@ class MassSolver(Solver):
         assert matr_dir is not None
         self._linsys_size = self._get_matr_size(matr_dir)
 
-        matrix_loc = os.path.join(matr_dir, \
-                            f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl")
+        matrix_loc = os.path.join(
+            matr_dir, f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl"
+        )
         with open(matrix_loc, "rb") as datafile:
             row_ind, col_ind, dat = pickle.load(datafile)
 
@@ -402,8 +403,10 @@ class MassSolver(Solver):
         for ii, row_coo in enumerate(row_ind):
             if self._rstart <= row_coo and row_coo < self._rend:
                 row_start, col_pos, val = row_coo, col_ind[ii], dat[ii]
-                logger.debug(f"I am rank {self.mpi_rank} and I am setting"\
-                f" the values at {(row_start, col_pos)}")
+                logger.debug(
+                    f"I am rank {self.mpi_rank} and I am setting"
+                    f" the values at {(row_start, col_pos)}"
+                )
                 self._mat_X.setValues(row_start, col_pos, val)
 
         # Assemble the matrix now that the values are filled in
@@ -475,8 +478,8 @@ class MassSolver(Solver):
                 logger.debug("Solution passed manual residual check.")
 
     def greens_function(self, k, w, eta, return_meta=False, pbar=False):
-        """Solves for the greens_function using the PETSc solver backend. Computation
-        is massively parallel over k,w and for each matrix at a
+        """Solves for the greens_function using the PETSc solver backend.
+        Computation is massively parallel over k,w and for each matrix at a
         given (k,w) point.
 
         Parameters
@@ -501,29 +504,32 @@ class MassSolver(Solver):
         k = float_to_list(k)
         w = float_to_list(w)
 
-        ## the jobs MUST be evenly divisible between brigades
-        ## we will force pad the arrays if this is not the case
-        ## and raise a warning
+        # the jobs MUST be evenly divisible between brigades
+        # we will force pad the arrays if this is not the case
+        # and raise a warning
         try:
-            assert len(k)*len(w) % self.brigades == 0
+            assert len(k) * len(w) % self.brigades == 0
         except AssertionError:
-            logger.warning(f"Number of jobs (k,w points) is not evenly "\
-                            f"divisible between brigades. Padding initiated."
-                        f" If you don't want this, change your k, w arrays.")
+            logger.warning(
+                "Number of jobs (k,w points) is not evenly "
+                "divisible between brigades. Padding initiated."
+                " If you don't want this, change your k, w arrays."
+            )
             k, w = padded_kw(k, w, self.brigades)
 
         # Generate a list of tuples for the (k, w) points to calculate.
         jobs = [(_k, _w) for _k in k for _w in w]
 
-
         # check if working from disk or computing matrices on the fly
         if self._matr_dir is not None:
             logger.info(
-                "Matrices are being loaded from disk. GGCE will not re-compute them."
+                "Matrices are being loaded from disk. GGCE will not "
+                "re-compute them."
             )
         else:
             logger.info(
-                "Matrices solved by the engine are being computed on the fly from the basis."
+                "Matrices solved by the engine are being computed on the "
+                "fly from the basis."
             )
 
         # Chunk the jobs appropriately. Each of these lists look like the jobs
@@ -595,12 +601,15 @@ class MassSolver(Solver):
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
         xx = [row_ind, col_ind, dat]
 
-        matr_loc = os.path.join(self.matr_dir, \
-                            f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl")
+        matr_loc = os.path.join(
+            self.matr_dir, f"matr_at_k_{k:.10f}_w_{w:.10f}_e_{eta:.10f}.pkl"
+        )
         with open(matr_loc, "wb") as matr_file:
             pickle.dump(xx, matr_file)
 
-    def prepare_greens_function(self, k, w, eta, return_meta=False, pbar=False):
+    def prepare_greens_function(
+        self, k, w, eta, return_meta=False, pbar=False
+    ):
         """Prepares matrices for the greens_function in parallel.
 
         Parameters
@@ -620,15 +629,17 @@ class MassSolver(Solver):
         k = float_to_list(k)
         w = float_to_list(w)
 
-        ## the jobs MUST be evenly divisible between brigades
-        ## we will force pad the arrays if this is not the case
-        ## and raise a warning
+        # the jobs MUST be evenly divisible between brigades
+        # we will force pad the arrays if this is not the case
+        # and raise a warning
         try:
-            assert len(k)*len(w) % self.brigades == 0
+            assert len(k) * len(w) % self.brigades == 0
         except AssertionError:
-            logger.warning(f"Number of jobs (k,w points) is not evenly "\
-                            f"divisible between brigades. Padding initiated."
-                        f" If you don't want this, change your k, w arrays.")
+            logger.warning(
+                "Number of jobs (k,w points) is not evenly "
+                "divisible between brigades. Padding initiated."
+                " If you don't want this, change your k, w arrays."
+            )
             k, w = padded_kw(k, w, self.brigades)
 
         # Generate a list of tuples for the (k, w) points to calculate.
@@ -640,7 +651,7 @@ class MassSolver(Solver):
         self._total_jobs_on_this_brigade = len(jobs_on_brigade)
 
         logger.info(
-            f"Running GGCE-PETSc in matrix prep mode. "\
+            f"Running GGCE-PETSc in matrix prep mode. "
             f"Matrices are being saved to {self._matr_dir}."
         )
 

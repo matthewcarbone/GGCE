@@ -1,5 +1,4 @@
 import pytest
-import importlib
 
 import numpy as np
 
@@ -303,19 +302,18 @@ EFB_Figure6_k2_params = {
     ],
 )
 def test_prb_82_085116_2010(p):
-    from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])
     model.add_(**p["model_add_params"])
 
-    from ggce.executors.petsc4py.solvers import MassSolverMUMPS
-
     executor_petsc = MassSolverMUMPS(system=System(model), mpi_comm=COMM)
     w_grid = gt[:, 0]
     A_gt = gt[:, 1]
 
-    results_petsc = executor_petsc.greens_function(p["k"], w_grid, eta=p["eta"])
+    results_petsc = executor_petsc.greens_function(
+        p["k"], w_grid, eta=p["eta"]
+    )
     results_petsc = (-results_petsc.imag / np.pi).squeeze()
     assert np.allclose(results_petsc, A_gt, atol=ATOL)

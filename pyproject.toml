@@ -6,11 +6,11 @@ build-backend = "flit_core.buildapi"
 name = "lightshow"
 authors = [
     {"name" = "Matthew R. Carbone", "email" = "mcarbone@bnl.gov"},
-    {"name" = "Stepan Fomichev"}
+    {"name" = "Stepan Fomichev", "email" = "fomichev@physics.ubc.ca"}
 ]
 maintainers = [
     {"name" = "Matthew R. Carbone", "email" = "mcarbone@bnl.gov"},
-    {"name" = "Stepan Fomichev"}
+    {"name" = "Stepan Fomichev", "email" = "fomichev@physics.ubc.ca"}
 ]
 description = "Numerically exact Generalized Green's Function Cluster Expansion"
 readme = "README.rst"

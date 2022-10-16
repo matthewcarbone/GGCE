@@ -63,7 +63,9 @@ class Solver(ABC):
             self._results_directory.mkdir(exist_ok=True, parents=True)
 
         else:
-            logger.warning("root not provided to Solver - Solver checkpointing disabled")
+            logger.warning(
+                "root not provided to Solver - Solver checkpointing disabled"
+            )
             self._results_directory = None
 
         if self._system is None:
@@ -140,8 +142,8 @@ class BasicSolver(Solver):
             pickle.dump(G, open(path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
     def greens_function(self, k, w, eta, pbar=False):
-        """Solves for the greens_function in serial or in parallel, depending on
-        whether MPI_COMM is provided to the Solver at instantiation.
+        """Solves for the greens_function in serial or in parallel, depending
+        on whether MPI_COMM is provided to the Solver at instantiation.
 
         Parameters
         ----------
@@ -175,10 +177,11 @@ class BasicSolver(Solver):
 
             # Only rank 0 returns the result
             if self.mpi_rank == 0:
-                ## all_results is a list of arrays of different length
-                ## need to parse it properly into an array
-                all_results = [xx[ii] for xx in all_results \
-                                                    for ii in range(len(xx))]
+                # all_results is a list of arrays of different length
+                # need to parse it properly into an array
+                all_results = [
+                    xx[ii] for xx in all_results for ii in range(len(xx))
+                ]
                 s = np.array([xx for xx in all_results])
                 return s.reshape(len(k), len(w))
             else:
@@ -281,14 +284,13 @@ class SparseSolver(BasicSolver):
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", \
-                                category=DeprecationWarning)
+            warnings.simplefilter("ignore", category=DeprecationWarning)
             proto_matr = (
-                            np.array(dat, dtype=np.complex64),
-                            (np.array(row_ind), np.array(col_ind)),
-                         )
+                np.array(dat, dtype=np.complex64),
+                (np.array(row_ind), np.array(col_ind)),
+            )
 
-        X = coo_matrix( proto_matr ).tocsr()
+        X = coo_matrix(proto_matr).tocsr()
 
         size = (X.data.size + X.indptr.size + X.indices.size) / BYTES_TO_MB
 

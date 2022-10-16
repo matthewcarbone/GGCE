@@ -308,7 +308,9 @@ class System:
         """
 
         if self._root is None:
-            logger.warning("root not provided to System - System checkpointing disabled")
+            logger.warning(
+                "root not provided to System - System checkpointing disabled"
+            )
             return
 
         # check how many equations there are -- if too many, checkpointing
@@ -316,14 +318,16 @@ class System:
         try:
             L = sum([len(val) for val in self._equations.values()])
             if L > self._chkpt_lim:
-                logger.warning(f"\nMatrices have size {L}, which is larger than the"\
-                               f" checkpoint limit {self._chkpt_lim:.0f}.\nPickle "\
-                               f"performance expected to be slow for such large"\
-                               f" files. System checkpointing is disabled.\n"\
-                               f"To override the preset, pass a value for chkpt_lim"\
-                               f" to System object.")
+                logger.warning(
+                    f"\nMatrices have size {L}, which is larger than the"
+                    f" checkpoint limit {self._chkpt_lim:.0f}.\nPickle "
+                    f"performance expected to be slow for such large"
+                    f" files. System checkpointing is disabled.\n"
+                    f"To override the preset, pass a value for chkpt_lim"
+                    f" to System object."
+                )
                 return
-        except AttributeError: ## just means no equations generated yet
+        except AttributeError:  # just means no equations generated yet
             pass
 
         for attr in ["generalized_equations", "f_arg_list", "equations"]:
@@ -387,7 +391,7 @@ class System:
         root=None,
         mpi_comm=None,
         chkpt_lim=1e6,
-        autoprime=True
+        autoprime=True,
     ):
         self._root = root
         if self._root is not None:
@@ -402,12 +406,15 @@ class System:
         self._chkpt_lim = chkpt_lim
 
         if autoprime:
-        # Get all of the allowed configurations - additionally checkpoint the
-        # generalized configurations in a root directory if its provided
+            # Get all of the allowed configurations - additionally checkpoint
+            # the generalized configurations in a root directory if its
+            # provided
             self._prime_system()
         else:
-            logger.warning(f"System has not been primed. Load from disk "\
-                           f"or prime explicitly with _prime_system.")
+            logger.warning(
+                "System has not been primed. Load from disk "
+                "or prime explicitly with _prime_system."
+            )
 
     def _prime_system(self):
         """Helper function that facilitates the construction of configs,
@@ -433,7 +440,6 @@ class System:
 
         with timeit(logger.debug, "Final checks"):
             self._final_checks()
-
 
     def visualize(self, generalized=True, full=True, coef=None):
         """Allows for easy visualization of the closure. Note this isn't
