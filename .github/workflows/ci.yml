@@ -116,7 +116,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install requirements
-      run: bash scripts/install_requirements.sh core tests
+      run: |
+        bash scripts/install.sh
+        bash scripts/install.sh tests
 
     - name: Run serial tests
       run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
