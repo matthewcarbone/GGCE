@@ -3,7 +3,7 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "lightshow"
+name = "ggce"
 authors = [
     {"name" = "Matthew R. Carbone", "email" = "mcarbone@bnl.gov"},
     {"name" = "Stepan Fomichev", "email" = "fomichev@physics.ubc.ca"}
@@ -61,7 +61,7 @@ doc = [
 ]
 
 [tool.setuptools]
-packages = ["lightshow"]
+packages = ["ggce"]
 
 [tool.black]
 line-length = 79
