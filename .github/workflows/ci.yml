@@ -118,7 +118,7 @@ jobs:
     - name: Install requirements
       run: |
         bash scripts/install.sh
-        bash scripts/install.sh tests
+        bash scripts/install.sh test
 
     - name: Run serial tests
       run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
