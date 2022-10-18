@@ -2,9 +2,15 @@
 GGCE
 ====
 
+.. image:: https://github.com/x94carbone/GGCE/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/x94carbone/GGCE/actions/workflows/ci.yml
+
 .. image:: https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O
    :target: https://codecov.io/gh/x94carbone/GGCE
    :alt: codecov
+
+.. image:: https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead
+   :target: https://www.codacy.com/gh/x94carbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=x94carbone/GGCE&amp;utm_campaign=Badge_Grade
 
 
 Generalized Green's function Cluster Expansion
@@ -12,7 +18,7 @@ Generalized Green's function Cluster Expansion
 Installation
 ------------
 
-We provide detailed information on how to install the GGCE package in our documentation (link TK).
+We provide detailed information on how to install the GGCE package in our `documentation <https://x94carbone.github.io/GGCE/installation.html>`__.
 
 Acknowledgements
 ----------------
