@@ -54,3 +54,8 @@ If you make references to the theory or application of the GGCE methodology, ple
      year={2021},
      publisher={APS}
    }
+
+
+.. image:: https://api.codacy.com/project/badge/Grade/16604f827a624665ba34ed2ec95ef1d0
+   :alt: Codacy Badge
+   :target: https://app.codacy.com/gh/x94carbone/GGCE?utm_source=github.com&utm_medium=referral&utm_content=x94carbone/GGCE&utm_campaign=Badge_Grade_Settings
