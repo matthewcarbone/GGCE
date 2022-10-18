@@ -71,7 +71,7 @@ A fundamental insight of the MA approximation is to utilize a variational space 
 
 Previous studies using GGCE focused on polarons at zero temperature. We include a new functionality which allows the study of polarons at finite temperature, GGCE+T. Here, we make use of the Thermofield Doubles formalism [@suzuki1985thermo; @takahashi1996thermo] which exactly maps any given model at finite temperature to one at zero temperature with couplings to real and fictious phonons, and study the doubled model using GGCE. Benchmarks of this approach are ongoing, and preliminary results suggest that the method may be competitive with state-of-the-art methods. A paper with these results is currently in preparation.
 
-Formally, the GGCE functions as an on-the-fly generator of equations of motion for the single-particle Green's function given a set of control parameters (cloud size, phonon number) and input model parameters (energy scales, coupling strength, etc.). The generated system of equations is then solved numerically in order to obtain the Green's function of interest using a chosen solver.
+Formally, the GGCE functions as an on-the-fly generator of equations of motion for the single-particle Green's function given a set of control parameters (cloud size, total phonon number) and input model parameters (energy scales, coupling strength, etc.). The generated system of equations is then solved numerically in order to obtain the Green's function of interest using a chosen solver.
 
 The GGCE code consists of three components detailed in our documentation: models, systems and solvers.
 
