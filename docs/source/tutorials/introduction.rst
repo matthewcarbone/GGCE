@@ -101,7 +101,10 @@ Next, we solve the system.
     k = np.array([0.0, np.pi / 2.0, np.pi])
     w = np.linspace(-6.0, -2.0, 100)
     solver = DenseSolver(system)
-    G = solver.spectrum(k, w, eta=0.005, pbar=True)
-    A = -G.imag / np.pi
+    G = solver.greens_function(k, w, eta=0.005, pbar=True)
 
-Calling the ``spectrum`` method actually returns the full Green's function at the level of theory specified in the ``Model``. One can easily obtain the spectral function by just taking :math:`-\mathrm{Im} \: G(k, \omega) / \pi`.
+Calling the ``greens_function`` method returns the full Green's function at the level of theory specified in the ``Model``. One can easily obtain the spectral function by just taking :math:`-\mathrm{Im} \: G(k, \omega) / \pi`:
+
+.. code-block:: python
+
+    A = -G.imag / np.pi
