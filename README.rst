@@ -33,7 +33,16 @@ This software is based upon work supported by the U.S. Department of Energy, Off
 Citation
 --------
 
-If you use this software, please cite our JOSS manuscript **(JOSS manuscript currently in prep)**.
+If you use this software, please cite our preprint here **(JOSS manuscript currently in prep)**:
+
+.. code-block::
+
+    @article{carbone2022generalized,
+      title={The Generalized Green's function Cluster Expansion: A Python package for simulating polarons},
+      author={Carbone, Matthew R and Fomichev, Stepan and Millis, Andrew J and Berciu, Mona and Reichman, David R and Sous, John},
+      journal={arXiv preprint arXiv:2210.12260},
+      year={2022}
+    }
 
 If you make references to the theory or application of the GGCE methodology, please consider citing the following two manuscripts: `Carbone, Reichman et al. <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`__ and `Carbone, Millis et al <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.L140307>`__:
 
