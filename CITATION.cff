@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Carbone"
+  given-names: "Matthew R."
+  orcid: "https://orcid.org/0000-0002-5181-9513"
+- family-names: "Fomichev"
+  given-names: "Stepan"
+  orcid: "https://orcid.org/0000-0002-1622-9382"
+- family-names: "Millis"
+  given-names: "Andrew J."
+  orcid: "https://orcid.org/0000-0001-9413-6344"
+- family-names: "Berciu"
+  given-names: "Mona"
+  orcid: "https://orcid.org/0000-0002-6736-1893"
+- family-names: "Reichman"
+  given-names: "David R."
+  orcid: "https://orcid.org/0000-0002-5265-5637"
+- family-names: "Sous"
+  given-names: "John"
+  orcid: "https://orcid.org/0000-0002-9994-5789"
+title: "GGCE"
+version: 0.1.1
+doi: 10.48550/arXiv.2210.12260
+date-released: 2022-10-18
+url: "https://github.com/x94carbone/GGCE"
