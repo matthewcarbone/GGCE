@@ -49,3 +49,21 @@ def Random3dPhononArray():
     ptype2 = (np.random.random(size=(4, 5, 6)) + 2.5).astype(int)
     ptype3 = (np.random.random(size=(4, 5, 6)) + 3.5).astype(int)
     return np.array([ptype1, ptype2, ptype3])
+
+## add this so slow tests are skipped by default
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runslow", action="store_true", default=False, help="run slow tests"
+    )
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test as slow to run")
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        # --runslow given in cli: do not skip slow tests
+        return
+    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)

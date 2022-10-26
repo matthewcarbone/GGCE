@@ -6,7 +6,7 @@ The following text documents how one should install the GGCE package. Note that 
 
 .. warning::
 
-   We cannot guarantee that the package works correctly on Windows operating systems (although it has been tested in [https://learn.microsoft.com/en-us/windows/wsl/about](URL "Windows Subsystem for Linux") (WSL/WSL2)). We also cannot guarantee that the package will work correctly on ARM-based Mac M1 or M2 machines, as these are still quite new, and occasionally some packages that GGCE depends on may break.
+   We cannot guarantee that the package works correctly on Windows operating systems (although it has been tested in `Windows Subsystem for Linux (WSL/WSL2) <https://learn.microsoft.com/en-us/windows/wsl/about>`__). We also cannot guarantee that the package will work correctly on ARM-based Mac M1 or M2 machines, as these are still quite new, and occasionally some packages that GGCE depends on may break.
 
 Standard installation
 ---------------------
@@ -81,7 +81,7 @@ Columbia's Stewart Blusson Quantum Matter Institute, the Cedar cluster at the We
 
 
 Institutional Cluster installation (Brookhaven National Lab / LISA SBQMI)
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 Unlike other examples as presented here, we will use ``pip``'s software environment manager, as often times ``conda`` does not play nice with many high performance computing clusters.
 

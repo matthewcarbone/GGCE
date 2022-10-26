@@ -8,7 +8,7 @@ from petsc4py import PETSc
 
 from ggce.logger import logger
 from ggce.utils.physics import G0_k_omega
-from ggce.utils.utils import chunk_jobs_equalize, float_to_list
+from ggce.utils.utils import chunk_jobs, padded_kw, float_to_list
 from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
@@ -103,7 +103,7 @@ class MassSolver(Solver):
 
         # for now the implementation has limitations: must have worldsize
         # evenly divided into brigades
-        assert 1 - self.mpi_world_size % self._brigade_size, logger.error(
+        assert self.mpi_world_size % self._brigade_size == 0, logger.error(
                 f"Number of MPI ranks {self.mpi_world_size} cannot be "\
                 f"equally divided into brigades with size {self._brigade_size}."
             )
@@ -131,7 +131,7 @@ class MassSolver(Solver):
         if self.brigades == 1:
             logger.warning("Chunking jobs with COMM_WORLD_SIZE=1")
             return jobs
-        return chunk_jobs_equalize(jobs, self.brigades, self.mpi_brigade)
+        return chunk_jobs(jobs, self.brigades, self.mpi_brigade)
 
     def _setup_petsc_structs(self):
         """This function serves to initialize the various vectors and matrices
@@ -473,7 +473,8 @@ class MassSolver(Solver):
 
     def spectrum(self, k, w, eta, return_meta=False, pbar=False):
         """Solves for the spectrum using the PETSc solver backend. Computation
-        is serial over k,w, but for each k,w it is massively paralle.
+        is massively parallel over k,w and for each matrix at a
+        given (k,w) point.
 
         Parameters
         ----------
@@ -496,6 +497,17 @@ class MassSolver(Solver):
 
         k = float_to_list(k)
         w = float_to_list(w)
+
+        ## the jobs MUST be evenly divisible between brigades
+        ## we will force pad the arrays if this is not the case
+        ## and raise a warning
+        try:
+            assert len(k)*len(w) % self.brigades == 0
+        except AssertionError:
+            logger.warning(f"Number of jobs (k,w points) is not evenly "\
+                            f"divisible between brigades. Padding initiated."
+                        f" If you don't want this, change your k, w arrays.")
+            k, w = padded_kw(k, w, self.brigades)
 
         # Generate a list of tuples for the (k, w) points to calculate.
         jobs = [(_k, _w) for _k in k for _w in w]
