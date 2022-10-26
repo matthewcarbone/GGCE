@@ -33,7 +33,7 @@ This software is based upon work supported by the U.S. Department of Energy, Off
 Citation
 --------
 
-If you use this software, please cite our preprint here **(JOSS manuscript currently in prep)**:
+If you use this software, please cite our preprint here:
 
 .. code-block::
 
@@ -43,6 +43,8 @@ If you use this software, please cite our preprint here **(JOSS manuscript curre
       journal={arXiv preprint arXiv:2210.12260},
       year={2022}
     }
+    
+We are also in the process of `editorial/peer review at the Journal of Open Source Software <https://github.com/openjournals/joss-reviews/issues/4884>`__.
 
 If you make references to the theory or application of the GGCE methodology, please consider citing the following two manuscripts: `Carbone, Reichman et al. <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.035106>`__ and `Carbone, Millis et al <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.104.L140307>`__:
 
