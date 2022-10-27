@@ -15,6 +15,8 @@ GGCE
 .. image:: https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5/status.svg
    :target: https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5
 
+.. image:: https://zenodo.org/badge/DOI/10.48550/arXiv.2210.12260.svg
+   :target: https://doi.org/10.48550/arXiv.2210.12260
 
 Generalized Green's function Cluster Expansion
 
