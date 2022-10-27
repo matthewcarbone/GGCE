@@ -69,7 +69,7 @@ in Fig. 5 (top panel) from the reference paper.
 
   While the ``phonon_number`` is not set explicitly in the reference,
   in MA it is understood that it is varied until physical results,
-  such as spectra, are converged relative to it. Here we found the value
+  such as spectra, are converged with respect to it. Here we found the value
   ``phonon_number = 9`` resulted in appropriate convergence. In general,
   a full convergence study in all variational parameters should be conducted
   to make sure convergence is reached.
@@ -105,6 +105,8 @@ different class ``SparseSolver``
 
     from ggce import SparseSolver
     solver = SparseSolver(system)
+
+.. _scipythread:
 
 The ``SparseSolver`` class, which relies on SciPy's sparse matrix format
 and solvers, can be helpful in the case of large variational calculations
@@ -150,32 +152,30 @@ Finally, we solve the system and plot the result against the reference.
 
     k = np.array([0.0])
     w = np.linspace(-3.0, -1.0, 100)
-    G = solver.spectrum(k, w, eta=0.005, pbar=True)
+    G = solver.greens_function(k, w, eta=0.005, pbar=True)
     A = -G.imag / np.pi
 
 We can plot the results directly against the literature data as a comparison.
 Note that the option ``pbar=True`` activates a visual progress bar (powered
 by ``tqdm``) that helps track the progress of the spectrum calculation.
 
-.. image:: images/benchmark1.png
+.. image:: ../_static/images/benchmark1.png
 
 As we can see, the GGCE results match the reference very well.
 
-.. note::
+The ``.greens_function()`` method is merely a convenient wrapper for ``.solve()``
+that can execute a loop over two arrays, of momentum :math:`k` and frequency
+:math:`\omega`. You could achieve the same functionality by writing your own
+loop: symbolically
 
-  The ``.spectrum()`` method is merely a convenient wrapper for ``.solve()``
-  that can execute a loop over two arrays, of momentum :math:`k` and frequency
-  :math:`\omega`. You could achieve the same functionality by writing your own
-  loop: symbolically
+.. code-block:: python
 
-  .. code-block:: python
+  for k, w in zip(kgrid, wgrid):
+    Green_Funcs[i,j] = solver.solve(k, w, eta)
 
-    for k, w in zip(kgrid, wgrid):
-      Green_Funcs[i,j] = solver.solve(k, w, eta)
+However, ``.greens_function()`` has the advantage that it has **built-in parallelizability**.
+If you have ``mpi4py`` installed and properly configured, you can run ``.greens_function()``
+on your chosen :math:`k,\omega` arrays and they will be **automatically partitioned
+between the MPI ranks**, no work required!
 
-  However, ``.spectrum()`` has the advantage that it has **built-in parallelizability**.
-  If you have ``mpi4py`` installed and properly configured, you can run ``.spectrum()``
-  on your chosen :math:`k,\omega` arrays and they will be **automatically partitioned
-  between the MPI ranks**, no work required!
-
-  See the next tutorial :ref:`parallel` where we show how to use GGCE with MPI parallelization.
+See the next tutorial :ref:`parallel` where we show how to use GGCE with MPI parallelization.
