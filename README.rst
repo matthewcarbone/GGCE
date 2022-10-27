@@ -11,6 +11,9 @@ GGCE
 
 .. image:: https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead
    :target: https://www.codacy.com/gh/x94carbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=x94carbone/GGCE&amp;utm_campaign=Badge_Grade
+   
+.. image:: https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5/status.svg
+   :target: https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5
 
 
 Generalized Green's function Cluster Expansion
