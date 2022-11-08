@@ -1,5 +1,5 @@
 .. _finite-t:
 
-==============================
-Finite-temprature calculations
-==============================
+===============================
+Finite-temperature calculations
+===============================
