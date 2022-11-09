@@ -1,13 +1,15 @@
+.. _intro:
+
 ========================
 Introduction to the GGCE
 ========================
 
 The GGCE API consists of three major components:
 
-- :class:`ggce.model.Model`: contains all aspects of the Model Hamiltonian to be solved. It also contains information about the level of theory used 
+- :class:`ggce.model.Model`: contains all aspects of the Model Hamiltonian to be solved. It also contains information about the level of theory used
 - :class:`ggce.engine.system.System`: a lightweight wrapper for the ``Model`` which initializes the system of equations to be solved
 - :class:`ggce.executors.solvers.Solver` (and classes which inherit from this base class): solves the system of equations in various ways, using either SciPy or PETSc
-  
+
 In this tutorial, we will demonstrate a simple application of the GGCE method.
 
 Step 1: initialize the model
@@ -54,7 +56,7 @@ The next step is extremely simple. Initializing the ``System`` object will trigg
 
     The GGCE code implements a comprehensive logger through Loguru. Debugging mode can be controlled using the :class:`ggce.logger.debug` context manager.
 
-While working in some sort of interactive environment such as iPython or Jupyter, you can use 
+While working in some sort of interactive environment such as iPython or Jupyter, you can use
 
 .. code-block:: python
 
@@ -84,7 +86,7 @@ TK
 Step 3: solve the system
 ------------------------
 
-GGCE offers multiple ways to solve an initialized ``System`` object. In this tutorial, we will use the most efficient method for relatively small matrices (or sets of equations): a direct, dense solver. Specifically, we will leverage SciPy's solver engines to do this, and these engines are based on e.g. BLAS, and as such are extremely fast and multi-threaded, being able to take advantage of multi-core machines. 
+GGCE offers multiple ways to solve an initialized ``System`` object. In this tutorial, we will use the most efficient method for relatively small matrices (or sets of equations): a direct, dense solver. Specifically, we will leverage SciPy's solver engines to do this, and these engines are based on e.g. BLAS, and as such are extremely fast and multi-threaded, being able to take advantage of multi-core machines.
 
 First, initialize the ``Solver`` itself.
 
@@ -94,7 +96,7 @@ First, initialize the ``Solver`` itself.
     solver = DenseSolver(system)
 
 
-Next, we solve the system. 
+Next, we solve the system.
 
 .. code-block:: python
 

@@ -6,7 +6,6 @@ job_data/
 results/
 results2/
 !build_sphinx.sh
-*.png
 slurm_config.yaml
 .LIFO_queue.yaml
 .ipynb_checkpoints/
