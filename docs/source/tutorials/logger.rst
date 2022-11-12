@@ -41,7 +41,7 @@ If GGCE throws a critical error the program will almost certainly terminate. Cri
 The GGCE logger context manager
 ===============================
 
-By default, the GGCE logger will print info and above. However, one can easily control the logging level dynamically using our context manager.
+By default, the GGCE logger will print info and above. However, one can easily control the logging level dynamically using our context managers in ``ggce/logger.py``.
 
 
 
