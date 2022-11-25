@@ -121,7 +121,7 @@ jobs:
         bash scripts/install.sh test
 
     - name: Run serial tests
-      run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
+      run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py --runslow
 
     - name: Setup MPI
       uses: mpi4py/setup-mpi@v1
@@ -132,7 +132,7 @@ jobs:
       run: pip install mpi4py pytest-mpi
 
     - name: Run MPI tests
-      run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
+      run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py --runslow
 
     - name: Setup PETSc
       run: pip install petsc petsc4py
@@ -140,7 +140,7 @@ jobs:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
 
     - name: Run PETSc tests
-      run: mpiexec -n 4 coverage run --rcfile=ggce/_tests/petsc/setup_pytest_petsc_mpi.cfg -m pytest -v --with-mpi ggce/_tests/petsc/*.py
+      run: mpiexec -n 4 coverage run --rcfile=ggce/_tests/petsc/setup_pytest_petsc_mpi.cfg -m pytest -v --with-mpi ggce/_tests/petsc/*.py --runslow
 
     - name: Combine coverage reports from all ranks and generate xml report
       run: coverage combine && coverage xml
