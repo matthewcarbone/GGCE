@@ -7,4 +7,7 @@ exclude =
     docs/source/conf.py
     legacy
 max-line-length = 79
-ignore = E203, W503, W605  # Ignore some style 'errors' produced while formatting by 'black'
+ignore = # Ignore some style 'errors' produced while formatting by 'black'
+         E203,
+	 W503,
+	 W605  
