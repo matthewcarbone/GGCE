@@ -154,7 +154,7 @@ class MassSolverMUMPS(MassSolver):
         t0 = time.time()
 
         # Now construct the desired solver instance
-        ksp = PETSc.KSP().create()
+        ksp = PETSc.KSP().create(comm=self._mpi_comm_brigadier)
 
         # "preonly" for e.g. mumps and other external solvers
         ksp.setType("preonly")
@@ -208,9 +208,9 @@ class MassSolverMUMPS(MassSolver):
 
         # since we grabbed the Green's func value, destroy the data structs
         # not strictly necessary
-        # self._vector_x.destroy()
-        # self._vector_b.destroy()
-        # self._mat_X.destroy()
+        self._vector_x.destroy()
+        self._vector_b.destroy()
+        self._mat_X.destroy()
 
         # Now select only the final value from the array
         if self.brigade_rank == 0:
