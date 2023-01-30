@@ -23,7 +23,7 @@ Generalized Green's function Cluster Expansion
 Installation
 ------------
 
-We provide detailed information on how to install the GGCE package in our `documentation <https://x94carbone.github.io/GGCE/installation.html>`__.
+We provide detailed information on how to install the GGCE package in our `documentation <https://matthewcarbone.github.io/GGCE/installation.html>`__.
 
 Acknowledgements
 ----------------
