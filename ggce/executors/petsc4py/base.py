@@ -544,6 +544,8 @@ class MassSolver(Solver):
         # Gather the results from the brigade commanders to "the general"
         # (global rank 0)
         all_results = self._mpi_comm.gather(s, root=0)
+        # this is a ragged list of length = number of MPI ranks
+        shuffled_jobs = self.mpi_comm.gather(jobs_on_brigade, root=0)
         # create placeholder variables for final bcast of results
         res = None
         meta = None
@@ -558,7 +560,11 @@ class MassSolver(Solver):
             else:
                 results = all_results
 
-            results = [xx[ii] for xx in results for ii in range(len(xx))]
+            results = np.array([xx[ii] for xx in results for ii in range(len(xx))])
+            shuffled_jobs = np.array([xx[ii] for xx in \
+                                            shuffled_jobs for ii in range(len(xx))])
+            sorted_idx = np.lexsort( (shuffled_jobs[:,1], shuffled_jobs[:,0]) )
+            results = results[sorted_idx]
 
             # a copy of the results of the whole brigade
             s = [xx[0] for xx in results]

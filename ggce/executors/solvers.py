@@ -174,14 +174,21 @@ class BasicSolver(Solver):
 
         if self.mpi_comm is not None:
             all_results = self.mpi_comm.gather(s, root=0)
+            # this is a ragged list of length = number of MPI ranks
+            shuffled_jobs = self.mpi_comm.gather(jobs_on_rank, root=0)
 
             # Only rank 0 returns the result
             if self.mpi_rank == 0:
                 # all_results is a list of arrays of different length
                 # need to parse it properly into an array
-                all_results = [
+                all_results = np.array([
                     xx[ii] for xx in all_results for ii in range(len(xx))
-                ]
+                ])
+                shuffled_jobs = np.array([
+                    xx[ii] for xx in shuffled_jobs for ii in range(len(xx))
+                ])
+                sorted_idx = np.lexsort( (shuffled_jobs[:,1], shuffled_jobs[:,0]) )
+                all_results = all_results[sorted_idx]
                 s = np.array([xx for xx in all_results])
                 return s.reshape(len(k), len(w))
             else:
@@ -254,7 +261,7 @@ class SparseSolver(BasicSolver):
 
                 row_ind.extend([ii_basis for _ in range(len(row_dict))])
                 col_ind.extend([key for key, _ in row_dict.items()])
-                dat.extend([value for _, value in row_dict.items()])
+                dat.extend([value+0j for _, value in row_dict.items()])
 
         # estimate sparse matrix memory usage
         # (complex (16 bytes) + int (4 bytes) + int) * nonzero entries
@@ -283,12 +290,12 @@ class SparseSolver(BasicSolver):
 
         row_ind, col_ind, dat = self._sparse_matrix_from_equations(k, w, eta)
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=DeprecationWarning)
-            proto_matr = (
-                np.array(dat, dtype=np.complex64),
-                (np.array(row_ind), np.array(col_ind)),
-            )
+        # with warnings.catch_warnings():
+        #     warnings.simplefilter("ignore", category=DeprecationWarning)
+        print(dat)
+        print(row_ind)
+        print(col_ind)
+        proto_matr = np.array( (np.array(dat).real, (row_ind, col_ind)) )
 
         X = coo_matrix(proto_matr).tocsr()
 

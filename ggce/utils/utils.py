@@ -1,3 +1,4 @@
+from ggce.logger import logger
 from contextlib import contextmanager
 from pathlib import Path
 import time
@@ -30,8 +31,14 @@ class Buffer:
 
 
 def chunk_jobs(jobs, world_size, rank):
-    return np.array_split(jobs, world_size)[rank].tolist()
-
+    np.random.seed(42) # ensures that all ranks have the same job partitioning
+    idx = np.arange(len(jobs), dtype=int)
+    np.random.shuffle(idx)
+    shufl_idx = np.array_split(idx, world_size)[rank].tolist()
+    logger.debug(f"I am rank {rank} and I get job indices {shufl_idx}")
+    return np.array(jobs, dtype=object)[shufl_idx].tolist()
+    # rand_idx = np.random.choice(idx, len(jobs) // world_size, replace=False)
+    # return np.array(jobs, dtype=object)[rand_idx].tolist()
 
 def padded_kw(k, w, num_brig, ext=20):
     """For two arrays of given width and chunk size,
