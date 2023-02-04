@@ -30,7 +30,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
 ]
 dependencies = [
-    "numpy==1.23",
+    "numpy<1.24",
     "scipy",
     "loguru",
     "monty",
