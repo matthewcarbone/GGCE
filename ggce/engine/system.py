@@ -155,7 +155,6 @@ class System:
                     self._f_arg_list[n_mat_id] = [delta]
 
     def _append_generalized_equation(self, n_phonons, config):
-
         eq = Equation.from_config(config, model=self._model)
 
         # Append a master dictionary at the System object level that
@@ -185,7 +184,6 @@ class System:
         return sum([len(ll) for ll in self._f_arg_list.values()])
 
     def _predict_total_terms(self):
-
         L = sum([len(val) for val in self._generalized_equations.values()])
 
         # Need to generalize this
@@ -215,7 +213,6 @@ class System:
             logger.info(f"Predicted {L} generalized equations")
 
     def _initialize_generalized_equations(self, allowed_configs):
-
         self._generalized_equations = {n: [] for n in allowed_configs.keys()}
 
         # Generate all possible numbers of phonons consistent with n_max.
@@ -233,7 +230,6 @@ class System:
         self._predict_total_terms()
 
     def _initialize_equations(self):
-
         totals = self._get_total_terms()
 
         # Initialize the self._equations attribute's lists here since we know
@@ -502,7 +498,6 @@ class System:
         basis = dict()
 
         if full_basis:
-
             # Set the overall basis. Each unique identifier gets its own .
             cc = 0
             for _, equations in self._equations.items():
@@ -511,7 +506,6 @@ class System:
                     cc += 1
 
         else:
-
             # Set the local basis, in which each identifier gets its own
             # relative to the n-phonon manifold.
             for n_phonons, list_of_equations in self._equations.items():

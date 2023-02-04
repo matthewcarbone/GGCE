@@ -40,7 +40,6 @@ def _check_config(config):
 
 
 def _config_edges_legal(config):
-
     # First, sum up over all of the phonon types. This produces the
     # "anchor" config.
     _config = config.sum(axis=0)
@@ -908,7 +907,6 @@ class NonIndexTerm(Term):
         self._modify_n_phonons_(*loc)
 
     def coefficient(self, k, w, eta):
-
         exp_arg = 1j * np.dot(k, self._lattice_constant * self.exp_shift)
         exp_term = cmath.exp(exp_arg)
 

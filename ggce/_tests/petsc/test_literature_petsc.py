@@ -302,7 +302,6 @@ EFB_Figure6_k2_params = {
     ],
 )
 def test_prb_82_085116_2010(p):
-
     COMM = MPI.COMM_WORLD
     gt = p["gt"]
     model = Model.from_parameters(**p["model_params"])

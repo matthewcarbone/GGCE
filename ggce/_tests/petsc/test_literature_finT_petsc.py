@@ -161,7 +161,6 @@ H_Figure8c_q = {
     [H_Figure8a, H_Figure8c],
 )
 def test_prb_102_165155_2020(p):
-
     COMM = MPI.COMM_WORLD
     gt = np.array(p["gt"])
     model = Model.from_parameters(**p["model_params"])

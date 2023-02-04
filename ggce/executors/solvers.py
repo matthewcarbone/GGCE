@@ -169,7 +169,7 @@ class BasicSolver(Solver):
         jobs_on_rank = self.get_jobs_on_this_rank(jobs)
 
         s = []
-        for (_k, _w) in tqdm(jobs_on_rank, disable=not pbar):
+        for _k, _w in tqdm(jobs_on_rank, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
         if self.mpi_comm is not None:
@@ -370,7 +370,6 @@ class DenseSolver(BasicSolver):
             self._basis = self._system.get_basis(full_basis=False)
 
     def _fill_matrix(self, k, w, n_phonons, shift, eta):
-
         n_phonons_shift = n_phonons + shift
 
         equations_n = self._system.equations[n_phonons]
@@ -424,7 +423,6 @@ class DenseSolver(BasicSolver):
         # Solution ------------------------------------------------------------
         total_phonons = np.sum(self._system.model.phonon_number)
         for n_phonons in range(total_phonons, 0, -1):
-
             # Special case of the recursion where R_N = alpha_N.
             if n_phonons == total_phonons:
                 R = self._get_alpha(k, w, n_phonons, eta)
