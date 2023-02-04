@@ -18,7 +18,6 @@ from ggce.model import model_coupling_map, SingleTerm, Hamiltonian
     ],
 )
 def test_model_coupling_map(coupling_type, t, Omega, lam):
-
     # This ground truth value is just copied from a version of the
     # model_coupling_map that is known to work
     def ground_truth(coupling_type, t, Omega, lam):

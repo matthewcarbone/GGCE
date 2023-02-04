@@ -141,7 +141,6 @@ model_hpt = {
     ],
 )
 def test_zero_vs_tiny_T(p):
-
     k = p[0]["k"]
     w = np.linspace(-2, 0, 10)
 

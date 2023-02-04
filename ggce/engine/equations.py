@@ -237,17 +237,14 @@ class Equation(MSONable):
 
         # Iterate over all possible types of the coupling operators
         for hterm in self._model.hamiltonian.terms:
-
             bt = hterm.phonon_index  # Phonon type
             arr = self.index_term.config.config[bt, ...]
 
             # We separate the two cases for creation and annihilation operators
             # on the boson operator 'b'
             if hterm.dag == "-":
-
                 # Iterate over the site indexes for the term's alpha-index
                 for loc, nval in np.ndenumerate(arr):
-
                     # Do not annihilate the vacuum, this term comes to 0
                     # anyway.
                     if nval == 0:
@@ -271,7 +268,6 @@ class Equation(MSONable):
                         self._terms_list.append(t)
 
             elif hterm.dag == "+":
-
                 # Don't want to create an equation corresponding to more than
                 # the maximum number of allowed phonons.
                 nphonons = self.index_term.config.total_phonons_per_type[bt]
@@ -380,7 +376,6 @@ class GreenEquation(Equation):
 
         # Iterate over all possible types of the coupling operators
         for hterm in self._model.hamiltonian.terms:
-
             # Only phonon creation terms contribute to the Green's function
             # EOM since annihilation terms hit the vacuum and yield zero.
             if hterm.dag == "+":

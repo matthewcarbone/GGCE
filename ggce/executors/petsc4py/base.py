@@ -64,7 +64,6 @@ class MassSolver(Solver):
         return self._matr_dir
 
     def __init__(self, brigade_size=None, matr_dir=None, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
         self._matr_dir = matr_dir
         if matr_dir is not None:
@@ -538,7 +537,7 @@ class MassSolver(Solver):
         self._total_jobs_on_this_brigade = len(jobs_on_brigade)
         # Get the results on this rank.
         s = []
-        for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
+        for _k, _w in tqdm(jobs_on_brigade, disable=not pbar):
             s.append(self.solve(_k, _w, eta))
 
         # Gather the results from the brigade commanders to "the general"
@@ -656,7 +655,7 @@ class MassSolver(Solver):
         )
 
         # Get the results on this rank.
-        for (_k, _w) in tqdm(jobs_on_brigade, disable=not pbar):
+        for _k, _w in tqdm(jobs_on_brigade, disable=not pbar):
             self.prepare_system(_k, _w, eta)
 
         return
@@ -668,7 +667,6 @@ class MassSolver(Solver):
 
     @staticmethod
     def _get_matr_size(matr_dir):
-
         """For use with the _scaffold_from_disk method. Helps figure
         out the ultimate matrix size before loading all in."""
 

@@ -39,7 +39,6 @@ class TestConfig:
 
     @staticmethod
     def test_1d_check_config_warning():
-
         arr = (np.random.random(size=(2, 3, 3, 3, 4)) + 1.5).astype(int)
         with _testing_mode():
             with warnings.catch_warnings(record=True) as w:

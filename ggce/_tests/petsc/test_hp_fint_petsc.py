@@ -161,7 +161,6 @@ model_hpt = {
     ],
 )
 def test_zero_vs_tiny_T(p):
-
     COMM = MPI.COMM_WORLD
 
     k = p[0]["k"]
