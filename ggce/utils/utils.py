@@ -33,7 +33,7 @@ def chunk_jobs(jobs, world_size, rank):
     return np.array_split(jobs, world_size)[rank].tolist()
 
 
-def padded_kw(k, w, num_brig, ext=20):
+def padded_kw(k, w, num_brig, ext=1000):
     """For two arrays of given width and chunk size,
     this gives the optimal padding amount. ext
     fixes how far are we willing to go."""
