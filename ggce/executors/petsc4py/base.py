@@ -10,7 +10,10 @@ from petsc4py import PETSc
 
 from ggce.logger import logger
 from ggce.utils.physics import G0_k_omega
-from ggce.utils.utils import chunk_jobs, padded_kw, float_to_list
+from ggce.utils.utils import chunk_jobs, padded_kw, \
+                        float_to_list, peak_location_and_weight, \
+                            peak_location_and_weight_wstep, \
+                                peak_location_and_weight_scipy
 from ggce.executors.solvers import Solver
 
 BYTES_TO_GB = 1073741274
@@ -682,3 +685,149 @@ class MassSolver(Solver):
         matrsize = max(row_ind) + 1
 
         return matrsize
+
+    def dispersion(
+        self, kgrid, w0, eta, eta_div=3.0, eta_step_div=5.0, incl_w_pts=10,
+        next_k_offset_factor=1.5, nmax=1000, peak_routine="change_eta", **solve_kwargs
+    ):
+        """Computes the dispersion of the peak closest to the provided w0 by
+        assuming that the peak is Lorentzian in nature. This allows us to
+        take two points, each at a different value of the broadening, eta, and
+        compute the location of the Lorentzian (ground state energy) and
+        quasi-particle weight exactly, at least in principle. As stated, we
+        rely on the assumption that the peak is Lorentzian, which is only true
+        in some cases (e.g. the polaron).
+
+        This method works as follows: (1) An initial guess for the peak
+        location of the first entry in kgrid is provided (w0). (2) The location
+        of the peak is found by slowly increasing w in increments of
+        eta / eta_step_div until the first time the value of A decreases from
+        the previou sone. (3) The location is found (as is the weight) by
+        computing A using a second broadening given by eta / eta_div. (4) This
+        value is logged in results, and the algorithm moves to the next
+        k-point. The new initial guess for the next peak location is given by
+        the found location of the previous k-point minus
+        eta * next_k_offset_factor.
+
+        UPDATE: The method can now be run using PETSc "ParallelSparse" protocol.
+        It is parallel in that the for a single (k,w) point, the matrix is
+        distributed across different tasks: however, it is "serial" in that
+        it still works its way through one (k,w) point at a time. If you try to
+        call this using ParallelDenseExecutor you will get a NotImplementedError.
+
+        Parameters
+        ----------
+        kgrid : list
+            A list of the k-points to calculate.
+        w0 : float
+            The initial guess for the peak location for the first k-point only.
+        eta : float
+            The broadening parameter.
+        eta_div : float, optional
+            Used for the computation of the second A value (the default is
+            3.0, a good empirical value).
+        eta_step_div : float, optional
+            Defines the step in frequency space as eta / eta_step_div (the
+            default is 5.0).
+        next_k_offset_factor : float, optional
+            Defines how far back from the found peak location to start the
+            algorithm at the next k-point. The next start location is given by
+            the found location minus eta * next_k_offset_vactor (the default is
+            1.5).
+        nmax : int, optional
+            The maximum number of steps to take in eta before gracefully
+            erroring out and returning the previously found values (the
+            default is 1000).
+
+        Returns
+        -------
+        list
+            List of dictionaries, each of which contains 5 keys: the k-value at
+            which the calculation was run ('k'), lists for the w-values and
+            spectrum values ('w' and 'A'), and the ground state energy and
+            quasi-particle weight ('ground_state' and 'weight').
+        """
+
+        results = []
+        w_val = w0
+        nk = len(kgrid)
+        for ii, k_val in enumerate(kgrid):
+
+            current_n_w = 0
+            reference = 0.0
+
+            results.append({
+                'k': k_val,
+                'w': [],
+                'A': [],
+                'ground_state': None,
+                'weight': None,
+                'lifetime': None
+            })
+
+            while True:
+
+                if current_n_w > nmax:
+                    logger.error("Exceeded maximum omega points")
+                    return results
+
+                G, _ = self.solve(k_val, w_val, eta)
+                A = -G.imag / np.pi
+                results[ii]['w'].append(w_val)
+                results[ii]['A'].append(A)
+
+                # Check and see whether or not we've found a local maxima
+                if reference < A:
+
+                    # This is not a maximum
+                    reference = A
+
+                    current_n_w += 1
+                    w_val += eta / eta_step_div
+                    continue
+
+                # This is a maximum, run the calculation again one dw step prior to this
+                if peak_routine == "change_eta":
+                    eta_prime = eta / eta_step_div
+                    G2 = self.solve(k_val, w_val, eta_prime)
+                    A2 = -G2.imag / np.pi
+                    loc, weight = peak_location_and_weight(
+                        w_val, A, A2, eta, eta_prime)
+                    lifetime = eta
+                elif peak_routine == "change_w":
+                    w_val_prime = w_val - 2. * eta / eta_step_div
+                    G2 = self.solve(k_val, w_val_prime, eta)
+                    A2 = -G2.imag / np.pi
+                    loc, weight = peak_location_and_weight_wstep(w_val,
+                                                                 w_val_prime, A, A2, eta)
+                    lifetime = eta
+                elif peak_routine == "scipy":
+                    assert len(results[ii]["w"]) >= incl_w_pts, \
+                        f"The number of w points solved for is smaller than required for a scipy fit."\
+                        f"\nRestart the calculation at smaller w0, or , if this happens halfway through"\
+                        f" the dispersion search, try increasing next_k_offset_factor."
+                    wrange = results[ii]["w"][-incl_w_pts:]
+                    Arange = results[ii]["A"][-incl_w_pts:]
+                    fit_params, error = peak_location_and_weight_scipy(
+                        wrange, Arange, eta)
+                    loc, weight, lifetime = fit_params
+                    # from ggce.utils.utils import lorentzian
+                    # import matplotlib.pyplot as plt
+                    # fig, ax0 = plt.subplots()
+                    # wrange_pred = np.linspace(wrange[0], wrange[-1], 100)
+                    # Arange_pred = lorentzian(wrange_pred, *fit_params)
+                    # ax0.plot(wrange_pred, Arange_pred)
+                    # ax0.scatter(wrange, Arange)
+                    # plt.show()
+
+                results[ii]['ground_state'] = loc
+                results[ii]['weight'] = weight
+                results[ii]['lifetime'] = lifetime
+                w_val = loc - eta * next_k_offset_factor
+                logger.info(
+                    f"For k ({ii:03}/{nk:03}) = {k_val:.02f}: GS={loc:.08f}, "
+                    f"wt={weight:.02e}, lifetime={lifetime:.04f}"
+                )
+                break
+
+        return results
