@@ -1,0 +1,49 @@
+<div align=center>
+
+# The Generalized Green's function Cluster Expansion
+
+[![image](https://github.com/x94carbone/GGCE/actions/workflows/ci.yml/badge.svg)](https://github.com/x94carbone/GGCE/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/x94carbone/GGCE)
+[![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/x94carbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=x94carbone/GGCE&amp;utm_campaign=Badge_Grade)
+[![python](https://img.shields.io/badge/-Python_>=3.7-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/) <br>
+[![image](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5/status.svg)](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5)
+[![image](https://zenodo.org/badge/DOI/10.48550/arXiv.2210.12260.svg)](https://doi.org/10.48550/arXiv.2210.12260)
+
+**Numerically exact Green's functions for lattice polaron models, easily and efficiently**
+
+_If you use this work, please cite us!_
+   
+[GGCE Software](https://doi.org/10.48550/arXiv.2210.12260) | [Original Paper](https://doi.org/10.1103/PhysRevB.104.035106) | [Bond-Peierls Paper](https://doi.org/10.1103/PhysRevB.104.L140307)
+
+</div>
+   
+## 💾 Installation
+
+Just use `pip`!
+
+```bash
+conda create -n py3.9-ggce python=3.9 -y
+conda activate py3.9-ggce
+pip install ggce
+```
+
+We provide detailed information on _advanced_ installation at our [documentation](https://matthewcarbone.github.io/GGCE/installation.html).
+
+## 🚀 Quickstart
+
+Get started in a few lines of code right [here](https://matthewcarbone.github.io/GGCE/tutorials/introduction.html)!
+
+## 🙏 Acknowledgements
+
+This software is based upon work supported by the U.S. Department of
+Energy, Office of Science, Office of Advanced Scientific Computing
+Research, Department of Energy Computational Science Graduate Fellowship
+under Award Number DE-FG02-97ER25308. This work also used theory and
+computational resources of the Center for Functional Nanomaterials,
+which is a U.S. Department of Energy Office of Science User Facility,
+and the Scientific Data and Computing Center, a component of the
+Computational Science Initiative, at Brookhaven National Laboratory
+under Contract No. DE-SC0012704. We also acknowledge support from the
+Natural Sciences and Engineering Research Council of Canada (NSERC) and
+the Stewart Blusson Quantum Matter Institute (SBQMI).
