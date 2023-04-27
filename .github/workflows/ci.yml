@@ -129,7 +129,7 @@ jobs:
         mpi: ${{ matrix.mpi }}
 
     - name: Install mpi4py and pytest-mpi
-      run: pip install mpi4py pytest-mpi
+      run: pip install "mpi4py==petsc-3.18.4" pytest-mpi
 
     - name: Run MPI tests
       run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
