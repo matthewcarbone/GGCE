@@ -2,9 +2,9 @@
 
 # The Generalized Green's function Cluster Expansion
 
-[![image](https://github.com/x94carbone/GGCE/actions/workflows/ci.yml/badge.svg)](https://github.com/x94carbone/GGCE/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/x94carbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/x94carbone/GGCE)
-[![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/x94carbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=x94carbone/GGCE&amp;utm_campaign=Badge_Grade)
+[![image](https://github.com/matthewcarbone/GGCE/actions/workflows/ci.yml/badge.svg)](https://github.com/matthewcarbone/GGCE/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/matthewcarbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/matthewcarbone/GGCE)
+[![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/matthewcarbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=matthewcarbone/GGCE&amp;utm_campaign=Badge_Grade)
 [![python](https://img.shields.io/badge/-Python_>=3.7-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/) <br>
 [![image](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5/status.svg)](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5)
