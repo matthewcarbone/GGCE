@@ -88,7 +88,7 @@ jobs:
       run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
 
     - name: Setup PETSc
-      run: pip install --no-use-pep517 "petsc==3.18.4" "petsc4py==3.18.4"
+      run: pip install --no-use-pep517 "petsc==3.19.1" "petsc4py==3.19.1"
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
 
