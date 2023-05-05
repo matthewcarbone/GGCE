@@ -14,7 +14,7 @@ install_test_requirements_only () {
 
 install_requirements() {
     python3 -c 'import toml; c = toml.load("pyproject.toml"); print("\n".join(c["project"]["dependencies"]))' | pip install -r /dev/stdin
-    python3 -m pip install --upgrade pip==23.0.1 --no-binary :all:
+    python3 -m pip install --upgrade cython pip==23.0.1 --no-binary :all:
 }
 
 
