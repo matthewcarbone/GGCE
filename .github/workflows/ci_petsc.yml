@@ -82,8 +82,10 @@ jobs:
     - name: Install mpi4py and pytest-mpi
       run: pip install mpi4py pytest-mpi
 
-    - name: Setup PETSc
+    - name: Install wheel
       run: pip install wheel
+
+    - name: Setup PETSc
       run: pip install petsc --no-cache-dir --no-use-pep517 --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
