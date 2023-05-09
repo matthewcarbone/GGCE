@@ -82,8 +82,8 @@ jobs:
     - name: Install mpi4py and pytest-mpi
       run: pip install mpi4py pytest-mpi
 
-    - name: Install wheel
-      run: pip install wheel
+    - name: Install wheel and setuptools manually
+      run: pip install wheel setuptools
 
     - name: Setup PETSc
       run: pip install petsc --no-cache-dir --no-use-pep517 --verbose
