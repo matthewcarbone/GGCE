@@ -57,7 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: [3.7, 3.8, 3.9, "3.10", 3.11]
+        python-version: ["3.10"]
         mpi: ["openmpi"]
 
     steps:
@@ -73,9 +73,6 @@ jobs:
       run: |
         bash scripts/install.sh
         bash scripts/install.sh test
-
-    - name: Run serial tests
-      run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
 
     - name: Setup MPI
       uses: mpi4py/setup-mpi@v1
