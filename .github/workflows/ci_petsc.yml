@@ -90,7 +90,7 @@ jobs:
 
     - name: Setup PETSc
       run: |
-        pip install pip=23.0.1 --verbose
+        pip install pip==23.0.1 --verbose
         pip -V
         pip install petsc --verbose
       env:
