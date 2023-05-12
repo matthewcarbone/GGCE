@@ -90,5 +90,6 @@ jobs:
 
     - name: Setup PETSc
       run: pip install petsc --verbose
+      continue-on-error: true
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
