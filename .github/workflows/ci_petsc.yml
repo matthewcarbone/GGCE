@@ -86,8 +86,7 @@ jobs:
       run: pip install wheel setuptools
 
     - name: Setup PETSc
-      continue-on-error: true
-      run: pip install petsc --no-cache-dir --no-use-pep517 --verbose
+      run: pip install petsc --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
 
