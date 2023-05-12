@@ -91,7 +91,7 @@ jobs:
 
     - name: Setup PETSc
       run: |
-      pip -V
+        pip -V
         pip install petsc --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
