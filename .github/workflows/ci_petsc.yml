@@ -88,6 +88,9 @@ jobs:
     - name: Downgrade pip
       run: pip install pip==23.0.1
 
+    - name: Check version of pip
+      run: pip -V
+
     - name: Setup PETSc
       run: pip install petsc --verbose
       continue-on-error: true
