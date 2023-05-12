@@ -84,13 +84,14 @@ jobs:
       run: pip install mpi4py pytest-mpi
 
     - name: Downgrade pip
-      run: pip install pip==23.0.1 --verbose
-
-    - name: Check version of pip with direct reference to location
-      run: /opt/hostedtoolcache/Python/3.10.11/bin/pip -V
+      run: |
+        pip uninstall pip
+        python -m ensurepip
+        pip -V
 
     - name: Setup PETSc
       run: |
-        /opt/hostedtoolcache/Python/3.10.11/bin/pip install petsc --verbose
+      pip -V
+        pip install petsc --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
