@@ -82,17 +82,16 @@ jobs:
     - name: Install mpi4py and pytest-mpi
       run: pip install mpi4py pytest-mpi
 
-    - name: Install wheel and setuptools manually
-      run: pip install wheel setuptools
-
     - name: Downgrade pip
-      run: pip install pip==23.0.1
+      run: pip install pip==23.0.1 --verbose
 
     - name: Check version of pip
       run: pip -V
 
     - name: Setup PETSc
-      run: pip install petsc --verbose
-      continue-on-error: true
+      run: |
+        pip install pip=23.0.1 --verbose
+        pip -V
+        pip install petsc --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
