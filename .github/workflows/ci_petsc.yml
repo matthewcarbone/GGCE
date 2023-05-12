@@ -71,6 +71,7 @@ jobs:
 
     - name: Install requirements
       run: |
+        pip -V
         bash scripts/install.sh
         bash scripts/install.sh test
 
@@ -85,13 +86,11 @@ jobs:
     - name: Downgrade pip
       run: pip install pip==23.0.1 --verbose
 
-    - name: Check version of pip
-      run: pip -V
+    - name: Check version of pip with direct reference to location
+      run: /opt/hostedtoolcache/Python/3.10.11/bin/pip -V
 
     - name: Setup PETSc
       run: |
-        pip install pip==23.0.1 --verbose
-        pip -V
-        pip install petsc --verbose
+        /opt/hostedtoolcache/Python/3.10.11/bin/pip install petsc --verbose
       env:
         PETSC_CONFIGURE_OPTIONS: "--with-scalar-type=complex --download-mumps --download-scalapack"
