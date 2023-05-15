@@ -34,6 +34,8 @@ We provide detailed information on _advanced_ installation at our [documentation
 
 Get started in a few lines of code right [here](https://matthewcarbone.github.io/GGCE/tutorials/introduction.html)!
 
+Or, checkout our intro tutorial: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/matthewcarbone/GGCE/blob/master/notebooks/GGCE_Tutorial.ipynb)
+
 ## 🙏 Acknowledgements
 
 This software is based upon work supported by the U.S. Department of
