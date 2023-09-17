@@ -6,7 +6,7 @@
 [![image](https://github.com/matthewcarbone/GGCE/actions/workflows/ci_petsc.yml/badge.svg)](https://github.com/matthewcarbone/GGCE/actions/workflows/ci_petsc.yml)
 [![codecov](https://codecov.io/gh/matthewcarbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/matthewcarbone/GGCE)
 [![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/matthewcarbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=matthewcarbone/GGCE&amp;utm_campaign=Badge_Grade)
-[![python](https://img.shields.io/badge/-Python_>=3.7-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![python](https://img.shields.io/badge/-Python_3.7+-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/) <br>
 [![image](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5/status.svg)](https://joss.theoj.org/papers/688705844ea344353b86815d8345f8d5)
 [![image](https://zenodo.org/badge/DOI/10.48550/arXiv.2210.12260.svg)](https://doi.org/10.48550/arXiv.2210.12260)
@@ -35,6 +35,11 @@ We provide detailed information on _advanced_ installation at our [documentation
 Get started in a few lines of code right [here](https://matthewcarbone.github.io/GGCE/tutorials/introduction.html)!
 
 Or, checkout our intro tutorial: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/matthewcarbone/GGCE/blob/master/notebooks/GGCE_Tutorial.ipynb)
+
+## ⚠️ Known issues
+
+Currently, PETSc is not building properly (we believe this is a problem with the `petsc4py` wheel or something like this).
+If you would like to help contribute to this bugfix, please see this [PR](https://github.com/matthewcarbone/GGCE/pull/76)!
 
 ## 🙏 Acknowledgements
 
