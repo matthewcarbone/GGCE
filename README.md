@@ -14,7 +14,7 @@
 **Numerically exact Green's functions for lattice polaron models, easily and efficiently**
 
 _If you use this work, please cite us!_ <br>
-[GGCE Software](https://doi.org/10.48550/arXiv.2210.12260) | [Original Paper](https://doi.org/10.1103/PhysRevB.104.035106) | [Bond-Peierls Paper](https://doi.org/10.1103/PhysRevB.104.L140307)
+[GGCE Software (JOSS)](https://doi.org/10.21105/joss.05115) | [Original Paper (PRB)](https://doi.org/10.1103/PhysRevB.104.035106) | [Bond-Peierls Paper (PRB)](https://doi.org/10.1103/PhysRevB.104.L140307)
 
 </div>
    
