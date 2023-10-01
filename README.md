@@ -6,7 +6,7 @@
 [![image](https://github.com/matthewcarbone/GGCE/actions/workflows/ci.yml/badge.svg)](https://github.com/matthewcarbone/GGCE/actions/workflows/ci.yml)
 [![image](https://github.com/matthewcarbone/GGCE/actions/workflows/ci_petsc.yml/badge.svg)](https://github.com/matthewcarbone/GGCE/actions/workflows/ci_petsc.yml)
 [![codecov](https://codecov.io/gh/matthewcarbone/GGCE/branch/master/graph/badge.svg?token=6Q7EUWBW6O)](https://codecov.io/gh/matthewcarbone/GGCE)
-[![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/matthewcarbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=matthewcarbone/GGCE&amp;utm_campaign=Badge_Grade)
+[![image](https://app.codacy.com/project/badge/Grade/bdb53153835a49fa8921b28a519b2ead)](https://www.codacy.com/gh/matthewcarbone/GGCE/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=matthewcarbone/GGCE&amp;utm_campaign=Badge_Grade) <br>
 [![python](https://img.shields.io/badge/-Python_3.7+-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/)
 
