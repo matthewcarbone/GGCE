@@ -76,7 +76,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Check lines exist
       run: |
-        grep -x "__version__ = ...  # semantic-version-placeholder" ggce/__init__.py
+        grep -x "__version__ = '0.dev' # version placeholder for editable installs" ggce/__init__.py
 
   docs:
     name: Build documentation test
