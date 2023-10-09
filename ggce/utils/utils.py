@@ -192,3 +192,36 @@ def peak_location_and_weight_scipy(wrange, Arange, eta):
 
 def lorentzian(w, loc, scale, eta):
     return scale * (eta / np.pi) / ((w - loc) ** 2 + eta**2)
+
+
+def quadratic_band(k, m_star, offset):
+
+    return k**2 / (2.*m_star) - offset
+
+
+def process_dispersion(dispersion_results):
+    '''
+    Helper to process the output of the dispersion()
+    method of a given solver to extract the following
+    a) kgrid
+    b) ground state energy, 1d-ndarray
+    c) ground state lifetime, 1d-ndarray
+    '''
+    kgrid = [dispersion_results[ii]["k"] \
+                        for ii in range(len(dispersion_results))]
+    dispersion = [dispersion_results[ii]["ground_state"] \
+                        for ii in range(len(dispersion_results))]
+    lifetimes = [dispersion_results[ii]["lifetime"] \
+                        for ii in range(len(dispersion_results))]
+    return dispersion, lifetimes
+
+
+def eff_mass_fit(kgrid, energy_k):
+    '''
+    Helper function to fit a quadratic to a polaron dispersion
+    at k = 0. In doing so, extracts the dispersion
+    '''
+    best_fit_pars, covmat = curve_fit(quadratic_band, kgrid, energy_k, \
+                                                p0 = [0.5, energy_k[0]])
+    mstar = best_fit_pars[0] / 0.5041061511616247
+    return mstar
