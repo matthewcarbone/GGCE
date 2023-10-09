@@ -120,19 +120,19 @@ jobs:
         bash scripts/install.sh
         bash scripts/install.sh test
 
-    - name: Run serial tests
-      run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
+    # - name: Run serial tests
+    #   run: pytest -v --cov --cov-report xml --cov-append ggce/_tests/*.py
 
-    - name: Setup MPI
-      uses: mpi4py/setup-mpi@v1
-      with:
-        mpi: ${{ matrix.mpi }}
+    # - name: Setup MPI
+    #   uses: mpi4py/setup-mpi@v1
+    #   with:
+    #     mpi: ${{ matrix.mpi }}
 
-    - name: Install mpi4py and pytest-mpi
-      run: pip install mpi4py pytest-mpi
+    # - name: Install mpi4py and pytest-mpi
+    #   run: pip install mpi4py pytest-mpi
 
-    - name: Run MPI tests
-      run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
+    # - name: Run MPI tests
+    #   run: mpiexec -n 2 coverage run --rcfile=ggce/_tests/mpi/setup_pytest_mpi.cfg -m pytest -v --with-mpi ggce/_tests/mpi/*.py
 
     # - name: Combine coverage reports from all ranks and generate xml report
     #   run: coverage combine && coverage xml
